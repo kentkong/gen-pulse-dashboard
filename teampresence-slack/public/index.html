@@ -622,6 +622,13 @@
         object-fit: cover;
         display: block;
       }
+      .sn-member-name-row {
+        display: flex;
+        align-items: center;
+        gap: 0.4rem;
+        flex-wrap: wrap;
+        min-width: 0;
+      }
       .sn-member-name {
         font-weight: 700;
         min-width: 0;
@@ -635,6 +642,57 @@
         font-size: 0.72rem;
         color: var(--muted-fg);
         margin-top: 0.05rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+
+      /* Team pill — tiny badge next to each teammate's name showing
+         which side of the org they sit on. Two tones keep Email
+         Marketing (on-brand blue) and Customer Success (emerald)
+         instantly scannable in the Team table. */
+      .sn-team-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        padding: 0.14rem 0.5rem 0.14rem 0.42rem;
+        border-radius: 999px;
+        line-height: 1;
+        border: 1px solid transparent;
+        white-space: nowrap;
+      }
+      .sn-team-pill::before {
+        content: "";
+        width: 0.38rem;
+        height: 0.38rem;
+        border-radius: 999px;
+        background: currentColor;
+        opacity: 0.85;
+        flex: none;
+      }
+      .sn-team-pill--email {
+        color: var(--gen-blue);
+        background: color-mix(in srgb, var(--gen-blue) 12%, var(--surface));
+        border-color: color-mix(in srgb, var(--gen-blue) 28%, transparent);
+      }
+      .sn-team-pill--cs {
+        color: #0f766e;
+        background: color-mix(in srgb, #0f766e 12%, var(--surface));
+        border-color: color-mix(in srgb, #0f766e 30%, transparent);
+      }
+      [data-theme="dark"] .sn-team-pill--email {
+        color: #93c5fd;
+        background: color-mix(in srgb, var(--gen-blue) 28%, transparent);
+        border-color: color-mix(in srgb, var(--gen-blue) 55%, transparent);
+      }
+      [data-theme="dark"] .sn-team-pill--cs {
+        color: #6ee7b7;
+        background: color-mix(in srgb, #10b981 22%, transparent);
+        border-color: color-mix(in srgb, #10b981 45%, transparent);
       }
 
       .sn-hero-title {
@@ -1684,6 +1742,19 @@
                 aria-hidden="true">${esc(initials)}</span>`;
       }
 
+      function teamPillHtml(team) {
+        if (!team) return "";
+        const t = String(team).trim();
+        const lower = t.toLowerCase();
+        const variant =
+          lower.includes("customer success") || lower === "cs"
+            ? "sn-team-pill--cs"
+            : lower.includes("email")
+            ? "sn-team-pill--email"
+            : "sn-team-pill--email";
+        return `<span class="sn-team-pill ${variant}">${esc(t)}</span>`;
+      }
+
       function renderMembers(members) {
         const tbody = document.getElementById("members");
         const empty = document.getElementById("members-empty");
@@ -1715,17 +1786,22 @@
             const updated = fmtTime(
               m.presence?.updatedAt ?? m.checkin?.updatedAt
             );
-            const titleLine = m.title
-              ? `<span class="sn-member-title">${esc(m.title)}</span>`
+            const subtitle = m.role || m.title || "";
+            const subtitleLine = subtitle
+              ? `<span class="sn-member-title" title="${esc(subtitle)}">${esc(subtitle)}</span>`
               : "";
+            const teamPill = teamPillHtml(m.team);
             return `
               <tr class="${tone}">
                 <td>
                   <div class="sn-member">
                     ${memberAvatarHtml(m)}
                     <div class="min-w-0">
-                      <span class="sn-member-name">${esc(m.name)}</span>
-                      ${titleLine}
+                      <div class="sn-member-name-row">
+                        <span class="sn-member-name">${esc(m.name)}</span>
+                        ${teamPill}
+                      </div>
+                      ${subtitleLine}
                     </div>
                   </div>
                 </td>

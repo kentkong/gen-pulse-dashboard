@@ -216,6 +216,7 @@ export function registerWebRoutes({
           const presence = getPresence(db, userId);
           const checkin = checkinByUser.get(userId) ?? null;
           const identity = await loadIdentity(userId);
+          const rosterEntry = findBySlackId(userId);
           const name = identity?.displayName || userId;
           return {
             id: userId,
@@ -223,6 +224,9 @@ export function registerWebRoutes({
             avatarUrl: identity?.avatarUrl ?? null,
             initials: identity?.initials ?? null,
             title: identity?.title ?? null,
+            role: rosterEntry?.role ?? null,
+            team: rosterEntry?.team ?? null,
+            tags: rosterEntry?.tags ?? [],
             checkin: checkin
               ? {
                   state: checkin.state,
@@ -352,6 +356,9 @@ export function registerWebRoutes({
         avatarUrl: m.avatarUrl,
         initials: initialsFor(m.fullName),
         title: m.title,
+        role: m.role ?? null,
+        team: m.team ?? null,
+        tags: m.tags ?? [],
         checkin: null,
         presence: null,
       }));

@@ -163,6 +163,8 @@ export function rosterMember(
     avatarUrl: entry.avatarUrl,
     initials: initialsFor(entry.fullName),
     title: entry.title,
+    role: entry.role ?? null,
+    team: entry.team ?? null,
     tags: entry.tags,
     checkin,
     presence,
