@@ -217,6 +217,137 @@
         pointer-events: none;
       }
 
+      /* Right-side of the hero — stacks the quick-links row above
+         the refreshed-at / theme / refresh buttons, right-aligned. */
+      .sn-hero-right {
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 0.8rem;
+        min-width: 0;
+      }
+
+      /* --------------------------------------------------------------
+         Quick-links pill row — a compact cluster of external
+         shortcuts to the team's most-used destinations (Jira, Slack,
+         Gen Central, Confluence, …). Sits on the right of the hero
+         and wraps to a second line on narrow screens. Subtle by
+         default; lifts and brightens on hover so they feel alive
+         without competing with the big "Gen Pulse" title.
+         -------------------------------------------------------------- */
+      .sn-quicklinks {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.45rem;
+        justify-content: flex-end;
+        max-width: 100%;
+      }
+      .sn-quicklink {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.38rem;
+        padding: 0.34rem 0.7rem 0.34rem 0.58rem;
+        font-size: 0.78rem;
+        font-weight: 600;
+        letter-spacing: 0.005em;
+        color: var(--text);
+        background: color-mix(in srgb, var(--surface) 82%, transparent);
+        border: 1px solid var(--border);
+        border-radius: 9999px;
+        text-decoration: none;
+        line-height: 1;
+        white-space: nowrap;
+        transition: background 120ms ease, border-color 120ms ease,
+          color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
+        box-shadow: 0 1px 0 rgba(8, 16, 58, 0.04);
+      }
+      .sn-quicklink:hover {
+        background: var(--surface);
+        border-color: color-mix(in srgb, var(--gen-blue) 55%, var(--border));
+        color: var(--gen-blue);
+        box-shadow:
+          0 4px 12px -6px rgba(4, 0, 245, 0.35),
+          0 1px 0 rgba(8, 16, 58, 0.06);
+        transform: translateY(-1px);
+      }
+      .sn-quicklink:focus-visible {
+        outline: none;
+        border-color: var(--gen-blue);
+        box-shadow: 0 0 0 3px rgba(4, 0, 245, 0.25);
+      }
+      .sn-quicklink .sn-ql-icon {
+        width: 0.95rem;
+        height: 0.95rem;
+        flex: none;
+        color: var(--gen-blue);
+        opacity: 0.85;
+      }
+      .sn-quicklink:hover .sn-ql-icon {
+        opacity: 1;
+      }
+
+      /* Dark-mode tuning — quieter chrome that still pops on hover. */
+      html.theme-dark .sn-quicklink,
+      html:not(.theme-light) .sn-quicklink {
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) .sn-quicklink {
+          background: rgba(255, 255, 255, 0.04);
+          border-color: rgba(255, 255, 255, 0.1);
+          color: #e5e7f5;
+        }
+        html:not(.theme-light) .sn-quicklink .sn-ql-icon {
+          color: #9a9aff;
+        }
+        html:not(.theme-light) .sn-quicklink:hover {
+          background: rgba(255, 255, 255, 0.09);
+          border-color: #9a9aff;
+          color: #ffffff;
+        }
+      }
+      html.theme-dark .sn-quicklink {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.1);
+        color: #e5e7f5;
+      }
+      html.theme-dark .sn-quicklink .sn-ql-icon {
+        color: #9a9aff;
+      }
+      html.theme-dark .sn-quicklink:hover {
+        background: rgba(255, 255, 255, 0.09);
+        border-color: #9a9aff;
+        color: #ffffff;
+      }
+
+      /* Placeholder URLs — a soft amber dashed ring tells you at a
+         glance which links still need a real destination. */
+      .sn-quicklink[data-placeholder] {
+        border-style: dashed;
+        border-color: color-mix(in srgb, var(--status-amber) 55%, var(--border));
+      }
+      .sn-quicklink[data-placeholder]::after {
+        content: "TODO";
+        font-size: 0.58rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        color: var(--status-amber);
+        padding: 0.08rem 0.35rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--status-amber) 18%, transparent);
+      }
+
+      /* On narrow screens collapse the hero to a single column so the
+         pill row sits naturally under the title. */
+      @media (max-width: 720px) {
+        .sn-hero-right {
+          align-items: flex-start;
+          width: 100%;
+        }
+        .sn-quicklinks {
+          justify-content: flex-start;
+        }
+      }
+
       /* --------------------------------------------------------------
          Feed canvas — atmospheric Gen-blue panel that sits behind
          the widget stack. Deep navy vignette with a cobalt bloom,
@@ -231,30 +362,53 @@
         border-radius: 1.25rem;
         isolation: isolate;
         overflow: hidden;
+        /* Gen-blue (#0400F5) base — identical to the logo tile — with
+           a soft white bloom top-left, a richer violet wash bottom-
+           right, a bright indigo highlight top-right and a softer
+           violet float bottom-left. The hue never leaves the Gen
+           family: all the "depth" comes from shifting toward violet
+           (#2a00b8 / #5a2ebf) rather than toward navy or black, so
+           the panel keeps reading as "Gen blue" everywhere. */
         background:
-          radial-gradient(440px 270px at 8% 30%, rgba(90, 190, 255, 0.22), transparent 62%),
-          radial-gradient(400px 250px at 92% 65%, rgba(150, 160, 255, 0.18), transparent 65%),
           radial-gradient(
-            ellipse 95% 85% at 48% 50%,
-            rgba(42, 39, 255, 0.58) 0%,
-            rgba(4, 0, 245, 0.42) 32%,
-            rgba(6, 4, 100, 0.94) 72%,
-            #040233 100%
-          );
-        border: 1px solid rgba(255, 255, 255, 0.08);
+            620px 340px at 14% 18%,
+            rgba(255, 255, 255, 0.2),
+            transparent 68%
+          ),
+          radial-gradient(
+            700px 400px at 92% 92%,
+            rgba(52, 14, 172, 0.72),
+            transparent 68%
+          ),
+          radial-gradient(
+            520px 340px at 96% 8%,
+            rgba(140, 96, 240, 0.42),
+            transparent 70%
+          ),
+          radial-gradient(
+            520px 340px at 6% 92%,
+            rgba(90, 46, 200, 0.34),
+            transparent 72%
+          ),
+          var(--gen-blue);
+        border: 1px solid rgba(255, 255, 255, 0.2);
         box-shadow:
-          0 30px 70px -24px rgba(4, 0, 80, 0.6),
-          inset 0 1px 0 rgba(255, 255, 255, 0.08);
+          0 30px 70px -22px rgba(4, 0, 245, 0.45),
+          inset 0 1px 0 rgba(255, 255, 255, 0.24);
       }
+      /* Artistic curve overlay — a flowing set of hair-thin arcs that
+         trace across the canvas, Gen brand-style. Mixes white, pale
+         cyan and violet strokes so the lines feel at home on the
+         new blue/purple surface rather than pasted on top of it. */
       .sn-feed-canvas::before {
         content: "";
         position: absolute;
         inset: 0;
         pointer-events: none;
-        background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800' preserveAspectRatio='none'%3E%3Cpath d='M-50 230 Q 420 -60 1260 270' stroke='rgba(255,255,255,0.22)' stroke-width='1' fill='none'/%3E%3Cpath d='M-50 560 Q 600 180 1260 580' stroke='rgba(170,210,255,0.18)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 660 Q 700 940 1260 470' stroke='rgba(255,255,255,0.12)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 100 Q 520 600 1260 150' stroke='rgba(130,190,255,0.14)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 380 Q 700 260 1260 360' stroke='rgba(255,255,255,0.08)' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800' preserveAspectRatio='none'%3E%3Cpath d='M-50 230 Q 420 -60 1260 270' stroke='rgba(255,255,255,0.26)' stroke-width='1.4' fill='none'/%3E%3Cpath d='M-50 560 Q 600 180 1260 580' stroke='rgba(170,210,255,0.20)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 660 Q 700 940 1260 470' stroke='rgba(255,255,255,0.14)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 100 Q 520 600 1260 150' stroke='rgba(130,190,255,0.18)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 380 Q 700 260 1260 360' stroke='rgba(255,255,255,0.10)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 500 Q 320 720 1260 320' stroke='rgba(180,140,255,0.34)' stroke-width='1.4' fill='none'/%3E%3Cpath d='M-60 820 Q 700 420 1260 720' stroke='rgba(110,60,220,0.34)' stroke-width='1.2' fill='none'/%3E%3Cpath d='M-60 180 Q 900 500 1260 20' stroke='rgba(200,160,255,0.22)' stroke-width='0.9' fill='none'/%3E%3Cpath d='M-60 720 Q 350 560 1260 820' stroke='rgba(150,110,240,0.28)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 40 Q 500 300 1260 -40' stroke='rgba(220,200,255,0.18)' stroke-width='0.8' fill='none'/%3E%3C/svg%3E");
         background-size: 100% 100%;
         background-repeat: no-repeat;
-        opacity: 0.8;
+        opacity: 0.9;
         z-index: 0;
       }
       .sn-feed-canvas > * {
@@ -1412,18 +1566,96 @@
           </p>
           <p id="subhead" class="sn-muted mt-1 text-sm">Loading…</p>
         </div>
-        <div class="flex items-center gap-3 text-sm">
-          <span id="refreshed" class="sn-muted"></span>
-          <button
-            id="theme-toggle"
-            class="sn-btn sn-btn-ghost"
-            type="button"
-            aria-label="Toggle light/dark theme"
-          >
-            <span id="theme-toggle-icon" aria-hidden="true">◐</span>
-            <span id="theme-toggle-label">Dark mode</span>
-          </button>
-          <button id="refresh" class="sn-btn" type="button">Refresh</button>
+        <div class="sn-hero-right">
+          <!--
+            Quick-links pill row — the team's most-used destinations.
+            Edit URLs here; the HTML structure is copy-pasteable so you
+            can add / remove links without touching any JS.
+          -->
+          <nav class="sn-quicklinks" aria-label="Quick links">
+            <a
+              class="sn-quicklink"
+              href="https://jira.corp.nortonlifelock.com/secure/Dashboard.jspa?selectPageId=63427"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Norton EMAIL Reports dashboard on Jira"
+            >
+              <svg class="sn-ql-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="4" y="3" width="16" height="18" rx="2"></rect>
+                <path d="M8 8h8M8 12h8M8 16h5"></path>
+              </svg>
+              <span>Jira Reports</span>
+            </a>
+            <a
+              class="sn-quicklink"
+              href="https://jira.corp.nortonlifelock.com/secure/RapidBoard.jspa?rapidView=101032"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="EMOPS Kanban board on Jira"
+            >
+              <svg class="sn-ql-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <rect x="3" y="4" width="5" height="16" rx="1"></rect>
+                <rect x="10" y="4" width="5" height="10" rx="1"></rect>
+                <rect x="17" y="4" width="4" height="13" rx="1"></rect>
+              </svg>
+              <span>Board</span>
+            </a>
+            <a
+              class="sn-quicklink"
+              href="https://gendigital.slack.com/archives/email-norton"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="#email-norton on Slack (update URL to your real channel id)"
+              data-placeholder="slack-channel"
+            >
+              <svg class="sn-ql-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 9h16M4 15h16M10 3L8 21M16 3l-2 18"></path>
+              </svg>
+              <span>#email-norton</span>
+            </a>
+            <a
+              class="sn-quicklink"
+              href="https://gencentral.gen.com/"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="Gen Central employee portal (update to your real URL)"
+              data-placeholder="gen-central"
+            >
+              <svg class="sn-ql-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M3 21V9l9-6 9 6v12"></path>
+                <path d="M9 21v-8h6v8"></path>
+              </svg>
+              <span>Gen Central</span>
+            </a>
+            <a
+              class="sn-quicklink"
+              href="https://confluence.corp.nortonlifelock.com/display/EMAILNORTON"
+              target="_blank"
+              rel="noopener noreferrer"
+              title="EMAIL Norton space on Confluence (update to your real URL)"
+              data-placeholder="confluence"
+            >
+              <svg class="sn-ql-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <path d="M4 4.5A2.5 2.5 0 0 1 6.5 2H20v18H6.5A2.5 2.5 0 0 1 4 17.5v-13z"></path>
+                <path d="M4 17.5A2.5 2.5 0 0 1 6.5 15H20"></path>
+              </svg>
+              <span>Confluence</span>
+            </a>
+          </nav>
+
+          <div class="flex items-center gap-3 text-sm">
+            <span id="refreshed" class="sn-muted"></span>
+            <button
+              id="theme-toggle"
+              class="sn-btn sn-btn-ghost"
+              type="button"
+              aria-label="Toggle light/dark theme"
+            >
+              <span id="theme-toggle-icon" aria-hidden="true">◐</span>
+              <span id="theme-toggle-label">Dark mode</span>
+            </button>
+            <button id="refresh" class="sn-btn" type="button">Refresh</button>
+          </div>
         </div>
       </header>
 
