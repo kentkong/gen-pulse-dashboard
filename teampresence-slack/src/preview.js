@@ -2,6 +2,7 @@ import http from "node:http";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { TEAM, rosterMember } from "./team.js";
 
 /**
  * Zero-dependency preview of the EMAIL NORTON Team Presence dashboard.
@@ -41,13 +42,11 @@ const hoursAhead = (n) => now + n * 60 * 60 * 1000;
 function buildDemoPayload() {
   const date = todayInTz();
 
-  const members = [
-    {
+  // Seed a visually interesting board by attaching a plausible state to
+  // each roster slug. Keeps real names + headshots in preview mode.
+  const seeds = {
+    "iryna-botulinska": {
       id: "U001",
-      name: "Iryna B",
-      avatarUrl: null,
-      initials: "IB",
-      title: "Email Marketing Manager",
       checkin: { state: "in", note: null, updatedAt: minsAgo(125) },
       presence: {
         state: "available",
@@ -56,12 +55,8 @@ function buildDemoPayload() {
         updatedAt: minsAgo(125),
       },
     },
-    {
+    "victor-shapochkin": {
       id: "U002",
-      name: "Victor",
-      avatarUrl: null,
-      initials: "V",
-      title: "Senior Email Designer",
       checkin: { state: "wfh", note: "Focus day on Q2 launch", updatedAt: minsAgo(95) },
       presence: {
         state: "available",
@@ -70,12 +65,8 @@ function buildDemoPayload() {
         updatedAt: minsAgo(95),
       },
     },
-    {
+    "petr-studeny": {
       id: "U003",
-      name: "Petr",
-      avatarUrl: null,
-      initials: "P",
-      title: "Deliverability Engineer",
       checkin: { state: "late", note: "Train delay", updatedAt: minsAgo(40) },
       presence: {
         state: "away",
@@ -84,12 +75,8 @@ function buildDemoPayload() {
         updatedAt: minsAgo(40),
       },
     },
-    {
+    "jan-bartoncik": {
       id: "U004",
-      name: "Honza B",
-      avatarUrl: null,
-      initials: "HB",
-      title: "Email Ops Lead",
       checkin: { state: "sick", note: "Flu", updatedAt: minsAgo(310) },
       presence: {
         state: "ooo",
@@ -98,12 +85,8 @@ function buildDemoPayload() {
         updatedAt: minsAgo(310),
       },
     },
-    {
+    "kristyna-simkova": {
       id: "U005",
-      name: "Kristy",
-      avatarUrl: null,
-      initials: "K",
-      title: "CRM Strategist",
       checkin: { state: "pto", note: "Annual leave", updatedAt: minsAgo(1440) },
       presence: {
         state: "ooo",
@@ -112,12 +95,8 @@ function buildDemoPayload() {
         updatedAt: minsAgo(1440),
       },
     },
-    {
+    "daniel-zabensky": {
       id: "U006",
-      name: "Daniel",
-      avatarUrl: null,
-      initials: "D",
-      title: "Data Analyst",
       checkin: { state: "in", note: null, updatedAt: minsAgo(60) },
       presence: {
         state: "away",
@@ -126,16 +105,26 @@ function buildDemoPayload() {
         updatedAt: minsAgo(10),
       },
     },
-    {
+    "yanina-scholz": {
       id: "U007",
-      name: "Yanina",
-      avatarUrl: null,
-      initials: "Y",
-      title: "Campaign Coordinator",
       checkin: null,
       presence: null,
     },
-  ];
+    "volodymyr-yatsenko": {
+      id: "U008",
+      checkin: { state: "wfh", note: "CS escalations queue", updatedAt: minsAgo(210) },
+      presence: {
+        state: "available",
+        note: "WFH — CS escalations queue",
+        untilTs: null,
+        updatedAt: minsAgo(210),
+      },
+    },
+  };
+
+  const members = TEAM
+    .map((m) => rosterMember(m.slug, seeds[m.slug] ?? { id: m.slug }))
+    .filter(Boolean);
 
   const rollcalls = [
     {
@@ -230,7 +219,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-311",
             summary: "Q2 launch — hero banner copy variants (EN-US / EN-GB)",
-            assignee: "Iryna B",
+            assignee: "Iryna Botulinska",
             priority: "High",
             status: "To Do",
             statusCategory: "new",
@@ -240,7 +229,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-309",
             summary: "Segment win-back cohort for inactive 90+ day subs",
-            assignee: "Kristy",
+            assignee: "Kristýna Šimková",
             priority: "Medium",
             status: "To Do",
             statusCategory: "new",
@@ -250,7 +239,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-307",
             summary: "Legal review for renewal reminder footer",
-            assignee: "Honza B",
+            assignee: "Jan Bartončík",
             priority: "High",
             status: "To Do",
             statusCategory: "new",
@@ -260,7 +249,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-304",
             summary: "Darkmode-safe logo lockup for Outlook rendering",
-            assignee: "Victor",
+            assignee: "Victor Shapochkin",
             priority: "Medium",
             status: "To Do",
             statusCategory: "new",
@@ -270,7 +259,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-299",
             summary: "A11y: alt-text audit across April sends",
-            assignee: "Daniel",
+            assignee: "Daniel Žabenský",
             priority: "Low",
             status: "To Do",
             statusCategory: "new",
@@ -280,7 +269,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-297",
             summary: "UTM convention refresh for paid cross-promo",
-            assignee: "Yanina",
+            assignee: "Yanina Scholz",
             priority: "Low",
             status: "To Do",
             statusCategory: "new",
@@ -298,7 +287,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-315",
             summary: "Urgent: deliverability dip — Yahoo postmaster spike",
-            assignee: "Petr",
+            assignee: "Petr Studený",
             priority: "Critical",
             status: "In Progress",
             statusCategory: "indeterminate",
@@ -308,7 +297,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-314",
             summary: "Rebuild renewal journey in Braze — send-time optimisation",
-            assignee: "Iryna B",
+            assignee: "Iryna Botulinska",
             priority: "High",
             status: "In Progress",
             statusCategory: "indeterminate",
@@ -318,7 +307,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-312",
             summary: "Monthly newsletter template — modular blocks v2",
-            assignee: "Victor",
+            assignee: "Victor Shapochkin",
             priority: "Medium",
             status: "In Progress",
             statusCategory: "indeterminate",
@@ -328,7 +317,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-308",
             summary: "Localisation pipeline — CZ / DE / IT sign-offs",
-            assignee: "Honza B",
+            assignee: "Jan Bartončík",
             priority: "Medium",
             status: "In Progress",
             statusCategory: "indeterminate",
@@ -338,7 +327,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-306",
             summary: "Attribution window: align with Norton.com dashboards",
-            assignee: "Daniel",
+            assignee: "Daniel Žabenský",
             priority: "High",
             status: "In Progress",
             statusCategory: "indeterminate",
@@ -348,7 +337,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-302",
             summary: "Suppression list cleanup — bounce threshold rules",
-            assignee: "Kristy",
+            assignee: "Kristýna Šimková",
             priority: "Medium",
             status: "In Progress",
             statusCategory: "indeterminate",
@@ -366,7 +355,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-305",
             summary: "QA sign-off: April security digest — multi-client render",
-            assignee: "Yanina",
+            assignee: "Yanina Scholz",
             priority: "High",
             status: "In Review",
             statusCategory: "indeterminate",
@@ -376,7 +365,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-303",
             summary: "Copy review — renewal promo with 30% LTV lift",
-            assignee: "Iryna B",
+            assignee: "Iryna Botulinska",
             priority: "High",
             status: "In Review",
             statusCategory: "indeterminate",
@@ -386,7 +375,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-301",
             summary: "Design approval — cross-promo creative set (April)",
-            assignee: "Victor",
+            assignee: "Victor Shapochkin",
             priority: "Medium",
             status: "In Review",
             statusCategory: "indeterminate",
@@ -396,7 +385,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-298",
             summary: "Accessibility sign-off: contrast + landmark roles",
-            assignee: "Daniel",
+            assignee: "Daniel Žabenský",
             priority: "Medium",
             status: "In Review",
             statusCategory: "indeterminate",
@@ -406,7 +395,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-295",
             summary: "Segmentation preview — win-back variant B",
-            assignee: "Kristy",
+            assignee: "Kristýna Šimková",
             priority: "Low",
             status: "In Review",
             statusCategory: "indeterminate",
@@ -424,7 +413,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-293",
             summary: "Send: April trust-and-safety digest (1.1M recipients)",
-            assignee: "Petr",
+            assignee: "Petr Studený",
             priority: "High",
             status: "Done",
             statusCategory: "done",
@@ -434,7 +423,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-290",
             summary: "Template: loyalty upgrade CTA block",
-            assignee: "Victor",
+            assignee: "Victor Shapochkin",
             priority: "Medium",
             status: "Done",
             statusCategory: "done",
@@ -444,7 +433,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-287",
             summary: "Link tracking: GA4 sync for consumer sends",
-            assignee: "Daniel",
+            assignee: "Daniel Žabenský",
             priority: "Medium",
             status: "Done",
             statusCategory: "done",
@@ -454,7 +443,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-284",
             summary: "Opt-down survey — preference centre v2 wiring",
-            assignee: "Honza B",
+            assignee: "Jan Bartončík",
             priority: "Medium",
             status: "Done",
             statusCategory: "done",
@@ -464,7 +453,7 @@ function buildDemoKanban() {
           {
             key: "EMOPS-280",
             summary: "Archive legacy welcome series — route to new journey",
-            assignee: "Iryna B",
+            assignee: "Iryna Botulinska",
             priority: "Low",
             status: "Done",
             statusCategory: "done",
@@ -630,6 +619,38 @@ const server = http.createServer((req, res) => {
 
   if (pathname === "/healthz") {
     sendText(res, 200, "ok");
+    return;
+  }
+
+  // Serve static assets under /public/ — currently just team headshots
+  // under /team/*.png. Paths are hardened against traversal.
+  if (pathname.startsWith("/team/")) {
+    const rel = pathname.replace(/^\/+/, "");
+    const filePath = path.resolve(PUBLIC_DIR, rel);
+    if (!filePath.startsWith(PUBLIC_DIR + path.sep)) {
+      sendText(res, 403, "Forbidden");
+      return;
+    }
+    fs.readFile(filePath, (err, buf) => {
+      if (err) {
+        sendText(res, 404, "Not found");
+        return;
+      }
+      const ext = path.extname(filePath).toLowerCase();
+      const mime =
+        ext === ".png"
+          ? "image/png"
+          : ext === ".jpg" || ext === ".jpeg"
+          ? "image/jpeg"
+          : ext === ".webp"
+          ? "image/webp"
+          : "application/octet-stream";
+      res.writeHead(200, {
+        "content-type": mime,
+        "cache-control": "public, max-age=3600",
+      });
+      res.end(buf);
+    });
     return;
   }
 

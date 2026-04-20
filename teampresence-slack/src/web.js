@@ -17,6 +17,7 @@ import {
   buildKanbanBoard,
 } from "./reports.js";
 import { jiraFromEnv } from "./jira.js";
+import { TEAM, findBySlackId, initialsFor } from "./team.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
@@ -166,6 +167,36 @@ export function registerWebRoutes({
     res.type("text/plain").send("ok");
   });
 
+  router.get("/team/:file", (req, res) => {
+    if (!authorized(req, dashboardKey)) {
+      res.status(401).type("text/plain").send("Unauthorized");
+      return;
+    }
+    const file = req.params.file;
+    if (!/^[\w.\-]+\.(png|jpg|jpeg|webp)$/i.test(file)) {
+      res.status(404).type("text/plain").send("Not found");
+      return;
+    }
+    const abs = path.resolve(PUBLIC_DIR, "team", file);
+    if (!abs.startsWith(path.join(PUBLIC_DIR, "team") + path.sep)) {
+      res.status(403).type("text/plain").send("Forbidden");
+      return;
+    }
+    fs.readFile(abs, (err, buf) => {
+      if (err) {
+        res.status(404).type("text/plain").send("Not found");
+        return;
+      }
+      const ext = path.extname(abs).toLowerCase();
+      const mime =
+        ext === ".png" ? "image/png"
+        : ext === ".webp" ? "image/webp"
+        : "image/jpeg";
+      res.setHeader("cache-control", "public, max-age=3600");
+      res.type(mime).send(buf);
+    });
+  });
+
   router.get("/api/team", async (req, res) => {
     if (!authorized(req, dashboardKey)) {
       res.status(401).json({ error: "unauthorized" });
@@ -210,6 +241,13 @@ export function registerWebRoutes({
           };
         })
       );
+
+      const seenNames = new Set(members.map((m) => m.name.toLowerCase()));
+      for (const fallback of rosterFallbackMembers()) {
+        if (!seenNames.has(fallback.name.toLowerCase())) {
+          members.push(fallback);
+        }
+      }
 
       members.sort((a, b) => a.name.localeCompare(b.name));
 
@@ -261,39 +299,62 @@ export function registerWebRoutes({
     if (cached && Date.now() - cached.fetchedAt < IDENTITY_TTL_MS) {
       return cached.payload;
     }
+    const rosterEntry = findBySlackId(userId);
     let payload = { userId };
     try {
       const info = await app.client.users.info({ user: userId });
       const p = info?.user?.profile ?? {};
-      const displayName =
+      const slackDisplay =
         p.display_name_normalized ||
         p.real_name_normalized ||
         info?.user?.real_name ||
         info?.user?.name ||
-        userId;
+        null;
+      const displayName =
+        slackDisplay || rosterEntry?.displayName || rosterEntry?.fullName || userId;
       payload = {
         userId,
         displayName,
         firstName: p.first_name ?? displayName.split(" ")[0] ?? "",
-        title: p.title ?? "",
+        title: p.title || rosterEntry?.title || "",
         email: p.email ?? "",
-        avatarUrl: p.image_72 ?? p.image_48 ?? p.image_32 ?? null,
+        avatarUrl:
+          p.image_72 ?? p.image_48 ?? p.image_32 ?? rosterEntry?.avatarUrl ?? null,
         initials: initialsFrom(displayName),
       };
     } catch (err) {
       console.warn("[web] users.info failed for", userId, err?.data?.error ?? err?.message);
+      const displayName =
+        rosterEntry?.displayName || rosterEntry?.fullName || userId;
       payload = {
         userId,
-        displayName: userId,
-        firstName: "",
-        title: "",
+        displayName,
+        firstName: rosterEntry?.fullName?.split(" ")[0] ?? "",
+        title: rosterEntry?.title ?? "",
         email: "",
-        avatarUrl: null,
-        initials: initialsFrom(userId),
+        avatarUrl: rosterEntry?.avatarUrl ?? null,
+        initials: initialsFor(rosterEntry?.fullName ?? userId),
       };
     }
     identityCache.set(userId, { payload, fetchedAt: Date.now() });
     return payload;
+  }
+
+  function rosterFallbackMembers() {
+    // Seed /api/team with every roster entry that isn't yet mapped to a
+    // live Slack id — so the UI shows the real team even before people
+    // start interacting with the bot.
+    return TEAM
+      .filter((m) => m.slackIds.length === 0)
+      .map((m) => ({
+        id: `roster:${m.slug}`,
+        name: m.displayName || m.fullName,
+        avatarUrl: m.avatarUrl,
+        initials: initialsFor(m.fullName),
+        title: m.title,
+        checkin: null,
+        presence: null,
+      }));
   }
 
   router.get("/api/me", async (req, res) => {
