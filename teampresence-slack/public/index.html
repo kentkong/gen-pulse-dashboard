@@ -6,9 +6,15 @@
     <title>Gen Pulse — live team &amp; reports</title>
     <script>
       // Apply the stored theme before first paint so there's no flash.
+      // A `?theme=light|dark` URL param wins over localStorage so
+      // deep-links / headless screenshot tools can pin the theme.
       (function () {
         try {
-          var saved = localStorage.getItem("gen-pulse-theme");
+          var override = null;
+          var q = window.location.search || "";
+          var m = q.match(/[?&]theme=(light|dark)\b/);
+          if (m) override = m[1];
+          var saved = override || localStorage.getItem("gen-pulse-theme");
           if (saved === "light" || saved === "dark") {
             document.documentElement.classList.add("theme-" + saved);
           }
@@ -366,6 +372,33 @@
           align-items: flex-start;
           width: 100%;
           margin-left: 0;
+        }
+      }
+      /* Phone polish — tighter spacing so the quick-links fit in
+         three items per row on a 393px viewport and the feed canvas
+         doesn't overflow its padding box. */
+      @media (max-width: 520px) {
+        .sn-quicklinks {
+          gap: 0.45rem 1rem;
+        }
+        .sn-quicklink {
+          font-size: 0.66rem;
+          letter-spacing: 0.08em;
+        }
+        .sn-quicklinks-bar {
+          padding: 0.65rem 0 0.8rem;
+        }
+        .sn-feed-canvas {
+          padding: 1.4rem 1rem 1.6rem;
+          border-radius: 1rem;
+          margin-top: 1.5rem;
+        }
+        .sn-hero-title {
+          font-size: clamp(1.85rem, 9vw, 2.6rem);
+        }
+        .sn-hero-tag {
+          font-size: 0.95rem;
+          margin-top: 1rem;
         }
       }
 

@@ -1,5 +1,6 @@
 import http from "node:http";
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { TEAM, rosterMember } from "./team.js";
@@ -657,9 +658,27 @@ const server = http.createServer((req, res) => {
   sendText(res, 404, "Not found");
 });
 
-server.listen(PORT, "127.0.0.1", () => {
+// Bind to 0.0.0.0 by default so the dashboard is reachable from
+// phones / tablets on the same WiFi. Set PREVIEW_HOST=127.0.0.1 to
+// restrict to the local machine only.
+const HOST = process.env.PREVIEW_HOST ?? "0.0.0.0";
+
+server.listen(PORT, HOST, () => {
+  const urls = [`http://localhost:${PORT}`];
+  if (HOST === "0.0.0.0") {
+    try {
+      const nets = os.networkInterfaces();
+      for (const ifaces of Object.values(nets)) {
+        for (const iface of ifaces ?? []) {
+          if (iface.family === "IPv4" && !iface.internal) {
+            urls.push(`http://${iface.address}:${PORT}`);
+          }
+        }
+      }
+    } catch {}
+  }
   // eslint-disable-next-line no-console
   console.log(
-    `[preview] ${BRAND_NAME} dashboard preview on http://localhost:${PORT} (tz ${TEAM_TIMEZONE})`
+    `[preview] ${BRAND_NAME} dashboard preview (tz ${TEAM_TIMEZONE}):\n  - ${urls.join("\n  - ")}`
   );
 });
