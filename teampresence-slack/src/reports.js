@@ -1,0 +1,478 @@
+/**
+ * Weekly-throughput report builder.
+ *
+ * All dates are computed in Europe/Prague (or whatever TEAM_TIMEZONE is set to)
+ * so "last week" means the full Mon..Sun that ended before this week.
+ */
+
+const WEEKS_OF_TREND = 8;
+
+/** ISO week label like "2026-W15" for a given UTC ms timestamp. */
+function isoWeekLabel(ms) {
+  const d = new Date(ms);
+  // Thursday of this week determines ISO year/week
+  const target = new Date(d.getTime());
+  target.setUTCHours(0, 0, 0, 0);
+  target.setUTCDate(target.getUTCDate() + 4 - (target.getUTCDay() || 7));
+  const year = target.getUTCFullYear();
+  const firstThursday = new Date(Date.UTC(year, 0, 4));
+  firstThursday.setUTCDate(
+    firstThursday.getUTCDate() + 4 - (firstThursday.getUTCDay() || 7)
+  );
+  const week = 1 + Math.round((target - firstThursday) / (7 * 24 * 3600 * 1000));
+  return `${year}-W${String(week).padStart(2, "0")}`;
+}
+
+/** YYYY-MM-DD in the given IANA timezone for a Date. */
+function tzDate(date, timezone) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: timezone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+  }).formatToParts(date);
+  const y = parts.find((p) => p.type === "year").value;
+  const m = parts.find((p) => p.type === "month").value;
+  const d = parts.find((p) => p.type === "day").value;
+  return `${y}-${m}-${d}`;
+}
+
+/** Monday (00:00) at the start of the ISO week containing `ref`, in `timezone`. */
+function mondayOfWeek(ref, timezone) {
+  // Start from ref's date in the target tz, walk back to Monday.
+  const dayName = new Intl.DateTimeFormat("en-GB", {
+    timeZone: timezone,
+    weekday: "short",
+  }).format(ref);
+  const order = { Mon: 0, Tue: 1, Wed: 2, Thu: 3, Fri: 4, Sat: 5, Sun: 6 };
+  const offset = order[dayName] ?? 0;
+  const ms = ref.getTime() - offset * 24 * 3600 * 1000;
+  const ymd = tzDate(new Date(ms), timezone);
+  return `${ymd} 00:00`;
+}
+
+/** Add N days to a `YYYY-MM-DD HH:mm` string (no tz conversion, just arithmetic). */
+function addDays(dayStr, n) {
+  const [date, hhmm] = dayStr.split(" ");
+  const d = new Date(`${date}T${hhmm ?? "00:00"}:00Z`);
+  d.setUTCDate(d.getUTCDate() + n);
+  const y = d.getUTCFullYear();
+  const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+  const day = String(d.getUTCDate()).padStart(2, "0");
+  return `${y}-${m}-${day} ${hhmm ?? "00:00"}`;
+}
+
+/** Human-friendly "Apr 7 – Apr 13" from a `YYYY-MM-DD HH:mm` start and end. */
+function prettyWeekRange(startStr, endStr) {
+  const fmt = (s) =>
+    new Date(`${s.split(" ")[0]}T00:00:00Z`).toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      timeZone: "UTC",
+    });
+  return `${fmt(startStr)} – ${fmt(endStr)}`;
+}
+
+/**
+ * Build the throughput payload for a given anchor Date.
+ *
+ * - "last week"     = the most recently completed Mon..Sun relative to `now`
+ * - "prev week"     = the Mon..Sun before that
+ * - trend           = the last N completed weeks' totals, oldest -> newest
+ */
+export async function buildWeeklyThroughput({
+  jira,
+  jql,
+  timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
+  now = new Date(),
+  weeksOfTrend = WEEKS_OF_TREND,
+}) {
+  if (!jira) throw new Error("buildWeeklyThroughput: jira client required");
+  if (!jql) throw new Error("buildWeeklyThroughput: jql required");
+
+  const thisMonday = mondayOfWeek(now, timezone);
+  const lastMonday = addDays(thisMonday, -7);
+  const prevMonday = addDays(lastMonday, -7);
+  const lastSunday23 = addDays(lastMonday, 7);
+  const prevSunday23 = addDays(prevMonday, 7);
+
+  const withinJql = (from, to) =>
+    `(${jql}) AND resolved >= "${from}" AND resolved < "${to}"`;
+
+  const [resolved, previous] = await Promise.all([
+    jira.searchCount(withinJql(lastMonday, lastSunday23)),
+    jira.searchCount(withinJql(prevMonday, prevSunday23)),
+  ]);
+
+  // Trend: N most recent completed weeks (oldest first), ending with "last week".
+  const trendPromises = [];
+  const trendLabels = [];
+  for (let i = weeksOfTrend - 1; i >= 0; i--) {
+    const from = addDays(lastMonday, -7 * i);
+    const to = addDays(from, 7);
+    trendPromises.push(jira.searchCount(withinJql(from, to)));
+    trendLabels.push(isoWeekLabel(new Date(`${from.split(" ")[0]}T00:00:00Z`)));
+  }
+  const trend = await Promise.all(trendPromises);
+
+  const deltaAbs = resolved - previous;
+  const deltaPct =
+    previous > 0 ? (deltaAbs / previous) * 100 : resolved > 0 ? 100 : 0;
+
+  return {
+    weekLabel: isoWeekLabel(
+      new Date(`${lastMonday.split(" ")[0]}T00:00:00Z`)
+    ),
+    weekRange: prettyWeekRange(lastMonday, addDays(lastMonday, 6)),
+    resolved,
+    previous,
+    deltaAbs,
+    deltaPct: Math.round(deltaPct * 10) / 10,
+    trend,
+    trendLabels,
+    generatedAt: Date.now(),
+    timezone,
+    jql,
+  };
+}
+
+const PRIORITY_ORDER = ["Highest", "Critical", "High", "Medium", "Low", "Lowest"];
+
+function sortPriorities(entries) {
+  const rank = (p) => {
+    const i = PRIORITY_ORDER.indexOf(p);
+    return i === -1 ? 999 : i;
+  };
+  return [...entries].sort((a, b) => rank(a.priority) - rank(b.priority));
+}
+
+function median(nums) {
+  if (!nums.length) return 0;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  return sorted.length % 2
+    ? sorted[mid]
+    : (sorted[mid - 1] + sorted[mid]) / 2;
+}
+
+function percentile(nums, p) {
+  if (!nums.length) return 0;
+  const sorted = [...nums].sort((a, b) => a - b);
+  const idx = Math.min(sorted.length - 1, Math.floor((p / 100) * sorted.length));
+  return sorted[idx];
+}
+
+function round1(n) {
+  return Math.round(n * 10) / 10;
+}
+
+/**
+ * Backlog overview — snapshot of currently open work.
+ *
+ * Expects `jql` to describe "all open EMAIL tickets", e.g.
+ *   project = EMAIL AND statusCategory != Done
+ * The builder adds the priority / age filters on top.
+ */
+export async function buildBacklogOverview({
+  jira,
+  jql,
+  priorities = ["Highest", "Critical", "High", "Medium", "Low", "Lowest"],
+  timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
+}) {
+  if (!jira) throw new Error("buildBacklogOverview: jira client required");
+  if (!jql) throw new Error("buildBacklogOverview: jql required");
+
+  const [total, previous, newThisWeek, resolvedThisWeek] = await Promise.all([
+    jira.searchCount(`(${jql})`),
+    jira.searchCount(`(${jql}) AND created <= -7d`),
+    jira.searchCount(`(${jql.replace(/statusCategory\s*!=\s*Done/i, "statusCategory != Done")}) AND created >= -7d`),
+    jira.searchCount(
+      `(${jql.replace(/statusCategory\s*!=\s*Done/i, "statusCategory = Done")}) AND resolved >= -7d`
+    ),
+  ]);
+
+  const byPriorityCounts = await Promise.all(
+    priorities.map((p) =>
+      jira.searchCount(`(${jql}) AND priority = "${p}"`).then((count) => ({
+        priority: p,
+        count,
+      }))
+    )
+  );
+  const byPriority = sortPriorities(byPriorityCounts.filter((x) => x.count > 0));
+
+  const [ageNew, ageRecent, ageAging, ageStale] = await Promise.all([
+    jira.searchCount(`(${jql}) AND created >= -7d`),
+    jira.searchCount(`(${jql}) AND created >= -30d AND created < -7d`),
+    jira.searchCount(`(${jql}) AND created >= -90d AND created < -30d`),
+    jira.searchCount(`(${jql}) AND created < -90d`),
+  ]);
+
+  const deltaAbs = total - previous;
+  const deltaPct = previous > 0 ? round1((deltaAbs / previous) * 100) : 0;
+
+  return {
+    total,
+    previous,
+    deltaAbs,
+    deltaPct,
+    byPriority,
+    byAge: { new: ageNew, recent: ageRecent, aging: ageAging, stale: ageStale },
+    newThisWeek,
+    resolvedThisWeek,
+    generatedAt: Date.now(),
+    timezone,
+    jql,
+  };
+}
+
+/**
+ * Ticket lifecycle — how long does a ticket live, from created to resolved?
+ *
+ * Expects `jql` to describe "tickets resolved in the recent window":
+ *   project = EMAIL AND statusCategory = Done AND resolved >= -30d
+ */
+export async function buildTicketLifecycle({
+  jira,
+  jql,
+  jqlPrevious, // optional: same query for the preceding window
+  lookbackDays = 30,
+  timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
+}) {
+  if (!jira) throw new Error("buildTicketLifecycle: jira client required");
+  if (!jql) throw new Error("buildTicketLifecycle: jql required");
+
+  const issues = await jira.searchAll(jql, {
+    fields: ["created", "resolutiondate", "priority"],
+    pageSize: 100,
+    hardCap: 500,
+  });
+
+  const agesDays = [];
+  const byPriorityBuckets = new Map();
+  for (const iss of issues) {
+    const created = iss.fields?.created;
+    const resolved = iss.fields?.resolutiondate;
+    if (!created || !resolved) continue;
+    const days = (Date.parse(resolved) - Date.parse(created)) / 86_400_000;
+    if (!Number.isFinite(days) || days < 0) continue;
+    agesDays.push(days);
+    const p = iss.fields?.priority?.name ?? "Unprioritised";
+    if (!byPriorityBuckets.has(p)) byPriorityBuckets.set(p, []);
+    byPriorityBuckets.get(p).push(days);
+  }
+
+  const byPriority = sortPriorities(
+    Array.from(byPriorityBuckets.entries()).map(([priority, arr]) => ({
+      priority,
+      count: arr.length,
+      medianDays: round1(median(arr)),
+    }))
+  );
+
+  let previousMedianDays = null;
+  if (jqlPrevious) {
+    const prev = await jira.searchAll(jqlPrevious, {
+      fields: ["created", "resolutiondate"],
+      pageSize: 100,
+      hardCap: 500,
+    });
+    const prevAges = prev
+      .map((i) => {
+        const c = i.fields?.created;
+        const r = i.fields?.resolutiondate;
+        if (!c || !r) return null;
+        const d = (Date.parse(r) - Date.parse(c)) / 86_400_000;
+        return Number.isFinite(d) && d >= 0 ? d : null;
+      })
+      .filter((x) => x !== null);
+    previousMedianDays = round1(median(prevAges));
+  }
+
+  const medianDays = round1(median(agesDays));
+  const meanDays =
+    agesDays.length > 0
+      ? round1(agesDays.reduce((a, b) => a + b, 0) / agesDays.length)
+      : 0;
+  const p95Days = round1(percentile(agesDays, 95));
+
+  const deltaDays =
+    previousMedianDays !== null ? round1(medianDays - previousMedianDays) : null;
+
+  return {
+    lookbackDays,
+    sampleSize: agesDays.length,
+    medianDays,
+    meanDays,
+    p95Days,
+    previousMedianDays,
+    deltaDays,
+    byPriority,
+    generatedAt: Date.now(),
+    timezone,
+    jql,
+  };
+}
+
+/**
+ * Kanban board snapshot — compact live view of the team's RapidBoard,
+ * grouped by status column with a cap on visible cards per column.
+ *
+ * `jql` should match the board filter in Jira (e.g. the same query that
+ * backs rapidView=101032). `columns`, when set, forces the column order
+ * (and shows empty columns) so the on-screen board matches Jira exactly.
+ */
+export async function buildKanbanBoard({
+  jira,
+  jql,
+  columns = null,
+  maxPerColumn = 6,
+  hardCap = 120,
+  timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
+  boardUrl = null,
+}) {
+  if (!jira) throw new Error("buildKanbanBoard: jira client required");
+  if (!jql) throw new Error("buildKanbanBoard: jql required");
+
+  const issues = await jira.searchAll(jql, {
+    fields: [
+      "summary",
+      "status",
+      "assignee",
+      "priority",
+      "updated",
+      "created",
+      "issuetype",
+    ],
+    pageSize: 50,
+    hardCap,
+  });
+
+  const seen = new Map();
+  const toTicket = (iss) => ({
+    key: iss.key,
+    summary: iss.fields?.summary ?? "(no summary)",
+    assignee: iss.fields?.assignee?.displayName ?? null,
+    assigneeKey: iss.fields?.assignee?.key ?? iss.fields?.assignee?.name ?? null,
+    priority: iss.fields?.priority?.name ?? null,
+    status: iss.fields?.status?.name ?? "Unknown",
+    statusCategory:
+      iss.fields?.status?.statusCategory?.key ??
+      iss.fields?.status?.statusCategory?.name?.toLowerCase() ??
+      null,
+    issueType: iss.fields?.issuetype?.name ?? null,
+    updatedAt: iss.fields?.updated ?? null,
+    createdAt: iss.fields?.created ?? null,
+  });
+
+  for (const iss of issues) {
+    const t = toTicket(iss);
+    const bucket = seen.get(t.status) ?? [];
+    bucket.push(t);
+    seen.set(t.status, bucket);
+  }
+
+  // Keep each column's tickets in "recently updated first" order.
+  for (const [, arr] of seen) {
+    arr.sort((a, b) => {
+      const bu = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+      const au = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+      return bu - au;
+    });
+  }
+
+  const orderedNames =
+    columns && columns.length > 0 ? [...columns] : Array.from(seen.keys());
+  // Append any statuses we saw but weren't in the requested order.
+  if (columns) {
+    for (const name of seen.keys()) {
+      if (!orderedNames.includes(name)) orderedNames.push(name);
+    }
+  }
+
+  const columnData = orderedNames.map((name) => {
+    const tickets = seen.get(name) ?? [];
+    return {
+      name,
+      statusCategory: tickets[0]?.statusCategory ?? null,
+      total: tickets.length,
+      tickets: tickets.slice(0, maxPerColumn),
+      truncated: Math.max(0, tickets.length - maxPerColumn),
+    };
+  });
+
+  return {
+    total: issues.length,
+    columns: columnData,
+    maxPerColumn,
+    boardUrl,
+    generatedAt: Date.now(),
+    timezone,
+    jql,
+  };
+}
+
+/** Slack-friendly mrkdwn + a quickchart.io sparkline image for the Monday post. */
+export function formatThroughputForSlack(payload, { dashboardUrl } = {}) {
+  const arrow =
+    payload.deltaAbs > 0 ? ":arrow_up_small:" : payload.deltaAbs < 0 ? ":arrow_down_small:" : ":small_blue_diamond:";
+  const sign = payload.deltaAbs > 0 ? "+" : "";
+  const deltaLine = `${arrow} ${sign}${payload.deltaAbs} (${sign}${payload.deltaPct}%) vs previous week`;
+
+  const chartCfg = {
+    type: "line",
+    data: {
+      labels: payload.trendLabels,
+      datasets: [
+        {
+          data: payload.trend,
+          borderColor: "#4A154B",
+          backgroundColor: "rgba(74,21,75,0.15)",
+          fill: true,
+          tension: 0.35,
+          pointRadius: 3,
+        },
+      ],
+    },
+    options: {
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { font: { size: 10 } } },
+        y: { beginAtZero: true },
+      },
+    },
+  };
+  const imageUrl = `https://quickchart.io/chart?w=600&h=220&c=${encodeURIComponent(
+    JSON.stringify(chartCfg)
+  )}`;
+
+  return {
+    text: `Weekly throughput — ${payload.weekRange}: *${payload.resolved}* resolved (${deltaLine})`,
+    blocks: [
+      {
+        type: "section",
+        text: {
+          type: "mrkdwn",
+          text:
+            `:bar_chart: *Weekly throughput — ${payload.weekRange}*\n` +
+            `*${payload.resolved}* issues resolved  ${deltaLine}` +
+            (dashboardUrl ? `\n<${dashboardUrl}|Open live dashboard>` : ""),
+        },
+      },
+      {
+        type: "image",
+        image_url: imageUrl,
+        alt_text: `Weekly throughput trend, last ${payload.trend.length} weeks`,
+      },
+      {
+        type: "context",
+        elements: [
+          {
+            type: "mrkdwn",
+            text: `_Week ${payload.weekLabel} · timezone ${payload.timezone} · auto-generated_`,
+          },
+        ],
+      },
+    ],
+  };
+}

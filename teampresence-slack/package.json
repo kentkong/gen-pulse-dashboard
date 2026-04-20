@@ -1,0 +1,20 @@
+{
+  "name": "teampresence-slack",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Slack app: presence / away updates and meeting roll calls for any domain",
+  "type": "module",
+  "main": "src/index.js",
+  "scripts": {
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "dependencies": {
+    "@slack/bolt": "^3.22.0",
+    "better-sqlite3": "^11.8.1",
+    "dotenv": "^16.4.7"
+  }
+}

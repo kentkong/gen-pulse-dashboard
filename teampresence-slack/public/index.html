@@ -1,0 +1,2458 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Gen Pulse — live team &amp; reports</title>
+    <script>
+      // Apply the stored theme before first paint so there's no flash.
+      (function () {
+        try {
+          var saved = localStorage.getItem("gen-pulse-theme");
+          if (saved === "light" || saved === "dark") {
+            document.documentElement.classList.add("theme-" + saved);
+          }
+        } catch (e) {}
+      })();
+    </script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+      :root {
+        color-scheme: light dark;
+        /* Gen corporate palette — sampled directly from Gen's Brand
+           Resources banner (dominant blue across 43k pixels came back
+           at rgb(5,1,244)). This is pure electric blue: near-zero red,
+           zero green, saturated B. Yellow is a tertiary accent only. */
+        --gen-blue: #0400f5;
+        --gen-blue-hi: #2a27ff;
+        --gen-blue-deep: #0000a8;
+        --gen-blue-soft: #dad8ff;
+        --gen-blue-haze: #ececff;
+        --gen-yellow: #ffd500;
+        --gen-yellow-hi: #ffe14d;
+        --gen-yellow-soft: #fff4b0;
+        --gen-ink: #0f1223;
+        --gen-ink-soft: #262a44;
+        --gen-slate: #4b5563;
+        --gen-page: #f7f7fb;
+        --gen-surface: #ffffff;
+        --gen-border: #e4e3ee;
+        --gen-muted-bg: #f1f0f8;
+        --gen-muted-fg: #545871;
+
+        /* Status ramp (used by pills, row tones, priority bars) */
+        --status-green: #1fb77a;
+        --status-green-soft: #e3f6ec;
+        --status-blue: #1b63b0;
+        --status-blue-soft: #e6eef7;
+        --status-amber: #f59e0b;
+        --status-amber-soft: #fff2d6;
+        --status-red: #e11d48;
+        --status-red-soft: #fde5ec;
+
+        /* Back-compat aliases — existing rules reference these names. */
+        --slack-aubergine: var(--gen-ink);
+        --slack-aubergine-soft: var(--gen-ink-soft);
+        --slack-blue: var(--status-blue);
+        --slack-blue-soft: var(--status-blue-soft);
+        --slack-green: var(--status-green);
+        --slack-yellow: var(--gen-yellow);
+        --slack-yellow-soft: var(--gen-yellow-soft);
+        --slack-red: var(--status-red);
+        --slack-red-soft: var(--status-red-soft);
+        --slack-muted-bg: var(--gen-muted-bg);
+        --slack-muted-fg: var(--gen-muted-fg);
+        --slack-border: var(--gen-border);
+        --slack-surface: var(--gen-surface);
+        --slack-page: var(--gen-page);
+        --slack-text: var(--gen-ink);
+
+        --bg: var(--gen-page);
+        --surface: var(--gen-surface);
+        --border: var(--gen-border);
+        --text: var(--gen-ink);
+        --muted-bg: var(--gen-muted-bg);
+        --muted-fg: var(--gen-muted-fg);
+        --accent: var(--gen-blue);
+        --accent-fg: #ffffff;
+        --link: var(--gen-blue);
+
+        /* Semantic theme tokens — one source of truth for light/dark. */
+        --brand-color: var(--gen-blue);
+        --logo-bg: var(--gen-blue);
+        --logo-fg: #ffffff;
+        --btn-bg: var(--gen-blue);
+        --btn-fg: #ffffff;
+        --btn-border: var(--gen-blue);
+        --btn-bg-hover: var(--gen-blue-hi);
+        --btn-border-hover: var(--gen-blue-hi);
+        --section-dot-bg: var(--gen-blue);
+        --section-dot-ring: var(--gen-blue-soft);
+        --subhead-dot-bg: var(--gen-blue);
+        --subhead-dot-ring: var(--gen-blue-soft);
+        --hero-pulse-color: var(--gen-ink);
+        --hero-pulse-hl: var(--gen-blue-soft);
+        --gen-logo-shadow: 0 6px 18px rgba(4, 0, 245, 0.32),
+          0 1px 0 rgba(4, 0, 245, 0.22);
+        --pill-green-color: #0f7b4d;
+        --pill-blue-color: var(--gen-blue);
+        --pill-yellow-color: #8a5a00;
+        --pill-red-color: var(--status-red);
+
+        /* Composed page background — layered pure-blue radials over
+           off-white. Gen's brand banner is a saturated cobalt, so the
+           ambient wash leans blue (no violet). A cyan grace note on the
+           left keeps it breathing; a whisper of lavender on the right
+           adds atmosphere without shifting the hue. */
+        --page-bg:
+          radial-gradient(1300px 600px at 0% -10%, rgba(4, 0, 245, 0.20), transparent 62%),
+          radial-gradient(1100px 520px at 100% 0%, rgba(42, 39, 255, 0.16), transparent 60%),
+          radial-gradient(720px 360px at 18% 48%, rgba(70, 150, 255, 0.10), transparent 62%),
+          radial-gradient(900px 440px at 85% 70%, rgba(150, 160, 255, 0.08), transparent 62%),
+          radial-gradient(900px 440px at 50% 118%, rgba(4, 0, 245, 0.14), transparent 65%),
+          var(--gen-page);
+        --hero-halo:
+          radial-gradient(580px 240px at 10% 40%, rgba(4, 0, 245, 0.18), transparent 65%),
+          radial-gradient(420px 210px at 88% 62%, rgba(42, 39, 255, 0.13), transparent 65%);
+      }
+
+      body {
+        font-family: "Lato", -apple-system, BlinkMacSystemFont, "Segoe UI",
+          Roboto, "Helvetica Neue", Arial, sans-serif;
+        background: var(--page-bg);
+        background-attachment: fixed;
+        color: var(--text);
+      }
+
+      .sn-brand {
+        color: var(--brand-color);
+        letter-spacing: -0.005em;
+      }
+      .sn-brand-dot {
+        display: inline-block;
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 9999px;
+        background: var(--gen-blue);
+        box-shadow: 0 0 0 3px var(--gen-blue-soft);
+        margin-right: 0.5rem;
+        vertical-align: middle;
+      }
+
+      .sn-card {
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: 0 1px 0 rgba(29, 28, 29, 0.04);
+      }
+
+      .sn-kpi-label {
+        color: var(--muted-fg);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .sn-kpi-value {
+        font-weight: 800;
+        font-size: 1.9rem;
+        line-height: 1.1;
+        color: var(--text);
+      }
+
+      .sn-btn {
+        background: var(--btn-bg);
+        color: var(--btn-fg);
+        border: 1px solid var(--btn-border);
+        border-radius: 6px;
+        padding: 0.45rem 0.9rem;
+        font-weight: 800;
+        font-size: 0.85rem;
+        letter-spacing: 0.01em;
+        transition: background 120ms ease, box-shadow 120ms ease,
+          border-color 120ms ease, color 120ms ease;
+      }
+      .sn-btn:hover {
+        background: var(--btn-bg-hover);
+        border-color: var(--btn-border-hover);
+      }
+      .sn-btn:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(255, 213, 0, 0.45);
+      }
+
+      /* Secondary / outline variant — used by the theme toggle. */
+      .sn-btn-ghost {
+        background: transparent;
+        color: var(--text);
+        border-color: var(--border);
+      }
+      .sn-btn-ghost:hover {
+        background: var(--muted-bg);
+        border-color: var(--muted-fg);
+      }
+
+      .sn-header {
+        border-bottom: 1px solid var(--border);
+      }
+      .sn-section-title {
+        font-weight: 800;
+        font-size: 1.05rem;
+        letter-spacing: 0.01em;
+      }
+
+      /* Impactful page hero */
+      .sn-hero {
+        position: relative;
+        padding: 1.25rem 0 1.5rem;
+        border-bottom: 1px solid var(--border);
+        isolation: isolate;
+      }
+      .sn-hero::before {
+        content: "";
+        position: absolute;
+        inset: -24px -48px 0;
+        background: var(--hero-halo);
+        z-index: -1;
+        pointer-events: none;
+      }
+
+      /* --------------------------------------------------------------
+         Feed canvas — atmospheric Gen-blue panel that sits behind
+         the widget stack. Deep navy vignette with a cobalt bloom,
+         a cyan highlight on the left, a lavender kiss on the right,
+         and hair-thin arcs tracing across. Inspired by Gen's
+         brand imagery.
+         -------------------------------------------------------------- */
+      .sn-feed-canvas {
+        position: relative;
+        margin-top: 2.25rem;
+        padding: 2rem 1.5rem 2.25rem;
+        border-radius: 1.25rem;
+        isolation: isolate;
+        overflow: hidden;
+        background:
+          radial-gradient(440px 270px at 8% 30%, rgba(90, 190, 255, 0.22), transparent 62%),
+          radial-gradient(400px 250px at 92% 65%, rgba(150, 160, 255, 0.18), transparent 65%),
+          radial-gradient(
+            ellipse 95% 85% at 48% 50%,
+            rgba(42, 39, 255, 0.58) 0%,
+            rgba(4, 0, 245, 0.42) 32%,
+            rgba(6, 4, 100, 0.94) 72%,
+            #040233 100%
+          );
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        box-shadow:
+          0 30px 70px -24px rgba(4, 0, 80, 0.6),
+          inset 0 1px 0 rgba(255, 255, 255, 0.08);
+      }
+      .sn-feed-canvas::before {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800' preserveAspectRatio='none'%3E%3Cpath d='M-50 230 Q 420 -60 1260 270' stroke='rgba(255,255,255,0.22)' stroke-width='1' fill='none'/%3E%3Cpath d='M-50 560 Q 600 180 1260 580' stroke='rgba(170,210,255,0.18)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 660 Q 700 940 1260 470' stroke='rgba(255,255,255,0.12)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 100 Q 520 600 1260 150' stroke='rgba(130,190,255,0.14)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 380 Q 700 260 1260 360' stroke='rgba(255,255,255,0.08)' stroke-width='1' fill='none'/%3E%3C/svg%3E");
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+        opacity: 0.8;
+        z-index: 0;
+      }
+      .sn-feed-canvas > * {
+        position: relative;
+        z-index: 1;
+      }
+
+      /* Anything that lives directly on the canvas (not inside a
+         white card) needs light text to stay readable on blue. */
+      .sn-feed-canvas .sn-section-head,
+      .sn-feed-canvas .sn-section-title {
+        color: #ffffff;
+      }
+      .sn-feed-canvas .sn-section-head .sn-section-tail {
+        color: rgba(255, 255, 255, 0.72);
+      }
+      .sn-feed-canvas .sn-section-head .sn-brand {
+        color: #ffffff;
+      }
+      .sn-feed-canvas .sn-section-dot {
+        background: #ffffff;
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.22);
+      }
+      .sn-feed-canvas > p.sn-muted,
+      .sn-feed-canvas > section > p.sn-muted {
+        color: rgba(255, 255, 255, 0.7);
+      }
+      .sn-feed-canvas code.sn-code {
+        background: rgba(255, 255, 255, 0.1);
+        border-color: rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.9);
+      }
+
+      /* Cards float as light/glass tiles over the blue canvas. */
+      .sn-feed-canvas .sn-card {
+        box-shadow:
+          0 12px 32px -14px rgba(8, 16, 58, 0.5),
+          0 2px 0 rgba(255, 255, 255, 0.05);
+      }
+
+      /* In dark mode the page body is already deep navy — lift
+         cards a touch so they don't merge into the canvas. */
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) .sn-feed-canvas .sn-card {
+          background: #1a1f3c;
+          border-color: rgba(255, 255, 255, 0.08);
+        }
+      }
+      html.theme-dark .sn-feed-canvas .sn-card {
+        background: #1a1f3c;
+        border-color: rgba(255, 255, 255, 0.08);
+      }
+
+      /* --------------------------------------------------------------
+         Kanban snapshot — compact, horizontally-scrollable columns that
+         live on the feed canvas. Each column is a glassy tile; each
+         ticket is a small card with priority bar, key, summary, and
+         an assignee chip. Click a card to jump to Jira.
+         -------------------------------------------------------------- */
+      .sn-kb-head {
+        display: flex;
+        align-items: flex-end;
+        justify-content: space-between;
+        gap: 1rem;
+        flex-wrap: wrap;
+      }
+      .sn-kb-open {
+        font-size: 0.78rem;
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        color: rgba(255, 255, 255, 0.85);
+        background: rgba(255, 255, 255, 0.08);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 999px;
+        padding: 0.35rem 0.8rem;
+        text-decoration: none;
+        white-space: nowrap;
+        transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+      }
+      .sn-kb-open:hover {
+        background: rgba(255, 255, 255, 0.16);
+        border-color: rgba(255, 255, 255, 0.32);
+        color: #ffffff;
+      }
+      html.theme-light .sn-kb-open,
+      html:not(.theme-dark) .sn-kb-open {
+        /* On the blue canvas the chip stays white-on-glass either way,
+           so no override needed; keeping the rule here so future-us
+           knows the selector exists. */
+      }
+
+      .sn-kb {
+        display: grid;
+        grid-auto-flow: column;
+        grid-auto-columns: minmax(260px, 1fr);
+        gap: 0.9rem;
+        overflow-x: auto;
+        overflow-y: hidden;
+        padding: 0.25rem 0.25rem 0.75rem;
+        margin: 0 -0.25rem;
+        scroll-snap-type: x proximity;
+        scrollbar-gutter: stable;
+      }
+      .sn-kb::-webkit-scrollbar {
+        height: 8px;
+      }
+      .sn-kb::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.04);
+        border-radius: 8px;
+      }
+      .sn-kb::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.22);
+        border-radius: 8px;
+      }
+      .sn-kb-loading {
+        padding: 1.5rem;
+        grid-column: 1 / -1;
+        color: rgba(255, 255, 255, 0.7);
+      }
+
+      .sn-kb-col {
+        scroll-snap-align: start;
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px solid rgba(255, 255, 255, 0.12);
+        border-radius: 0.85rem;
+        padding: 0.75rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.55rem;
+        min-width: 0;
+        backdrop-filter: blur(4px);
+        -webkit-backdrop-filter: blur(4px);
+      }
+      .sn-kb-col-head {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.05rem 0.15rem 0.3rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+      }
+      .sn-kb-col-dot {
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 999px;
+        background: rgba(255, 255, 255, 0.6);
+        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+        flex: none;
+      }
+      .sn-kb-col-dot--new { background: #94a3b8; box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.22); }
+      .sn-kb-col-dot--indeterminate { background: #3838ff; box-shadow: 0 0 0 3px rgba(56, 56, 255, 0.28); }
+      .sn-kb-col-dot--done { background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.22); }
+
+      .sn-kb-col-name {
+        font-size: 0.72rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: rgba(255, 255, 255, 0.92);
+        flex: 1;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .sn-kb-col-count {
+        font-size: 0.7rem;
+        font-weight: 800;
+        color: rgba(255, 255, 255, 0.85);
+        background: rgba(255, 255, 255, 0.12);
+        border: 1px solid rgba(255, 255, 255, 0.18);
+        border-radius: 999px;
+        padding: 0.05rem 0.5rem;
+        min-width: 1.4rem;
+        text-align: center;
+      }
+
+      .sn-kb-col-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.5rem;
+        max-height: 440px;
+        overflow-y: auto;
+        padding-right: 0.15rem;
+      }
+      .sn-kb-col-body::-webkit-scrollbar {
+        width: 6px;
+      }
+      .sn-kb-col-body::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.18);
+        border-radius: 6px;
+      }
+      .sn-kb-col-empty {
+        font-size: 0.78rem;
+        color: rgba(255, 255, 255, 0.55);
+        padding: 0.75rem 0.25rem;
+        text-align: center;
+      }
+
+      .sn-kb-card {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+        padding: 0.6rem 0.7rem 0.6rem 0.85rem;
+        background: #ffffff;
+        border: 1px solid rgba(15, 23, 42, 0.08);
+        border-radius: 0.55rem;
+        text-decoration: none;
+        color: inherit;
+        box-shadow: 0 1px 0 rgba(8, 16, 58, 0.08), 0 4px 12px -8px rgba(8, 16, 58, 0.4);
+        transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+      }
+      .sn-kb-card::before {
+        content: "";
+        position: absolute;
+        left: 0; top: 0; bottom: 0;
+        width: 3px;
+        background: #94a3b8;
+        border-radius: 0.55rem 0 0 0.55rem;
+      }
+      .sn-kb-card:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 2px 0 rgba(8, 16, 58, 0.10), 0 10px 22px -10px rgba(8, 16, 58, 0.55);
+        border-color: rgba(15, 23, 42, 0.16);
+      }
+      .sn-kb-card--critical::before,
+      .sn-kb-card--highest::before { background: var(--status-red); }
+      .sn-kb-card--high::before { background: var(--status-amber); }
+      .sn-kb-card--medium::before { background: var(--gen-blue); }
+      .sn-kb-card--low::before,
+      .sn-kb-card--lowest::before { background: #94a3b8; }
+
+      .sn-kb-card-head {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+      }
+      .sn-kb-key {
+        font-size: 0.7rem;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        color: var(--gen-blue);
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .sn-kb-type {
+        font-size: 0.62rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        color: var(--muted-fg);
+      }
+      .sn-kb-card-sum {
+        font-size: 0.85rem;
+        line-height: 1.3;
+        font-weight: 600;
+        color: var(--text);
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        overflow: hidden;
+      }
+      .sn-kb-card-foot {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 0.5rem;
+        margin-top: 0.15rem;
+      }
+      .sn-kb-assignee {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        min-width: 0;
+      }
+      .sn-kb-ava {
+        width: 1.35rem;
+        height: 1.35rem;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.62rem;
+        font-weight: 800;
+        color: #ffffff;
+        background: linear-gradient(160deg, var(--gen-blue) 0%, var(--gen-blue-deep) 100%);
+        letter-spacing: 0.02em;
+        flex: none;
+        box-shadow: 0 1px 0 rgba(8, 16, 58, 0.25);
+      }
+      .sn-kb-assignee-name {
+        font-size: 0.72rem;
+        font-weight: 600;
+        color: var(--text);
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        min-width: 0;
+      }
+      .sn-kb-ago {
+        font-size: 0.68rem;
+        color: var(--muted-fg);
+        white-space: nowrap;
+      }
+      .sn-kb-more {
+        font-size: 0.72rem;
+        font-weight: 700;
+        text-align: center;
+        padding: 0.4rem;
+        color: rgba(255, 255, 255, 0.82);
+        background: rgba(255, 255, 255, 0.04);
+        border: 1px dashed rgba(255, 255, 255, 0.2);
+        border-radius: 0.45rem;
+      }
+
+      /* Dark-mode tweaks so cards still feel crisp on the navy body. */
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) .sn-kb-card {
+          background: #1a1f3c;
+          border-color: rgba(255, 255, 255, 0.1);
+          box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 8px 18px -10px rgba(0, 0, 0, 0.55);
+        }
+        html:not(.theme-light) .sn-kb-key { color: #a3a3ff; }
+      }
+      html.theme-dark .sn-kb-card {
+        background: #1a1f3c;
+        border-color: rgba(255, 255, 255, 0.1);
+        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 8px 18px -10px rgba(0, 0, 0, 0.55);
+      }
+      html.theme-dark .sn-kb-key { color: #a3a3ff; }
+
+      /* --------------------------------------------------------------
+         Team-member avatars — circular chip that sits next to each
+         name in the Team table. Falls back to initials over a stable
+         per-person gradient if no avatarUrl is provided by Slack.
+         -------------------------------------------------------------- */
+      .sn-member {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.65rem;
+        min-width: 0;
+      }
+      .sn-member-avatar {
+        width: 2rem;
+        height: 2rem;
+        border-radius: 999px;
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        overflow: hidden;
+        font-size: 0.72rem;
+        font-weight: 800;
+        color: #ffffff;
+        letter-spacing: 0.02em;
+        box-shadow:
+          0 0 0 2px var(--surface),
+          0 1px 2px rgba(8, 16, 58, 0.25),
+          0 4px 10px -6px rgba(8, 16, 58, 0.35);
+        user-select: none;
+      }
+      .sn-member-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        display: block;
+      }
+      .sn-member-name {
+        font-weight: 700;
+        min-width: 0;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .sn-member-title {
+        display: block;
+        font-weight: 500;
+        font-size: 0.72rem;
+        color: var(--muted-fg);
+        margin-top: 0.05rem;
+      }
+
+      .sn-hero-title {
+        margin: 0;
+        font-weight: 900;
+        font-size: clamp(2.1rem, 5.2vw, 3.5rem);
+        line-height: 1.03;
+        letter-spacing: -0.025em;
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        gap: 0.65rem;
+      }
+      .sn-hero-lead {
+        color: var(--gen-blue);
+      }
+      .sn-hero-sep {
+        color: var(--muted-fg);
+        font-weight: 300;
+        opacity: 0.55;
+      }
+
+      /* Gen logo mark — cobalt-blue tile with a white "Gen" wordmark,
+         matching the Gen Central hero banner. */
+      .gen-logo {
+        display: inline-flex;
+        align-items: baseline;
+        background: linear-gradient(
+          180deg,
+          var(--logo-bg) 0%,
+          var(--gen-blue-deep, var(--logo-bg)) 100%
+        );
+        color: var(--logo-fg);
+        padding: 0.14em 0.34em 0.22em;
+        border-radius: 0.22em;
+        font-family: "Inter", "Helvetica Neue", -apple-system, system-ui,
+          sans-serif;
+        font-weight: 900;
+        letter-spacing: -0.03em;
+        line-height: 0.95;
+        box-shadow: var(--gen-logo-shadow);
+      }
+      .gen-logo-word {
+        display: inline-block;
+        /* Optical adjustment so the wordmark sits centred in the tile. */
+        transform: translateY(-0.01em);
+      }
+      .gen-logo-tm {
+        font-size: 0.35em;
+        margin-left: 0.18em;
+        opacity: 0.8;
+        transform: translateY(-0.75em);
+        display: inline-block;
+        font-weight: 600;
+      }
+
+      /* "Pulse" wordmark with a yellow highlighter slab behind the text. */
+      .hero-pulse {
+        position: relative;
+        color: var(--hero-pulse-color);
+        padding: 0 0.1em;
+        font-style: normal;
+      }
+      .hero-pulse::after {
+        content: "";
+        position: absolute;
+        left: 0.05em;
+        right: 0.05em;
+        bottom: 0.08em;
+        height: 0.26em;
+        background: var(--hero-pulse-hl);
+        border-radius: 0.06em;
+        z-index: -1;
+      }
+      .sn-hero-tag {
+        color: var(--muted-fg);
+        font-size: 1rem;
+        font-weight: 500;
+        margin: 0.55rem 0 0;
+        max-width: 62ch;
+      }
+
+      /* Big section headers (matching the 'Team Presence' treatment) */
+      .sn-section-head {
+        margin: 0;
+        font-size: clamp(1.25rem, 2.5vw, 1.6rem);
+        font-weight: 800;
+        letter-spacing: -0.01em;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        flex-wrap: wrap;
+      }
+      .sn-section-dot {
+        display: inline-block;
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 9999px;
+        background: var(--section-dot-bg);
+        box-shadow: 0 0 0 3px var(--section-dot-ring);
+      }
+      .sn-section-tail {
+        color: var(--muted-fg);
+        font-weight: 600;
+      }
+
+      /* Sub-section headers used inside cards (smaller than main section heads) */
+      .sn-subhead {
+        margin: 0;
+        font-size: 0.95rem;
+        font-weight: 800;
+        letter-spacing: 0;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+      }
+      .sn-subhead-dot {
+        display: inline-block;
+        width: 0.38rem;
+        height: 0.38rem;
+        border-radius: 9999px;
+        background: var(--subhead-dot-bg);
+        box-shadow: 0 0 0 2px var(--subhead-dot-ring);
+      }
+
+      /* Segmented stacked bar (used in Backlog Overview) */
+      .sn-stack {
+        display: flex;
+        height: 10px;
+        width: 100%;
+        border-radius: 999px;
+        overflow: hidden;
+        background: var(--muted-bg);
+      }
+      .sn-stack-seg {
+        height: 100%;
+        min-width: 2px;
+      }
+
+      /* Mini bar used inside the lifecycle priority table */
+      .sn-minibar {
+        position: relative;
+        height: 6px;
+        border-radius: 999px;
+        background: var(--muted-bg);
+        overflow: hidden;
+        min-width: 60px;
+      }
+      .sn-minibar-fill {
+        position: absolute;
+        inset: 0;
+        right: auto;
+        background: var(--gen-blue);
+      }
+
+      /* Colour classes for backlog priority segments and legend chips.
+         Traffic-light ramp anchored with Gen blue at the Medium tier
+         so the main chunk of the stack echoes the brand. */
+      .pri-critical { background: var(--status-red); }
+      .pri-high     { background: var(--status-amber); }
+      .pri-medium   { background: var(--gen-blue); }
+      .pri-low      { background: var(--status-green); }
+      .pri-other    { background: #9a9b9e; }
+
+      .sn-legend-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        font-size: 0.72rem;
+        color: var(--muted-fg);
+      }
+      .sn-legend-chip::before {
+        content: "";
+        display: inline-block;
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 2px;
+        background: currentColor;
+        opacity: 0.35;
+      }
+
+      /* Dark-mode variable overrides are consolidated below.  */
+
+      table.sn-table {
+        width: 100%;
+        border-collapse: separate;
+        border-spacing: 0;
+      }
+      .sn-table thead th {
+        background: var(--muted-bg);
+        color: var(--muted-fg);
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        padding: 0.6rem 0.9rem;
+        border-bottom: 1px solid var(--border);
+        text-align: left;
+      }
+      .sn-table tbody td {
+        padding: 0.7rem 0.9rem;
+        border-bottom: 1px solid var(--border);
+        vertical-align: top;
+      }
+      .sn-table tbody tr:last-child td {
+        border-bottom: none;
+      }
+
+      .sn-pill {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.15rem 0.55rem;
+        border-radius: 9999px;
+        font-size: 0.72rem;
+        font-weight: 700;
+        border: 1px solid transparent;
+        white-space: nowrap;
+      }
+      .sn-pill-green {
+        background: rgba(46, 182, 125, 0.12);
+        color: var(--pill-green-color);
+        border-color: rgba(46, 182, 125, 0.35);
+      }
+      .sn-pill-blue {
+        background: var(--slack-blue-soft);
+        color: var(--pill-blue-color);
+        border-color: rgba(18, 100, 163, 0.3);
+      }
+      .sn-pill-yellow {
+        background: var(--slack-yellow-soft);
+        color: var(--pill-yellow-color);
+        border-color: rgba(236, 178, 46, 0.45);
+      }
+      .sn-pill-red {
+        background: var(--slack-red-soft);
+        color: var(--pill-red-color);
+        border-color: rgba(224, 30, 90, 0.3);
+      }
+      .sn-pill-muted {
+        background: var(--muted-bg);
+        color: var(--muted-fg);
+        border-color: var(--border);
+      }
+
+      /* Row tints (subtle, left-border accent in Slack style) */
+      .tone-amber td:first-child {
+        box-shadow: inset 3px 0 0 var(--slack-yellow);
+      }
+      .tone-red td:first-child {
+        box-shadow: inset 3px 0 0 var(--slack-red);
+      }
+      .tone-blue td:first-child {
+        box-shadow: inset 3px 0 0 var(--slack-blue);
+      }
+      .tone-muted {
+        color: var(--muted-fg);
+      }
+      .tone-muted td:first-child {
+        box-shadow: inset 3px 0 0 var(--border);
+      }
+
+      .sn-code {
+        font-family: "Monaco", Menlo, Consolas, monospace;
+        background: var(--muted-bg);
+        border: 1px solid var(--border);
+        padding: 0.05rem 0.35rem;
+        border-radius: 4px;
+        font-size: 0.78rem;
+      }
+      .sn-muted {
+        color: var(--muted-fg);
+      }
+
+      /* --------------------------------------------------------------
+         Dark-mode palette.
+
+         Applied in two ways so users can override their OS preference:
+           • OS preference only:   @media (prefers-color-scheme: dark)
+             when the user hasn't explicitly chosen a theme.
+           • Explicit dark choice: html.theme-dark  (set by the toggle).
+         The light theme is the :root default and is forced by
+         html.theme-light (which beats the media query).
+         Keep these two selector blocks in sync — they share one set of
+         tokens so there's no per-component duplication.
+         -------------------------------------------------------------- */
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) {
+          --bg: #0a0d1a;
+          --surface: #151829;
+          --border: #2a2d44;
+          --text: #e8e8f2;
+          --muted-bg: #1d2033;
+          --muted-fg: #9d9fb8;
+          --accent: var(--gen-blue-hi);
+          --accent-fg: #ffffff;
+          --slack-blue-soft: rgba(42, 39, 255, 0.24);
+          --slack-yellow-soft: rgba(255, 213, 0, 0.18);
+          --slack-red-soft: rgba(225, 29, 72, 0.22);
+
+          --brand-color: #8b8bff;
+          --logo-bg: var(--gen-blue-hi);
+          --logo-fg: #ffffff;
+          --btn-bg: var(--gen-blue-hi);
+          --btn-fg: #ffffff;
+          --btn-border: var(--gen-blue-hi);
+          --btn-bg-hover: #4a48ff;
+          --btn-border-hover: #4a48ff;
+          --section-dot-bg: #8b8bff;
+          --section-dot-ring: rgba(139, 139, 255, 0.22);
+          --subhead-dot-bg: #8b8bff;
+          --subhead-dot-ring: rgba(139, 139, 255, 0.25);
+          --hero-pulse-color: #f5f5f7;
+          --hero-pulse-hl: rgba(74, 72, 255, 0.46);
+          --gen-logo-shadow: 0 8px 20px rgba(4, 0, 245, 0.55),
+            0 0 0 1px rgba(255, 255, 255, 0.08);
+          --pill-green-color: #5cd6a0;
+          --pill-blue-color: #9a9aff;
+          --pill-yellow-color: #ffe14d;
+          --pill-red-color: #f27aa1;
+
+          --page-bg:
+            radial-gradient(1100px 520px at 0% -8%, rgba(42, 39, 255, 0.22), transparent 60%),
+            radial-gradient(900px 420px at 100% -6%, rgba(74, 72, 255, 0.16), transparent 60%),
+            radial-gradient(700px 360px at 50% 110%, rgba(4, 0, 245, 0.18), transparent 65%),
+            #0a0d1a;
+          --hero-halo:
+            radial-gradient(520px 220px at 12% 35%, rgba(74, 72, 255, 0.22), transparent 65%),
+            radial-gradient(380px 180px at 85% 65%, rgba(42, 39, 255, 0.16), transparent 65%);
+        }
+      }
+      html.theme-dark {
+        --bg: #0a0d1a;
+        --surface: #151829;
+        --border: #2a2d44;
+        --text: #e8e8f2;
+        --muted-bg: #1d2033;
+        --muted-fg: #9d9fb8;
+        --accent: var(--gen-blue-hi);
+        --accent-fg: #ffffff;
+        --slack-blue-soft: rgba(42, 39, 255, 0.24);
+        --slack-yellow-soft: rgba(255, 213, 0, 0.18);
+        --slack-red-soft: rgba(225, 29, 72, 0.22);
+
+        --brand-color: #8b8bff;
+        --logo-bg: var(--gen-blue-hi);
+        --logo-fg: #ffffff;
+        --btn-bg: var(--gen-blue-hi);
+        --btn-fg: #ffffff;
+        --btn-border: var(--gen-blue-hi);
+        --btn-bg-hover: #4a48ff;
+        --btn-border-hover: #4a48ff;
+        --section-dot-bg: #8b8bff;
+        --section-dot-ring: rgba(139, 139, 255, 0.22);
+        --subhead-dot-bg: #8b8bff;
+        --subhead-dot-ring: rgba(139, 139, 255, 0.25);
+        --hero-pulse-color: #f5f5f7;
+        --hero-pulse-hl: rgba(74, 72, 255, 0.46);
+        --gen-logo-shadow: 0 8px 20px rgba(4, 0, 245, 0.55),
+          0 0 0 1px rgba(255, 255, 255, 0.08);
+        --pill-green-color: #5cd6a0;
+        --pill-blue-color: #9a9aff;
+        --pill-yellow-color: #ffe14d;
+        --pill-red-color: #f27aa1;
+
+        --page-bg:
+          radial-gradient(1100px 520px at 0% -8%, rgba(42, 39, 255, 0.22), transparent 60%),
+          radial-gradient(900px 420px at 100% -6%, rgba(74, 72, 255, 0.16), transparent 60%),
+          radial-gradient(700px 360px at 50% 110%, rgba(4, 0, 245, 0.18), transparent 65%),
+          #0a0d1a;
+        --hero-halo:
+          radial-gradient(520px 220px at 12% 35%, rgba(74, 72, 255, 0.22), transparent 65%),
+          radial-gradient(380px 180px at 85% 65%, rgba(42, 39, 255, 0.16), transparent 65%);
+      }
+
+      /* --------------------------------------------------------------
+         Top navigation + user chip (Gen Central-style identity bar).
+         -------------------------------------------------------------- */
+      .sn-topnav {
+        position: sticky;
+        top: 0;
+        z-index: 30;
+        background: rgba(255, 255, 255, 0.78);
+        border-bottom: 1px solid var(--border);
+        backdrop-filter: saturate(150%) blur(10px);
+        -webkit-backdrop-filter: saturate(150%) blur(10px);
+      }
+      html.theme-dark .sn-topnav,
+      html:not(.theme-light) .sn-topnav {
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) .sn-topnav {
+          background: rgba(10, 13, 26, 0.72);
+        }
+      }
+      html.theme-dark .sn-topnav {
+        background: rgba(10, 13, 26, 0.72);
+      }
+
+      .sn-topnav-inner {
+        max-width: 72rem;
+        margin: 0 auto;
+        padding: 0.6rem 1.5rem;
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 1rem;
+      }
+      .sn-topnav-brand {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        color: var(--text);
+        text-decoration: none;
+      }
+      .gen-logo-mini {
+        display: inline-flex;
+        align-items: baseline;
+        background: var(--logo-bg);
+        color: var(--logo-fg);
+        padding: 0.12em 0.3em 0.18em;
+        border-radius: 0.18em;
+        font-family: "Inter", "Helvetica Neue", -apple-system, system-ui,
+          sans-serif;
+        font-weight: 900;
+        letter-spacing: -0.02em;
+        line-height: 0.95;
+        font-size: 0.95rem;
+      }
+      .sn-topnav-crumb {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        font-weight: 700;
+        font-size: 0.9rem;
+        color: var(--text);
+      }
+      .sn-topnav-sep {
+        color: var(--muted-fg);
+        opacity: 0.7;
+      }
+      .sn-topnav-right {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+      }
+
+      .sn-user-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.25rem 0.5rem 0.25rem 0.3rem;
+        border-radius: 9999px;
+        border: 1px solid var(--border);
+        background: var(--surface);
+        color: var(--text);
+        cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease,
+          box-shadow 120ms ease;
+        max-width: 18rem;
+      }
+      .sn-user-chip:hover {
+        background: var(--muted-bg);
+        border-color: var(--muted-fg);
+      }
+      .sn-user-chip:focus-visible {
+        outline: none;
+        box-shadow: 0 0 0 3px rgba(4, 0, 245, 0.32);
+      }
+      .sn-avatar {
+        width: 28px;
+        height: 28px;
+        border-radius: 9999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-weight: 800;
+        font-size: 0.72rem;
+        letter-spacing: 0.02em;
+        color: #ffffff;
+        background: linear-gradient(
+          160deg,
+          var(--gen-blue) 0%,
+          var(--gen-blue-deep) 100%
+        );
+        flex: 0 0 auto;
+        overflow: hidden;
+      }
+      .sn-avatar img {
+        width: 100%;
+        height: 100%;
+        object-fit: cover;
+        border-radius: inherit;
+      }
+      .sn-user-meta {
+        display: inline-flex;
+        flex-direction: column;
+        line-height: 1.05;
+        min-width: 0;
+        max-width: 12rem;
+      }
+      .sn-user-name {
+        font-weight: 700;
+        font-size: 0.82rem;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .sn-user-role {
+        font-size: 0.68rem;
+        font-weight: 500;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .sn-chevron {
+        color: var(--muted-fg);
+        font-size: 0.7rem;
+        margin-right: 0.15rem;
+      }
+
+      .sn-user-menu {
+        position: absolute;
+        top: calc(100% + 0.5rem);
+        right: 0;
+        min-width: 18rem;
+        background: var(--surface);
+        border: 1px solid var(--border);
+        border-radius: 10px;
+        box-shadow: 0 12px 32px rgba(15, 18, 35, 0.18),
+          0 2px 6px rgba(15, 18, 35, 0.06);
+        padding: 0.5rem;
+        z-index: 40;
+      }
+      .sn-user-menu[hidden] { display: none; }
+      .sn-user-menu-header {
+        padding: 0.6rem 0.75rem 0.75rem;
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+      }
+      .sn-user-menu-header .sn-avatar {
+        width: 40px;
+        height: 40px;
+        font-size: 0.95rem;
+      }
+      .sn-user-menu-header-meta .sn-user-name {
+        font-size: 0.92rem;
+      }
+      .sn-user-menu-header-meta .sn-user-role {
+        font-size: 0.75rem;
+      }
+      .sn-menu-divider {
+        height: 1px;
+        background: var(--border);
+        margin: 0.25rem 0;
+      }
+      .sn-user-menu-item {
+        display: flex;
+        align-items: center;
+        gap: 0.6rem;
+        width: 100%;
+        padding: 0.55rem 0.75rem;
+        border-radius: 6px;
+        color: var(--text);
+        font-size: 0.85rem;
+        font-weight: 500;
+        background: transparent;
+        border: none;
+        text-align: left;
+        cursor: pointer;
+        text-decoration: none;
+      }
+      .sn-user-menu-item:hover {
+        background: var(--muted-bg);
+      }
+      .sn-user-menu-item[disabled] {
+        color: var(--muted-fg);
+        cursor: not-allowed;
+      }
+      .sn-menu-kbd {
+        margin-left: auto;
+        font-family: "Monaco", Menlo, Consolas, monospace;
+        font-size: 0.7rem;
+        color: var(--muted-fg);
+      }
+      .sn-user-menu-roles {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.3rem;
+        padding: 0 0.75rem 0.55rem;
+      }
+      .sn-role-chip {
+        font-size: 0.65rem;
+        font-weight: 700;
+        padding: 0.1rem 0.45rem;
+        border-radius: 9999px;
+        background: var(--gen-blue-soft);
+        color: var(--gen-blue);
+        letter-spacing: 0.02em;
+        text-transform: uppercase;
+      }
+      html.theme-dark .sn-role-chip,
+      html:not(.theme-light) .sn-role-chip {
+        background: rgba(139, 139, 255, 0.20);
+        color: #bfbfff;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) .sn-role-chip {
+          background: rgba(139, 139, 255, 0.20);
+          color: #bfbfff;
+        }
+      }
+
+      /* Hide the small meta text on narrow screens, keep the avatar. */
+      @media (max-width: 640px) {
+        .sn-user-meta { display: none; }
+        .sn-topnav-crumb { display: none; }
+        .sn-topnav-inner { padding: 0.5rem 1rem; }
+      }
+    </style>
+  </head>
+  <body class="min-h-screen">
+    <nav class="sn-topnav" aria-label="Primary">
+      <div class="sn-topnav-inner">
+        <a class="sn-topnav-brand" href="/" aria-label="Gen Pulse home">
+          <span class="gen-logo-mini" aria-hidden="true">Gen</span>
+          <span class="sn-topnav-crumb">
+            <span class="sn-topnav-sep" aria-hidden="true">›</span>
+            <span id="topnav-product-name">Pulse</span>
+          </span>
+        </a>
+        <div class="sn-topnav-right">
+          <button
+            id="user-chip"
+            class="sn-user-chip"
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded="false"
+            aria-controls="user-menu"
+          >
+            <span id="user-avatar" class="sn-avatar" aria-hidden="true">–</span>
+            <span class="sn-user-meta">
+              <span id="user-name" class="sn-user-name">Loading…</span>
+              <span id="user-role" class="sn-user-role sn-muted"></span>
+            </span>
+            <span class="sn-chevron" aria-hidden="true">▾</span>
+          </button>
+          <div
+            id="user-menu"
+            class="sn-user-menu"
+            role="menu"
+            aria-labelledby="user-chip"
+            hidden
+          >
+            <div class="sn-user-menu-header">
+              <span id="menu-avatar" class="sn-avatar" aria-hidden="true">–</span>
+              <span class="sn-user-menu-header-meta">
+                <span id="menu-name" class="sn-user-name">–</span>
+                <span id="menu-role" class="sn-user-role sn-muted">–</span>
+              </span>
+            </div>
+            <div id="menu-roles" class="sn-user-menu-roles"></div>
+            <div class="sn-menu-divider"></div>
+            <a
+              id="menu-profile-link"
+              class="sn-user-menu-item"
+              href="#"
+              role="menuitem"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View profile in Gen Central
+            </a>
+            <button
+              type="button"
+              class="sn-user-menu-item"
+              role="menuitem"
+              id="menu-customize"
+              disabled
+            >
+              Customize feed
+              <span class="sn-menu-kbd">soon</span>
+            </button>
+            <button
+              type="button"
+              class="sn-user-menu-item"
+              role="menuitem"
+              id="menu-theme"
+            >
+              <span id="menu-theme-label">Switch theme</span>
+            </button>
+            <div class="sn-menu-divider"></div>
+            <a
+              class="sn-user-menu-item"
+              href="/logout"
+              role="menuitem"
+            >
+              Sign out
+            </a>
+          </div>
+        </div>
+      </div>
+    </nav>
+    <main class="mx-auto max-w-6xl px-6 py-10">
+      <header class="sn-hero flex flex-wrap items-end justify-between gap-4">
+        <div class="min-w-0">
+          <h1 class="sn-hero-title" aria-label="Gen Pulse">
+            <span class="gen-logo" aria-hidden="true">
+              <span class="gen-logo-word">Gen</span><span class="gen-logo-tm">™</span>
+            </span>
+            <span class="hero-pulse">Pulse</span>
+          </h1>
+          <p class="sn-hero-tag">
+            Gen Digital · {{BRAND_NAME}} — the team, the week, and the numbers in one live view.
+          </p>
+          <p id="subhead" class="sn-muted mt-1 text-sm">Loading…</p>
+        </div>
+        <div class="flex items-center gap-3 text-sm">
+          <span id="refreshed" class="sn-muted"></span>
+          <button
+            id="theme-toggle"
+            class="sn-btn sn-btn-ghost"
+            type="button"
+            aria-label="Toggle light/dark theme"
+          >
+            <span id="theme-toggle-icon" aria-hidden="true">◐</span>
+            <span id="theme-toggle-label">Dark mode</span>
+          </button>
+          <button id="refresh" class="sn-btn" type="button">Refresh</button>
+        </div>
+      </header>
+
+      <div class="sn-feed-canvas" aria-label="Your feed">
+      <section id="widget-weekly-throughput" class="mt-0">
+        <h2 class="sn-section-head">
+          <span class="sn-section-dot" aria-hidden="true"></span>
+          <span class="sn-brand">Norton EMAIL Reports</span>
+          <span class="sn-section-tail">— Weekly throughput</span>
+        </h2>
+        <div class="sn-card mt-4 p-5">
+          <div class="flex flex-wrap items-start justify-between gap-4">
+            <div>
+              <div id="wt-week" class="sn-muted text-sm">Loading…</div>
+              <div class="mt-3 flex items-end gap-3">
+                <div id="wt-value" class="sn-kpi-value" style="font-size:2.6rem;line-height:1;">–</div>
+                <span id="wt-delta" class="sn-pill sn-pill-muted mb-1">–</span>
+              </div>
+              <div id="wt-note" class="sn-muted mt-2 text-xs"></div>
+            </div>
+            <div class="flex-1 min-w-[240px] max-w-[420px]">
+              <svg id="wt-spark" viewBox="0 0 400 90" class="h-[90px] w-full"
+                   preserveAspectRatio="none" role="img"
+                   aria-label="Weekly throughput trend"></svg>
+              <div id="wt-trend-labels" class="sn-muted mt-1 flex justify-between text-[10px]"></div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <section class="mt-6 grid gap-4 md:grid-cols-2">
+        <div id="widget-backlog-overview" class="sn-card p-5">
+          <h3 class="sn-subhead">
+            <span class="sn-subhead-dot" aria-hidden="true"></span>
+            <span class="sn-brand">Norton Email</span>
+            <span class="sn-section-tail">— Backlog Overview</span>
+          </h3>
+          <div class="mt-3 flex items-end gap-3">
+            <div id="bo-value" class="sn-kpi-value" style="font-size:2.2rem;line-height:1;">–</div>
+            <span id="bo-delta" class="sn-pill sn-pill-muted mb-1">–</span>
+          </div>
+          <div class="sn-muted text-xs">Open tickets right now</div>
+          <div class="mt-4">
+            <div class="sn-stack" id="bo-bar" role="img" aria-label="Backlog by priority"></div>
+            <div id="bo-legend" class="mt-2 flex flex-wrap gap-3"></div>
+          </div>
+          <div id="bo-age" class="mt-3 grid grid-cols-4 gap-2 text-xs"></div>
+          <div id="bo-note" class="sn-muted mt-3 text-xs"></div>
+        </div>
+
+        <div id="widget-ticket-lifecycle" class="sn-card p-5">
+          <h3 class="sn-subhead">
+            <span class="sn-subhead-dot" aria-hidden="true"></span>
+            <span class="sn-brand">Norton Email</span>
+            <span class="sn-section-tail">— Average Ticket Lifecycle</span>
+          </h3>
+          <div class="mt-3 flex items-end gap-3">
+            <div id="tl-value" class="sn-kpi-value" style="font-size:2.2rem;line-height:1;">
+              –<span class="sn-muted" style="font-size:0.95rem;font-weight:600;margin-left:0.35rem;">days (median)</span>
+            </div>
+            <span id="tl-delta" class="sn-pill sn-pill-muted mb-1">–</span>
+          </div>
+          <div id="tl-summary" class="sn-muted text-xs">From created to resolved</div>
+          <div class="mt-4">
+            <div class="sn-kpi-label mb-2">Median days by priority</div>
+            <div id="tl-priority" class="space-y-2"></div>
+          </div>
+          <div id="tl-note" class="sn-muted mt-3 text-xs"></div>
+        </div>
+      </section>
+
+      <section id="widget-kanban-board" class="mt-10">
+        <div class="sn-kb-head">
+          <h2 class="sn-section-head">
+            <span class="sn-section-dot" aria-hidden="true"></span>
+            <span class="sn-brand">Norton Email</span>
+            <span class="sn-section-tail">— Kanban Snapshot</span>
+          </h2>
+          <a
+            id="kb-link"
+            class="sn-kb-open"
+            href="https://jira.corp.nortonlifelock.com/secure/RapidBoard.jspa?rapidView=101032"
+            target="_blank"
+            rel="noopener"
+          >Open full board in Jira →</a>
+        </div>
+        <div id="kb-board" class="sn-kb mt-4" aria-busy="true">
+          <div class="sn-kb-loading sn-muted">Loading board…</div>
+        </div>
+        <div id="kb-note" class="sn-muted mt-2 text-xs"></div>
+      </section>
+
+      <section class="mt-12">
+        <h2 class="sn-section-head">
+          <span class="sn-section-dot" aria-hidden="true"></span>
+          <span class="sn-brand">{{BRAND_NAME}}</span>
+          <span class="sn-section-tail">— Team Presence</span>
+        </h2>
+      </section>
+
+      <section class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
+        <div class="sn-card p-4">
+          <div class="sn-kpi-label">In office</div>
+          <div id="kpi-in" class="sn-kpi-value mt-1">–</div>
+        </div>
+        <div class="sn-card p-4">
+          <div class="sn-kpi-label">WFH</div>
+          <div id="kpi-wfh" class="sn-kpi-value mt-1">–</div>
+        </div>
+        <div class="sn-card p-4">
+          <div class="sn-kpi-label">Out (sick / PTO / OOO)</div>
+          <div id="kpi-out" class="sn-kpi-value mt-1">–</div>
+        </div>
+        <div class="sn-card p-4">
+          <div class="sn-kpi-label">No check-in yet</div>
+          <div id="kpi-none" class="sn-kpi-value mt-1">–</div>
+        </div>
+      </section>
+
+      <section class="mt-10">
+        <h2 class="sn-section-title">Team</h2>
+        <div class="sn-card mt-3 overflow-x-auto">
+          <table class="sn-table text-sm">
+            <thead>
+              <tr>
+                <th>Member</th>
+                <th>Today</th>
+                <th>Presence</th>
+                <th>Note</th>
+                <th>Until</th>
+                <th>Updated</th>
+              </tr>
+            </thead>
+            <tbody id="members"></tbody>
+          </table>
+        </div>
+        <p id="members-empty" class="sn-muted mt-4 hidden text-sm">
+          No check-ins yet today. Ask the team to try
+          <code class="sn-code">/teampresence checkin in</code>.
+        </p>
+      </section>
+
+      <section class="mt-10">
+        <h2 class="sn-section-title">Exceptions today</h2>
+        <ul id="exceptions" class="sn-card mt-3 divide-y text-sm" style="border-color: var(--border);"></ul>
+        <p id="exceptions-empty" class="sn-muted mt-3 hidden text-sm">
+          None — everyone who's checked in is in or WFH.
+        </p>
+      </section>
+
+      <section class="mt-10 mb-10">
+        <h2 class="sn-section-title">Recent roll calls</h2>
+        <div class="sn-card mt-3 overflow-x-auto">
+          <table class="sn-table text-sm">
+            <thead>
+              <tr>
+                <th>Meeting</th>
+                <th>Started</th>
+                <th>Attending</th>
+                <th>Late</th>
+                <th>Absent</th>
+                <th>Total</th>
+                <th>ID</th>
+              </tr>
+            </thead>
+            <tbody id="rollcalls"></tbody>
+          </table>
+        </div>
+        <p id="rollcalls-empty" class="sn-muted mt-3 hidden text-sm">No roll calls yet.</p>
+      </section>
+      </div>
+    </main>
+
+    <script>
+      const CHECKIN_LABELS = {
+        in: "In office",
+        wfh: "WFH",
+        sick: "Sick",
+        pto: "PTO",
+        late: "Late",
+      };
+      const CHECKIN_TONES = {
+        in: "",
+        wfh: "",
+        sick: "tone-red",
+        pto: "tone-blue",
+        late: "tone-amber",
+      };
+      const PRESENCE_TONES = {
+        available: "",
+        away: "tone-amber",
+        ooo: "tone-blue",
+      };
+      const CHECKIN_PILL = {
+        in: "sn-pill sn-pill-green",
+        wfh: "sn-pill sn-pill-blue",
+        sick: "sn-pill sn-pill-red",
+        pto: "sn-pill sn-pill-blue",
+        late: "sn-pill sn-pill-yellow",
+      };
+      const PRESENCE_LABELS = {
+        available: "Available",
+        away: "Away",
+        ooo: "Out of office",
+      };
+      const PRESENCE_PILL = {
+        available: "sn-pill sn-pill-green",
+        away: "sn-pill sn-pill-yellow",
+        ooo: "sn-pill sn-pill-blue",
+      };
+      const EXCEPTION_CHECKINS = new Set(["sick", "pto", "late"]);
+      const EXCEPTION_PRESENCE = new Set(["away", "ooo"]);
+
+      const API_KEY = new URLSearchParams(location.search).get("key");
+      const apiUrl = (p) => {
+        const base = p ?? "/api/team";
+        return API_KEY
+          ? `${base}${base.includes("?") ? "&" : "?"}key=${encodeURIComponent(API_KEY)}`
+          : base;
+      };
+
+      function fmtTime(ts) {
+        if (!ts) return "—";
+        return new Date(ts).toLocaleTimeString([], {
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+      function fmtDateTime(ts) {
+        if (!ts) return "—";
+        return new Date(ts).toLocaleString([], {
+          weekday: "short",
+          hour: "2-digit",
+          minute: "2-digit",
+        });
+      }
+      function esc(s) {
+        return String(s ?? "").replace(/[&<>"']/g, (c) => ({
+          "&": "&amp;",
+          "<": "&lt;",
+          ">": "&gt;",
+          '"': "&quot;",
+          "'": "&#39;",
+        }[c]));
+      }
+
+      function rowTone(member) {
+        if (!member.checkin && !member.presence) return "tone-muted";
+        const ci = member.checkin?.state;
+        if (ci && CHECKIN_TONES[ci]) return CHECKIN_TONES[ci];
+        const pr = member.presence?.state;
+        if (pr && PRESENCE_TONES[pr]) return PRESENCE_TONES[pr];
+        return "";
+      }
+
+      function classifyBucket(member) {
+        const ci = member.checkin?.state;
+        if (ci === "in") return "in";
+        if (ci === "wfh") return "wfh";
+        if (ci === "sick" || ci === "pto") return "out";
+        if (!ci) {
+          if (member.presence?.state === "ooo") return "out";
+          return "none";
+        }
+        return "other";
+      }
+
+      function renderKpis(members) {
+        const counts = { in: 0, wfh: 0, out: 0, none: 0, other: 0 };
+        for (const m of members) counts[classifyBucket(m)] += 1;
+        document.getElementById("kpi-in").textContent = counts.in;
+        document.getElementById("kpi-wfh").textContent = counts.wfh;
+        document.getElementById("kpi-out").textContent = counts.out;
+        document.getElementById("kpi-none").textContent = counts.none;
+      }
+
+      // Stable per-person gradient palette — each name always picks
+      // the same tile, so Iryna is always indigo, Victor is always
+      // teal, etc. Colours are hand-picked for WCAG-AA on white text.
+      const MEMBER_GRADIENTS = [
+        "linear-gradient(135deg, #0400f5 0%, #6366f1 100%)",
+        "linear-gradient(135deg, #06b6d4 0%, #0ea5e9 100%)",
+        "linear-gradient(135deg, #8b5cf6 0%, #d946ef 100%)",
+        "linear-gradient(135deg, #f43f5e 0%, #ef4444 100%)",
+        "linear-gradient(135deg, #10b981 0%, #14b8a6 100%)",
+        "linear-gradient(135deg, #f59e0b 0%, #f97316 100%)",
+        "linear-gradient(135deg, #ec4899 0%, #be185d 100%)",
+        "linear-gradient(135deg, #0ea5e9 0%, #2563eb 100%)",
+      ];
+      function memberGradient(seed) {
+        const s = String(seed || "");
+        let h = 0;
+        for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+        return MEMBER_GRADIENTS[Math.abs(h) % MEMBER_GRADIENTS.length];
+      }
+      function memberInitials(name) {
+        if (!name) return "?";
+        const parts = String(name).trim().split(/\s+/).filter(Boolean);
+        if (!parts.length) return "?";
+        const first = parts[0][0] ?? "";
+        const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+        return (first + last).toUpperCase().slice(0, 2) || "?";
+      }
+      function memberAvatarHtml(m) {
+        const initials = m.initials || memberInitials(m.name);
+        if (m.avatarUrl) {
+          return `
+            <span class="sn-member-avatar" aria-hidden="true">
+              <img src="${esc(m.avatarUrl)}" alt="" loading="lazy"
+                   onerror="this.remove();this.parentNode.textContent=${JSON.stringify(initials)};">
+            </span>`;
+        }
+        return `
+          <span class="sn-member-avatar"
+                style="background:${memberGradient(m.id || m.name)};"
+                aria-hidden="true">${esc(initials)}</span>`;
+      }
+
+      function renderMembers(members) {
+        const tbody = document.getElementById("members");
+        const empty = document.getElementById("members-empty");
+        if (!members.length) {
+          tbody.innerHTML = "";
+          empty.classList.remove("hidden");
+          return;
+        }
+        empty.classList.add("hidden");
+        tbody.innerHTML = members
+          .map((m) => {
+            const tone = rowTone(m);
+            const ciState = m.checkin?.state;
+            const ciHtml = ciState
+              ? `<span class="${CHECKIN_PILL[ciState] ?? "sn-pill sn-pill-muted"}">${esc(
+                  CHECKIN_LABELS[ciState] ?? ciState
+                )}</span>`
+              : `<span class="sn-pill sn-pill-muted">No check-in</span>`;
+            const prState = m.presence?.state;
+            const prHtml = prState
+              ? `<span class="${PRESENCE_PILL[prState] ?? "sn-pill sn-pill-muted"}">${esc(
+                  PRESENCE_LABELS[prState] ?? prState
+                )}</span>`
+              : `<span class="sn-muted">—</span>`;
+            const note = m.presence?.note ?? m.checkin?.note ?? "";
+            const until = m.presence?.untilTs
+              ? fmtDateTime(m.presence.untilTs)
+              : "—";
+            const updated = fmtTime(
+              m.presence?.updatedAt ?? m.checkin?.updatedAt
+            );
+            const titleLine = m.title
+              ? `<span class="sn-member-title">${esc(m.title)}</span>`
+              : "";
+            return `
+              <tr class="${tone}">
+                <td>
+                  <div class="sn-member">
+                    ${memberAvatarHtml(m)}
+                    <div class="min-w-0">
+                      <span class="sn-member-name">${esc(m.name)}</span>
+                      ${titleLine}
+                    </div>
+                  </div>
+                </td>
+                <td>${ciHtml}</td>
+                <td>${prHtml}</td>
+                <td class="sn-muted">${esc(
+                  note || (m.checkin || m.presence ? "—" : "no update yet")
+                )}</td>
+                <td>${esc(until)}</td>
+                <td class="sn-muted">${esc(updated)}</td>
+              </tr>`;
+          })
+          .join("");
+      }
+
+      function renderExceptions(members) {
+        const ul = document.getElementById("exceptions");
+        const empty = document.getElementById("exceptions-empty");
+        const items = [];
+        for (const m of members) {
+          const ci = m.checkin?.state;
+          if (ci && EXCEPTION_CHECKINS.has(ci)) {
+            items.push({
+              name: m.name,
+              state: CHECKIN_LABELS[ci],
+              note: m.checkin.note,
+              ts: m.checkin.updatedAt,
+              source: "check-in",
+            });
+            continue;
+          }
+          const pr = m.presence?.state;
+          if (pr && EXCEPTION_PRESENCE.has(pr)) {
+            items.push({
+              name: m.name,
+              state: pr === "ooo" ? "Out of office" : "Away",
+              note: m.presence.note,
+              ts: m.presence.updatedAt,
+              source: "presence",
+            });
+          }
+        }
+        items.sort((a, b) => (a.ts ?? 0) - (b.ts ?? 0));
+        if (!items.length) {
+          ul.innerHTML = "";
+          empty.classList.remove("hidden");
+          return;
+        }
+        empty.classList.add("hidden");
+        const toneFor = (label) => {
+          const l = String(label).toLowerCase();
+          if (l.includes("sick")) return "sn-pill sn-pill-red";
+          if (l.includes("pto") || l.includes("out of office"))
+            return "sn-pill sn-pill-blue";
+          if (l.includes("late") || l.includes("away"))
+            return "sn-pill sn-pill-yellow";
+          return "sn-pill sn-pill-muted";
+        };
+        ul.innerHTML = items
+          .map(
+            (i) => `
+              <li class="flex items-start justify-between gap-3 px-4 py-3">
+                <div>
+                  <span class="font-semibold">${esc(i.name)}</span>
+                  <span class="ml-2 ${toneFor(i.state)}">${esc(i.state)}</span>
+                  ${i.note ? `<span class="ml-2 sn-muted">— ${esc(i.note)}</span>` : ""}
+                </div>
+                <span class="sn-muted">${esc(fmtTime(i.ts))}</span>
+              </li>`
+          )
+          .join("");
+      }
+
+      function renderRollcalls(rollcalls) {
+        const tbody = document.getElementById("rollcalls");
+        const empty = document.getElementById("rollcalls-empty");
+        if (!rollcalls.length) {
+          tbody.innerHTML = "";
+          empty.classList.remove("hidden");
+          return;
+        }
+        empty.classList.add("hidden");
+        tbody.innerHTML = rollcalls
+          .map(
+            (rc) => `
+              <tr>
+                <td class="font-semibold">${esc(rc.title)}</td>
+                <td class="sn-muted">${esc(fmtDateTime(rc.createdAt))}</td>
+                <td><span class="sn-pill sn-pill-green">${rc.counts.attending}</span></td>
+                <td><span class="sn-pill sn-pill-yellow">${rc.counts.late}</span></td>
+                <td><span class="sn-pill sn-pill-red">${rc.counts.absent}</span></td>
+                <td>${rc.totalResponses}</td>
+                <td><code class="sn-code">${esc(rc.id)}</code></td>
+              </tr>`
+          )
+          .join("");
+      }
+
+      function renderHeader(data) {
+        const sub = document.getElementById("subhead");
+        const d = new Date(`${data.date}T00:00:00`);
+        const pretty = d.toLocaleDateString([], {
+          weekday: "long",
+          day: "numeric",
+          month: "long",
+          year: "numeric",
+        });
+        sub.textContent = `${pretty} · timezone ${data.timezone} · auto-refresh 30s`;
+        document.getElementById("refreshed").textContent =
+          `Updated ${fmtTime(data.generatedAt)}`;
+      }
+
+      function renderThroughput(data) {
+        const weekEl = document.getElementById("wt-week");
+        const valEl = document.getElementById("wt-value");
+        const delEl = document.getElementById("wt-delta");
+        const noteEl = document.getElementById("wt-note");
+        const spark = document.getElementById("wt-spark");
+        const labels = document.getElementById("wt-trend-labels");
+
+        if (!data || data.unavailable) {
+          weekEl.textContent = "Not yet configured";
+          valEl.textContent = "–";
+          delEl.className = "sn-pill sn-pill-muted mb-1";
+          delEl.textContent = "set up Jira";
+          noteEl.textContent = data?.reason
+            ? data.reason
+            : "Set JIRA_BASE_URL, JIRA_TOKEN and JIRA_THROUGHPUT_JQL.";
+          spark.innerHTML = "";
+          labels.innerHTML = "";
+          return;
+        }
+
+        weekEl.textContent = `Week ${data.weekLabel} · ${data.weekRange}`;
+        valEl.textContent = data.resolved;
+
+        const sign = data.deltaAbs > 0 ? "+" : "";
+        const pctLabel = `${sign}${data.deltaPct}% vs prev week`;
+        const toneClass =
+          data.deltaAbs > 0
+            ? "sn-pill sn-pill-green"
+            : data.deltaAbs < 0
+            ? "sn-pill sn-pill-red"
+            : "sn-pill sn-pill-muted";
+        delEl.className = `${toneClass} mb-1`;
+        const arrow =
+          data.deltaAbs > 0 ? "\u25B2" : data.deltaAbs < 0 ? "\u25BC" : "\u2022";
+        delEl.textContent = `${arrow} ${sign}${data.deltaAbs} (${pctLabel})`;
+
+        noteEl.textContent =
+          `Previous week: ${data.previous} resolved · ` +
+          `tz ${data.timezone} · updated ${fmtTime(data.generatedAt)}`;
+
+        const trend = data.trend ?? [];
+        if (!trend.length) {
+          spark.innerHTML = "";
+          labels.innerHTML = "";
+          return;
+        }
+        const W = 400, H = 90, pad = 4;
+        const max = Math.max(...trend, 1);
+        const min = 0;
+        const stepX = (W - pad * 2) / Math.max(1, trend.length - 1);
+        const toY = (v) =>
+          H - pad - ((v - min) / Math.max(1, max - min)) * (H - pad * 2);
+        const pts = trend.map((v, i) => [pad + i * stepX, toY(v)]);
+        const path = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
+        const area = `${path} L${pts[pts.length - 1][0].toFixed(1)},${H - pad} L${pts[0][0].toFixed(1)},${H - pad} Z`;
+        spark.innerHTML = `
+          <path d="${area}" fill="rgba(74,21,75,0.15)"></path>
+          <path d="${path}" fill="none" stroke="#4A154B" stroke-width="2"></path>
+          ${pts
+            .map(
+              (p, i) =>
+                `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${
+                  i === pts.length - 1 ? 3.5 : 2.2
+                }" fill="${i === pts.length - 1 ? "#2EB67D" : "#4A154B"}"></circle>`
+            )
+            .join("")}
+        `;
+        const showLabels = (data.trendLabels ?? []).map((l) => l.replace(/^\d{4}-/, ""));
+        labels.innerHTML = showLabels
+          .map((l) => `<span>${esc(l)}</span>`)
+          .join("");
+      }
+
+      async function loadThroughput() {
+        try {
+          const res = await fetch(apiUrl("/api/widgets/weekly-throughput"), {
+            cache: "no-store",
+          });
+          if (!res.ok) {
+            renderThroughput({ unavailable: true, reason: `HTTP ${res.status}` });
+            return;
+          }
+          renderThroughput(await res.json());
+        } catch (err) {
+          renderThroughput({
+            unavailable: true,
+            reason: "Failed to load: " + (err?.message ?? err),
+          });
+        }
+      }
+
+      const PRIORITY_CLASS = {
+        Highest: "pri-critical",
+        Critical: "pri-critical",
+        High: "pri-high",
+        Medium: "pri-medium",
+        Low: "pri-low",
+        Lowest: "pri-low",
+      };
+
+      function renderBacklog(data) {
+        const valEl = document.getElementById("bo-value");
+        const delEl = document.getElementById("bo-delta");
+        const bar = document.getElementById("bo-bar");
+        const legend = document.getElementById("bo-legend");
+        const age = document.getElementById("bo-age");
+        const note = document.getElementById("bo-note");
+
+        if (!data || data.unavailable) {
+          valEl.textContent = "–";
+          delEl.className = "sn-pill sn-pill-muted mb-1";
+          delEl.textContent = "set up Jira";
+          bar.innerHTML = "";
+          legend.innerHTML = "";
+          age.innerHTML = "";
+          note.textContent = data?.reason ?? "JIRA_BACKLOG_JQL not set.";
+          return;
+        }
+
+        valEl.textContent = data.total;
+
+        const sign = data.deltaAbs > 0 ? "+" : "";
+        // For a backlog, growing is bad (red), shrinking is good (green).
+        const toneClass =
+          data.deltaAbs > 0
+            ? "sn-pill sn-pill-red"
+            : data.deltaAbs < 0
+            ? "sn-pill sn-pill-green"
+            : "sn-pill sn-pill-muted";
+        const arrow =
+          data.deltaAbs > 0 ? "\u25B2" : data.deltaAbs < 0 ? "\u25BC" : "\u2022";
+        delEl.className = `${toneClass} mb-1`;
+        delEl.textContent = `${arrow} ${sign}${data.deltaAbs} (${sign}${data.deltaPct}%) vs 7d ago`;
+
+        const total = data.byPriority.reduce((a, b) => a + b.count, 0) || 1;
+        bar.innerHTML = data.byPriority
+          .map((p) => {
+            const cls = PRIORITY_CLASS[p.priority] ?? "pri-other";
+            const pct = (p.count / total) * 100;
+            return `<div class="sn-stack-seg ${cls}" style="width:${pct.toFixed(
+              2
+            )}%;" title="${esc(p.priority)}: ${p.count}"></div>`;
+          })
+          .join("");
+
+        legend.innerHTML = data.byPriority
+          .map((p) => {
+            const cls = PRIORITY_CLASS[p.priority] ?? "pri-other";
+            return `<span class="sn-legend-chip"><span class="${cls}" style="width:0.55rem;height:0.55rem;border-radius:2px;display:inline-block;"></span>${esc(
+              p.priority
+            )} <span class="sn-muted">· ${p.count}</span></span>`;
+          })
+          .join("");
+
+        const a = data.byAge ?? {};
+        age.innerHTML = [
+          ["0-7d", a.new ?? 0, "pri-low"],
+          ["8-30d", a.recent ?? 0, "pri-medium"],
+          ["31-90d", a.aging ?? 0, "pri-high"],
+          ["90d+", a.stale ?? 0, "pri-critical"],
+        ]
+          .map(
+            ([label, n, cls]) => `
+              <div class="sn-card p-2" style="box-shadow:none;border-radius:6px;">
+                <div class="sn-kpi-label" style="font-size:0.6rem;">${esc(label)}</div>
+                <div class="flex items-center gap-1.5 mt-1">
+                  <span class="${cls}" style="width:0.45rem;height:0.45rem;border-radius:2px;display:inline-block;"></span>
+                  <span style="font-weight:800;">${n}</span>
+                </div>
+              </div>`
+          )
+          .join("");
+
+        note.textContent =
+          `New this week: ${data.newThisWeek} · Resolved this week: ${data.resolvedThisWeek}` +
+          ` · tz ${data.timezone} · updated ${fmtTime(data.generatedAt)}`;
+      }
+
+      async function loadBacklog() {
+        try {
+          const res = await fetch(apiUrl("/api/widgets/backlog-overview"), {
+            cache: "no-store",
+          });
+          if (!res.ok) {
+            renderBacklog({ unavailable: true, reason: `HTTP ${res.status}` });
+            return;
+          }
+          renderBacklog(await res.json());
+        } catch (err) {
+          renderBacklog({
+            unavailable: true,
+            reason: "Failed to load: " + (err?.message ?? err),
+          });
+        }
+      }
+
+      function renderLifecycle(data) {
+        const valEl = document.getElementById("tl-value");
+        const delEl = document.getElementById("tl-delta");
+        const sum = document.getElementById("tl-summary");
+        const pri = document.getElementById("tl-priority");
+        const note = document.getElementById("tl-note");
+
+        if (!data || data.unavailable) {
+          valEl.innerHTML =
+            '–<span class="sn-muted" style="font-size:0.95rem;font-weight:600;margin-left:0.35rem;">days (median)</span>';
+          delEl.className = "sn-pill sn-pill-muted mb-1";
+          delEl.textContent = "set up Jira";
+          sum.textContent = "From created to resolved";
+          pri.innerHTML = "";
+          note.textContent = data?.reason ?? "JIRA_LIFECYCLE_JQL not set.";
+          return;
+        }
+
+        valEl.innerHTML =
+          `${data.medianDays}<span class="sn-muted" style="font-size:0.95rem;font-weight:600;margin-left:0.35rem;">days (median)</span>`;
+
+        if (data.deltaDays === null || data.deltaDays === undefined) {
+          delEl.className = "sn-pill sn-pill-muted mb-1";
+          delEl.textContent = `mean ${data.meanDays}d · p95 ${data.p95Days}d`;
+        } else {
+          const sign = data.deltaDays > 0 ? "+" : "";
+          // For lifecycle, shorter is better: down = green, up = red.
+          const toneClass =
+            data.deltaDays < 0
+              ? "sn-pill sn-pill-green"
+              : data.deltaDays > 0
+              ? "sn-pill sn-pill-red"
+              : "sn-pill sn-pill-muted";
+          const arrow =
+            data.deltaDays > 0 ? "\u25B2" : data.deltaDays < 0 ? "\u25BC" : "\u2022";
+          delEl.className = `${toneClass} mb-1`;
+          delEl.textContent = `${arrow} ${sign}${data.deltaDays}d vs prev period`;
+        }
+
+        sum.textContent =
+          `Based on ${data.sampleSize} tickets resolved in the last ${data.lookbackDays} days · ` +
+          `mean ${data.meanDays}d · p95 ${data.p95Days}d`;
+
+        const rows = data.byPriority ?? [];
+        const maxMedian = Math.max(1, ...rows.map((r) => r.medianDays));
+        pri.innerHTML = rows
+          .map((r) => {
+            const cls = PRIORITY_CLASS[r.priority] ?? "pri-other";
+            const pct = (r.medianDays / maxMedian) * 100;
+            return `
+              <div class="grid grid-cols-[90px_1fr_auto] items-center gap-3 text-xs">
+                <div class="font-semibold">${esc(r.priority)}</div>
+                <div class="sn-minibar">
+                  <div class="sn-minibar-fill ${cls}" style="width:${pct.toFixed(
+              1
+            )}%; background:unset;"></div>
+                </div>
+                <div class="sn-muted whitespace-nowrap">${r.medianDays}d · ${r.count}</div>
+              </div>`;
+          })
+          .join("");
+
+        note.textContent =
+          `tz ${data.timezone} · updated ${fmtTime(data.generatedAt)}`;
+      }
+
+      async function loadLifecycle() {
+        try {
+          const res = await fetch(apiUrl("/api/widgets/ticket-lifecycle"), {
+            cache: "no-store",
+          });
+          if (!res.ok) {
+            renderLifecycle({ unavailable: true, reason: `HTTP ${res.status}` });
+            return;
+          }
+          renderLifecycle(await res.json());
+        } catch (err) {
+          renderLifecycle({
+            unavailable: true,
+            reason: "Failed to load: " + (err?.message ?? err),
+          });
+        }
+      }
+
+      // --------------------------------------------------------------
+      // Kanban snapshot — compact live view of the Jira RapidBoard.
+      // --------------------------------------------------------------
+      const JIRA_BROWSE_BASE = "https://jira.corp.nortonlifelock.com/browse/";
+      const PRIORITY_CLASS_KB = {
+        Highest: "sn-kb-card--highest",
+        Critical: "sn-kb-card--critical",
+        High: "sn-kb-card--high",
+        Medium: "sn-kb-card--medium",
+        Low: "sn-kb-card--low",
+        Lowest: "sn-kb-card--lowest",
+      };
+
+      function kbInitials(name) {
+        if (!name) return "·";
+        const parts = String(name).trim().split(/\s+/).filter(Boolean);
+        if (!parts.length) return "·";
+        const first = parts[0][0] ?? "";
+        const last = parts.length > 1 ? parts[parts.length - 1][0] : "";
+        return (first + last).toUpperCase().slice(0, 2) || "·";
+      }
+      function kbRelativeTime(iso) {
+        if (!iso) return "";
+        const ms = Date.now() - Date.parse(iso);
+        if (!Number.isFinite(ms) || ms < 0) return "";
+        const mins = Math.floor(ms / 60000);
+        if (mins < 1) return "just now";
+        if (mins < 60) return `${mins}m ago`;
+        const hrs = Math.floor(mins / 60);
+        if (hrs < 24) return `${hrs}h ago`;
+        const days = Math.floor(hrs / 24);
+        if (days < 7) return `${days}d ago`;
+        const weeks = Math.floor(days / 7);
+        return `${weeks}w ago`;
+      }
+
+      function renderKanban(data) {
+        const board = document.getElementById("kb-board");
+        const note = document.getElementById("kb-note");
+        const link = document.getElementById("kb-link");
+        if (!board) return;
+        board.setAttribute("aria-busy", "false");
+
+        if (data?.boardUrl && link) link.href = data.boardUrl;
+
+        if (data?.unavailable) {
+          board.innerHTML = `
+            <div class="sn-kb-loading sn-muted">
+              Kanban board unavailable — ${esc(data.reason ?? "no Jira connection")}.
+            </div>`;
+          if (note) note.textContent = "";
+          return;
+        }
+
+        const cols = Array.isArray(data?.columns) ? data.columns : [];
+        if (!cols.length) {
+          board.innerHTML = `<div class="sn-kb-loading sn-muted">No columns to show.</div>`;
+          if (note) note.textContent = "";
+          return;
+        }
+
+        board.innerHTML = cols
+          .map((col) => {
+            const cat = (col.statusCategory || "").toLowerCase();
+            const dotCls = ["new", "indeterminate", "done"].includes(cat)
+              ? `sn-kb-col-dot--${cat}`
+              : "";
+            const cards = (col.tickets ?? [])
+              .map((t) => {
+                const prioCls = PRIORITY_CLASS_KB[t.priority] ?? "";
+                const initials = kbInitials(t.assignee);
+                const assignee = t.assignee || "Unassigned";
+                const ago = kbRelativeTime(t.updatedAt);
+                const href = `${JIRA_BROWSE_BASE}${encodeURIComponent(t.key)}`;
+                const type = t.issueType ? esc(t.issueType) : "";
+                return `
+                  <a href="${href}" target="_blank" rel="noopener"
+                     class="sn-kb-card ${prioCls}"
+                     title="${esc(t.key)} · ${esc(t.summary)}">
+                    <div class="sn-kb-card-head">
+                      <span class="sn-kb-key">${esc(t.key)}</span>
+                      ${type ? `<span class="sn-kb-type">${type}</span>` : ""}
+                    </div>
+                    <div class="sn-kb-card-sum">${esc(t.summary)}</div>
+                    <div class="sn-kb-card-foot">
+                      <span class="sn-kb-assignee">
+                        <span class="sn-kb-ava" aria-hidden="true">${esc(initials)}</span>
+                        <span class="sn-kb-assignee-name">${esc(assignee)}</span>
+                      </span>
+                      ${ago ? `<span class="sn-kb-ago">${esc(ago)}</span>` : ""}
+                    </div>
+                  </a>`;
+              })
+              .join("");
+
+            const emptyOrCards =
+              cards || `<div class="sn-kb-col-empty">No tickets</div>`;
+            const truncated = Number(col.truncated ?? 0);
+            const moreNode = truncated > 0
+              ? `<div class="sn-kb-more">+${truncated} more in Jira</div>`
+              : "";
+
+            return `
+              <div class="sn-kb-col" role="group" aria-label="${esc(col.name)} — ${col.total} tickets">
+                <div class="sn-kb-col-head">
+                  <span class="sn-kb-col-dot ${dotCls}" aria-hidden="true"></span>
+                  <span class="sn-kb-col-name">${esc(col.name)}</span>
+                  <span class="sn-kb-col-count">${col.total ?? 0}</span>
+                </div>
+                <div class="sn-kb-col-body">
+                  ${emptyOrCards}
+                  ${moreNode}
+                </div>
+              </div>`;
+          })
+          .join("");
+
+        if (note) {
+          const total = Number(data.total ?? 0);
+          note.textContent =
+            `${total} open tickets across ${cols.length} columns · ` +
+            `live from Jira · updated ${fmtTime(data.generatedAt)}`;
+        }
+      }
+
+      async function loadKanban() {
+        try {
+          const res = await fetch(apiUrl("/api/widgets/kanban-board"), {
+            cache: "no-store",
+          });
+          if (!res.ok) {
+            renderKanban({ unavailable: true, reason: `HTTP ${res.status}` });
+            return;
+          }
+          renderKanban(await res.json());
+        } catch (err) {
+          renderKanban({
+            unavailable: true,
+            reason: "Failed to load: " + (err?.message ?? err),
+          });
+        }
+      }
+
+      async function load() {
+        try {
+          const res = await fetch(apiUrl("/api/team"), { cache: "no-store" });
+          if (res.status === 401) {
+            document.getElementById("subhead").textContent =
+              "Unauthorized — append ?key=… to the URL.";
+            return;
+          }
+          const data = await res.json();
+          renderHeader(data);
+          renderKpis(data.members);
+          renderMembers(data.members);
+          renderExceptions(data.members);
+          renderRollcalls(data.rollcalls);
+        } catch (err) {
+          document.getElementById("subhead").textContent =
+            "Failed to load: " + (err?.message ?? err);
+        }
+        loadThroughput();
+        loadBacklog();
+        loadLifecycle();
+        loadKanban();
+      }
+
+      document.getElementById("refresh").addEventListener("click", load);
+      load();
+      setInterval(load, 30000);
+
+      // --------------------------------------------------------------
+      // User chip + dropdown menu.
+      // --------------------------------------------------------------
+      (function initUserChip() {
+        const chip = document.getElementById("user-chip");
+        const menu = document.getElementById("user-menu");
+        const avatarEl = document.getElementById("user-avatar");
+        const nameEl = document.getElementById("user-name");
+        const roleEl = document.getElementById("user-role");
+        const menuAvatar = document.getElementById("menu-avatar");
+        const menuName = document.getElementById("menu-name");
+        const menuRole = document.getElementById("menu-role");
+        const menuRoles = document.getElementById("menu-roles");
+        const menuProfile = document.getElementById("menu-profile-link");
+        const menuCustomize = document.getElementById("menu-customize");
+
+        function paintAvatar(target, me) {
+          target.textContent = "";
+          target.removeAttribute("style");
+          if (me?.avatarUrl) {
+            const img = document.createElement("img");
+            img.src = me.avatarUrl;
+            img.alt = "";
+            target.appendChild(img);
+          } else {
+            target.textContent = (me?.initials || "?").slice(0, 2);
+          }
+        }
+
+        function renderMe(me) {
+          if (!me || me.error) {
+            nameEl.textContent = "Not signed in";
+            roleEl.textContent = "";
+            avatarEl.textContent = "?";
+            menuName.textContent = "Not signed in";
+            menuRole.textContent = "";
+            menuRoles.innerHTML = "";
+            menuCustomize.disabled = true;
+            return;
+          }
+          const display = me.displayName || me.userId || "User";
+          const roleLine = me.title || (me.team ? me.team : "");
+          nameEl.textContent = display;
+          roleEl.textContent = roleLine;
+          menuName.textContent = display;
+          menuRole.textContent = roleLine || (me.email ?? "");
+          paintAvatar(avatarEl, me);
+          paintAvatar(menuAvatar, me);
+
+          const roles = (me.roles ?? []).filter((r) => r && r !== "any");
+          menuRoles.innerHTML = roles
+            .map((r) => `<span class="sn-role-chip">${esc(r)}</span>`)
+            .join("");
+
+          if (me.profileUrl) {
+            menuProfile.setAttribute("href", me.profileUrl);
+          } else {
+            menuProfile.setAttribute("href", "#");
+          }
+          menuCustomize.disabled = !me.canCustomize;
+        }
+
+        async function loadMe() {
+          try {
+            const res = await fetch(apiUrl("/api/me"), { cache: "no-store" });
+            if (!res.ok) {
+              renderMe({ error: true });
+              return;
+            }
+            renderMe(await res.json());
+          } catch (e) {
+            renderMe({ error: true });
+          }
+        }
+
+        function setOpen(open) {
+          menu.hidden = !open;
+          chip.setAttribute("aria-expanded", open ? "true" : "false");
+        }
+        chip.addEventListener("click", () => setOpen(menu.hidden));
+        document.addEventListener("click", (e) => {
+          if (!menu.hidden && !chip.contains(e.target) && !menu.contains(e.target)) {
+            setOpen(false);
+          }
+        });
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && !menu.hidden) {
+            setOpen(false);
+            chip.focus();
+          }
+        });
+
+        // Menu "Switch theme" mirrors the header toggle.
+        const menuThemeBtn = document.getElementById("menu-theme");
+        const menuThemeLabel = document.getElementById("menu-theme-label");
+        function refreshMenuThemeLabel() {
+          const current =
+            document.documentElement.classList.contains("theme-dark")
+              ? "dark"
+              : document.documentElement.classList.contains("theme-light")
+              ? "light"
+              : window.matchMedia("(prefers-color-scheme: dark)").matches
+              ? "dark"
+              : "light";
+          menuThemeLabel.textContent =
+            current === "dark" ? "Switch to light mode" : "Switch to dark mode";
+        }
+        menuThemeBtn.addEventListener("click", () => {
+          const existing = document.getElementById("theme-toggle");
+          if (existing) existing.click();
+          refreshMenuThemeLabel();
+          setOpen(false);
+        });
+        new MutationObserver(refreshMenuThemeLabel).observe(
+          document.documentElement,
+          { attributes: true, attributeFilter: ["class"] }
+        );
+        refreshMenuThemeLabel();
+
+        loadMe();
+      })();
+
+      // Theme toggle — cycles between light and dark, persisted in localStorage.
+      (function initThemeToggle() {
+        const KEY = "gen-pulse-theme";
+        const root = document.documentElement;
+        const btn = document.getElementById("theme-toggle");
+        const iconEl = document.getElementById("theme-toggle-icon");
+        const labelEl = document.getElementById("theme-toggle-label");
+        const media = window.matchMedia("(prefers-color-scheme: dark)");
+
+        function currentTheme() {
+          if (root.classList.contains("theme-dark")) return "dark";
+          if (root.classList.contains("theme-light")) return "light";
+          return media.matches ? "dark" : "light";
+        }
+        function render() {
+          const t = currentTheme();
+          labelEl.textContent = t === "dark" ? "Light mode" : "Dark mode";
+          iconEl.textContent = t === "dark" ? "☼" : "☾";
+          btn.setAttribute("aria-pressed", t === "dark" ? "true" : "false");
+        }
+        function setTheme(next) {
+          root.classList.remove("theme-light", "theme-dark");
+          root.classList.add("theme-" + next);
+          try {
+            localStorage.setItem(KEY, next);
+          } catch (e) {}
+          render();
+        }
+
+        btn.addEventListener("click", () => {
+          setTheme(currentTheme() === "dark" ? "light" : "dark");
+        });
+        // If the user hasn't made an explicit choice, follow the OS live.
+        media.addEventListener?.("change", () => {
+          if (!root.classList.contains("theme-light") &&
+              !root.classList.contains("theme-dark")) {
+            render();
+          }
+        });
+        render();
+      })();
+    </script>
+  </body>
+</html>

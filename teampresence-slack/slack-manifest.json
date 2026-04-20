@@ -1,0 +1,46 @@
+{
+  "display_information": {
+    "name": "Team Presence",
+    "description": "Away/meeting notes, roster view, and meeting roll calls with missed-response list.",
+    "background_color": "#1a1d21"
+  },
+  "features": {
+    "bot_user": {
+      "display_name": "Team Presence",
+      "always_online": false
+    },
+    "slash_commands": [
+      {
+        "command": "/teampresence",
+        "url": "https://YOUR_DOMAIN/slack/events",
+        "description": "Presence, check-ins, roster, roll call",
+        "usage_hint": "checkin in|wfh|sick|pto|late [note]",
+        "should_escape": false
+      }
+    ]
+  },
+  "oauth_config": {
+    "scopes": {
+      "bot": [
+        "channels:read",
+        "chat:write",
+        "commands",
+        "groups:read",
+        "users:read"
+      ]
+    }
+  },
+  "settings": {
+    "event_subscriptions": {
+      "request_url": "https://YOUR_DOMAIN/slack/events",
+      "bot_events": []
+    },
+    "interactivity": {
+      "is_enabled": true,
+      "request_url": "https://YOUR_DOMAIN/slack/events"
+    },
+    "org_deploy_enabled": false,
+    "socket_mode_enabled": false,
+    "token_rotation_enabled": false
+  }
+}

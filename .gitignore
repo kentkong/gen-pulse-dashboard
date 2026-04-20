@@ -1,0 +1,23 @@
+# macOS
+.DS_Store
+
+# Editors
+.vscode/
+.idea/
+
+# Node (apps that land here)
+node_modules/
+*.log
+
+# Secrets — never commit. Use .env.example templates instead.
+.env
+.env.local
+.env.*.local
+
+# Local SQLite / runtime data
+data/
+
+# Local build / tmp
+dist/
+build/
+.tmp/
