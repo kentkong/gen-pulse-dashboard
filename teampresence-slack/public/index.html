@@ -225,126 +225,147 @@
         align-items: flex-end;
         gap: 0.8rem;
         min-width: 0;
+        /* Keep this column pinned to the right edge of the hero even
+           when the header wraps. Without margin-left: auto, flex-wrap
+           + justify-content: space-between aligns a solo wrapped line
+           to the start (left), which drops the quick-links + controls
+           under the title instead of under the user chip. */
+        margin-left: auto;
       }
 
       /* --------------------------------------------------------------
-         Quick-links pill row — a compact cluster of external
-         shortcuts to the team's most-used destinations (Jira, Slack,
-         Gen Central, Confluence, …). Sits on the right of the hero
-         and wraps to a second line on narrow screens. Subtle by
-         default; lifts and brightens on hover so they feel alive
-         without competing with the big "Gen Pulse" title.
+         Quick-links row — corporate nav styling that matches Gen
+         Central's top bar: UPPERCASE labels, bold weight, generous
+         horizontal spacing, no pills/borders. Hover draws a thin
+         Gen-blue underline under the label only (not the icon).
+         Sits on the right of the hero and wraps to a second line on
+         narrow screens.
          -------------------------------------------------------------- */
       .sn-quicklinks {
         display: flex;
         flex-wrap: wrap;
-        gap: 0.45rem;
-        justify-content: flex-end;
+        gap: 0.55rem 1.75rem;
+        justify-content: center;
+        align-items: center;
         max-width: 100%;
+      }
+      /* When the nav sits on its own row (between top-nav and hero)
+         it gets a thin hairline divider below and some vertical
+         breathing room so it reads as a distinct navigation tier. */
+      .sn-quicklinks-bar {
+        padding: 0.85rem 0 1rem;
+        border-bottom: 1px solid var(--border);
+        margin-bottom: 0.25rem;
+      }
+      html.theme-dark .sn-quicklinks-bar,
+      html:not(.theme-light) .sn-quicklinks-bar {
+        border-bottom-color: rgba(255, 255, 255, 0.08);
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) .sn-quicklinks-bar {
+          border-bottom-color: rgba(255, 255, 255, 0.08);
+        }
       }
       .sn-quicklink {
         display: inline-flex;
         align-items: center;
-        gap: 0.38rem;
-        padding: 0.34rem 0.7rem 0.34rem 0.58rem;
-        font-size: 0.78rem;
-        font-weight: 600;
-        letter-spacing: 0.005em;
+        gap: 0.45rem;
+        padding: 0.35rem 0 0.4rem;
+        font-size: 0.72rem;
+        font-weight: 700;
+        letter-spacing: 0.1em;
+        text-transform: uppercase;
         color: var(--text);
-        background: color-mix(in srgb, var(--surface) 82%, transparent);
-        border: 1px solid var(--border);
-        border-radius: 9999px;
+        background: transparent;
+        border: none;
+        border-radius: 0;
         text-decoration: none;
         line-height: 1;
         white-space: nowrap;
-        transition: background 120ms ease, border-color 120ms ease,
-          color 120ms ease, box-shadow 120ms ease, transform 120ms ease;
-        box-shadow: 0 1px 0 rgba(8, 16, 58, 0.04);
+        transition: color 140ms ease;
+        box-shadow: none;
       }
-      .sn-quicklink:hover {
-        background: var(--surface);
-        border-color: color-mix(in srgb, var(--gen-blue) 55%, var(--border));
+      .sn-quicklink > span {
+        position: relative;
+        padding-bottom: 2px;
+        background-image: linear-gradient(currentColor, currentColor);
+        background-size: 0% 1.5px;
+        background-position: 0 100%;
+        background-repeat: no-repeat;
+        transition: background-size 200ms ease;
+      }
+      .sn-quicklink:hover,
+      .sn-quicklink:focus-visible {
         color: var(--gen-blue);
-        box-shadow:
-          0 4px 12px -6px rgba(4, 0, 245, 0.35),
-          0 1px 0 rgba(8, 16, 58, 0.06);
-        transform: translateY(-1px);
+      }
+      .sn-quicklink:hover > span,
+      .sn-quicklink:focus-visible > span {
+        background-size: 100% 1.5px;
       }
       .sn-quicklink:focus-visible {
-        outline: none;
-        border-color: var(--gen-blue);
-        box-shadow: 0 0 0 3px rgba(4, 0, 245, 0.25);
+        outline: 2px solid var(--gen-blue);
+        outline-offset: 4px;
+        border-radius: 3px;
       }
       .sn-quicklink .sn-ql-icon {
         width: 0.95rem;
         height: 0.95rem;
         flex: none;
         color: var(--gen-blue);
-        opacity: 0.85;
+        opacity: 0.8;
       }
       .sn-quicklink:hover .sn-ql-icon {
         opacity: 1;
       }
 
-      /* Dark-mode tuning — quieter chrome that still pops on hover. */
-      html.theme-dark .sn-quicklink,
-      html:not(.theme-light) .sn-quicklink {
-      }
+      /* Dark-mode tuning — lighter label colour, indigo accent. */
       @media (prefers-color-scheme: dark) {
         html:not(.theme-light) .sn-quicklink {
-          background: rgba(255, 255, 255, 0.04);
-          border-color: rgba(255, 255, 255, 0.1);
           color: #e5e7f5;
         }
         html:not(.theme-light) .sn-quicklink .sn-ql-icon {
           color: #9a9aff;
         }
-        html:not(.theme-light) .sn-quicklink:hover {
-          background: rgba(255, 255, 255, 0.09);
-          border-color: #9a9aff;
+        html:not(.theme-light) .sn-quicklink:hover,
+        html:not(.theme-light) .sn-quicklink:focus-visible {
           color: #ffffff;
         }
       }
       html.theme-dark .sn-quicklink {
-        background: rgba(255, 255, 255, 0.04);
-        border-color: rgba(255, 255, 255, 0.1);
         color: #e5e7f5;
       }
       html.theme-dark .sn-quicklink .sn-ql-icon {
         color: #9a9aff;
       }
-      html.theme-dark .sn-quicklink:hover {
-        background: rgba(255, 255, 255, 0.09);
-        border-color: #9a9aff;
+      html.theme-dark .sn-quicklink:hover,
+      html.theme-dark .sn-quicklink:focus-visible {
         color: #ffffff;
       }
 
-      /* Placeholder URLs — a soft amber dashed ring tells you at a
-         glance which links still need a real destination. */
-      .sn-quicklink[data-placeholder] {
-        border-style: dashed;
-        border-color: color-mix(in srgb, var(--status-amber) 55%, var(--border));
-      }
-      .sn-quicklink[data-placeholder]::after {
-        content: "TODO";
-        font-size: 0.58rem;
-        font-weight: 800;
-        letter-spacing: 0.08em;
+      /* Placeholder URLs — a soft amber dot before the label marks
+         which destinations still need a real URL. */
+      .sn-quicklink[data-placeholder] .sn-ql-icon {
         color: var(--status-amber);
-        padding: 0.08rem 0.35rem;
+        opacity: 0.9;
+      }
+      .sn-quicklink[data-placeholder]::before {
+        content: "";
+        width: 6px;
+        height: 6px;
         border-radius: 999px;
-        background: color-mix(in srgb, var(--status-amber) 18%, transparent);
+        background: var(--status-amber);
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-amber) 22%, transparent);
+        flex: none;
       }
 
-      /* On narrow screens collapse the hero to a single column so the
-         pill row sits naturally under the title. */
+      /* On narrow screens collapse the hero-right column to the left
+         so the controls read naturally under the title. The
+         quick-links bar stays centered regardless of width. */
       @media (max-width: 720px) {
         .sn-hero-right {
           align-items: flex-start;
           width: 100%;
-        }
-        .sn-quicklinks {
-          justify-content: flex-start;
+          margin-left: 0;
         }
       }
 
@@ -363,53 +384,83 @@
         isolation: isolate;
         overflow: hidden;
         /* Gen-blue (#0400F5) base — identical to the logo tile — with
-           a soft white bloom top-left, a richer violet wash bottom-
-           right, a bright indigo highlight top-right and a softer
-           violet float bottom-left. The hue never leaves the Gen
-           family: all the "depth" comes from shifting toward violet
-           (#2a00b8 / #5a2ebf) rather than toward navy or black, so
-           the panel keeps reading as "Gen blue" everywhere. */
+           multiple layered radial blooms and a soft top-sheen so the
+           surface feels atmospheric and alive. The hue never leaves
+           the Gen family: the "depth" comes from shifting toward
+           violet/indigo rather than navy or black, so the panel
+           keeps reading as "Gen blue" everywhere. */
         background:
-          radial-gradient(
-            620px 340px at 14% 18%,
-            rgba(255, 255, 255, 0.2),
-            transparent 68%
+          linear-gradient(
+            180deg,
+            rgba(255, 255, 255, 0.1) 0%,
+            rgba(255, 255, 255, 0) 26%
           ),
           radial-gradient(
-            700px 400px at 92% 92%,
-            rgba(52, 14, 172, 0.72),
-            transparent 68%
-          ),
-          radial-gradient(
-            520px 340px at 96% 8%,
-            rgba(140, 96, 240, 0.42),
+            720px 420px at 12% 14%,
+            rgba(255, 255, 255, 0.28),
             transparent 70%
           ),
           radial-gradient(
-            520px 340px at 6% 92%,
-            rgba(90, 46, 200, 0.34),
+            620px 420px at 96% 6%,
+            rgba(150, 108, 248, 0.5),
             transparent 72%
           ),
+          radial-gradient(
+            900px 540px at 94% 96%,
+            rgba(56, 18, 184, 0.85),
+            transparent 66%
+          ),
+          radial-gradient(
+            580px 400px at 4% 94%,
+            rgba(104, 56, 216, 0.44),
+            transparent 72%
+          ),
+          radial-gradient(
+            860px 520px at 66% 50%,
+            rgba(94, 52, 224, 0.28),
+            transparent 70%
+          ),
+          radial-gradient(
+            1000px 260px at 50% 110%,
+            rgba(20, 6, 80, 0.4),
+            transparent 65%
+          ),
           var(--gen-blue);
-        border: 1px solid rgba(255, 255, 255, 0.2);
+        border: 1px solid rgba(255, 255, 255, 0.22);
         box-shadow:
-          0 30px 70px -22px rgba(4, 0, 245, 0.45),
-          inset 0 1px 0 rgba(255, 255, 255, 0.24);
+          0 30px 70px -22px rgba(4, 0, 245, 0.5),
+          inset 0 1px 0 rgba(255, 255, 255, 0.26);
       }
-      /* Artistic curve overlay — a flowing set of hair-thin arcs that
-         trace across the canvas, Gen brand-style. Mixes white, pale
-         cyan and violet strokes so the lines feel at home on the
-         new blue/purple surface rather than pasted on top of it. */
+      /* Artistic curve overlay — a flowing composition of three bold
+         hero sweeps, several cross-cutting mid-weight arcs and a few
+         whispered background curves. Mixes white, pale-cyan, lavender
+         and violet strokes so the lines feel native to the Gen
+         blue/violet surface rather than pasted on top of it. */
       .sn-feed-canvas::before {
         content: "";
         position: absolute;
         inset: 0;
         pointer-events: none;
-        background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800' preserveAspectRatio='none'%3E%3Cpath d='M-50 230 Q 420 -60 1260 270' stroke='rgba(255,255,255,0.26)' stroke-width='1.4' fill='none'/%3E%3Cpath d='M-50 560 Q 600 180 1260 580' stroke='rgba(170,210,255,0.20)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 660 Q 700 940 1260 470' stroke='rgba(255,255,255,0.14)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 100 Q 520 600 1260 150' stroke='rgba(130,190,255,0.18)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 380 Q 700 260 1260 360' stroke='rgba(255,255,255,0.10)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 500 Q 320 720 1260 320' stroke='rgba(180,140,255,0.34)' stroke-width='1.4' fill='none'/%3E%3Cpath d='M-60 820 Q 700 420 1260 720' stroke='rgba(110,60,220,0.34)' stroke-width='1.2' fill='none'/%3E%3Cpath d='M-60 180 Q 900 500 1260 20' stroke='rgba(200,160,255,0.22)' stroke-width='0.9' fill='none'/%3E%3Cpath d='M-60 720 Q 350 560 1260 820' stroke='rgba(150,110,240,0.28)' stroke-width='1' fill='none'/%3E%3Cpath d='M-60 40 Q 500 300 1260 -40' stroke='rgba(220,200,255,0.18)' stroke-width='0.8' fill='none'/%3E%3C/svg%3E");
+        background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800' preserveAspectRatio='none'%3E%3Cpath d='M-80 300 Q 520 -90 1280 340' stroke='rgba(255,255,255,0.38)' stroke-width='2.2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M-80 540 Q 640 940 1280 440' stroke='rgba(182,138,255,0.46)' stroke-width='2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M-80 120 Q 700 630 1280 80' stroke='rgba(210,180,255,0.34)' stroke-width='1.7' fill='none' stroke-linecap='round'/%3E%3Cpath d='M-80 690 Q 420 430 1280 720' stroke='rgba(170,220,255,0.28)' stroke-width='1.4' fill='none'/%3E%3Cpath d='M-80 220 Q 920 500 1280 200' stroke='rgba(255,255,255,0.24)' stroke-width='1.3' fill='none'/%3E%3Cpath d='M-80 460 Q 320 240 1280 520' stroke='rgba(160,110,240,0.3)' stroke-width='1.3' fill='none'/%3E%3Cpath d='M-80 780 Q 720 520 1280 800' stroke='rgba(200,160,255,0.26)' stroke-width='1.2' fill='none'/%3E%3Cpath d='M-80 380 Q 600 600 1280 360' stroke='rgba(150,200,255,0.2)' stroke-width='1' fill='none'/%3E%3Cpath d='M-80 60 Q 460 300 1280 -30' stroke='rgba(255,255,255,0.2)' stroke-width='0.9' fill='none'/%3E%3Cpath d='M-80 640 Q 240 860 1280 560' stroke='rgba(130,80,220,0.24)' stroke-width='0.9' fill='none'/%3E%3Cpath d='M-80 180 Q 780 380 1280 260' stroke='rgba(220,200,255,0.16)' stroke-width='0.8' fill='none'/%3E%3Cpath d='M-80 840 Q 560 660 1280 880' stroke='rgba(120,70,220,0.22)' stroke-width='0.8' fill='none'/%3E%3C/svg%3E");
         background-size: 100% 100%;
         background-repeat: no-repeat;
-        opacity: 0.9;
+        opacity: 1;
         z-index: 0;
+      }
+      /* Secondary atmospheric layer — huge soft orbs + a slow
+         counter-curve sweep that sits behind the hero arcs so the
+         depth reads in both light and dark modes. */
+      .sn-feed-canvas::after {
+        content: "";
+        position: absolute;
+        inset: 0;
+        pointer-events: none;
+        background-image: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 800' preserveAspectRatio='none'%3E%3Cdefs%3E%3CradialGradient id='orb' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='rgba(255,255,255,0.35)'/%3E%3Cstop offset='60%25' stop-color='rgba(255,255,255,0.05)'/%3E%3Cstop offset='100%25' stop-color='rgba(255,255,255,0)'/%3E%3C/radialGradient%3E%3CradialGradient id='orbViolet' cx='50%25' cy='50%25' r='50%25'%3E%3Cstop offset='0%25' stop-color='rgba(180,140,255,0.4)'/%3E%3Cstop offset='70%25' stop-color='rgba(130,80,220,0.08)'/%3E%3Cstop offset='100%25' stop-color='rgba(130,80,220,0)'/%3E%3C/radialGradient%3E%3C/defs%3E%3Ccircle cx='180' cy='180' r='240' fill='url(%23orb)'/%3E%3Ccircle cx='1040' cy='620' r='320' fill='url(%23orbViolet)'/%3E%3Ccircle cx='760' cy='180' r='180' fill='url(%23orbViolet)'/%3E%3Cpath d='M-80 420 Q 300 120 760 420 T 1280 420' stroke='rgba(255,255,255,0.12)' stroke-width='1.6' fill='none'/%3E%3Cpath d='M-80 540 Q 420 760 860 540 T 1280 540' stroke='rgba(200,170,255,0.12)' stroke-width='1.4' fill='none'/%3E%3C/svg%3E");
+        background-size: 100% 100%;
+        background-repeat: no-repeat;
+        opacity: 0.85;
+        z-index: 0;
+        mix-blend-mode: screen;
       }
       .sn-feed-canvas > * {
         position: relative;
@@ -531,23 +582,26 @@
 
       .sn-kb-col {
         scroll-snap-align: start;
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px solid rgba(255, 255, 255, 0.12);
+        background: rgba(255, 255, 255, 0.09);
+        border: 1px solid rgba(226, 232, 255, 0.4);
         border-radius: 0.85rem;
         padding: 0.75rem;
         display: flex;
         flex-direction: column;
         gap: 0.55rem;
         min-width: 0;
-        backdrop-filter: blur(4px);
-        -webkit-backdrop-filter: blur(4px);
+        backdrop-filter: blur(6px);
+        -webkit-backdrop-filter: blur(6px);
+        box-shadow:
+          inset 0 1px 0 rgba(255, 255, 255, 0.22),
+          0 10px 28px -18px rgba(4, 0, 245, 0.55);
       }
       .sn-kb-col-head {
         display: flex;
         align-items: center;
         gap: 0.5rem;
-        padding: 0.05rem 0.15rem 0.3rem;
-        border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+        padding: 0.05rem 0.15rem 0.5rem;
+        border-bottom: 1px solid rgba(226, 232, 255, 0.32);
       }
       .sn-kb-col-dot {
         width: 0.55rem;
@@ -718,9 +772,9 @@
         font-weight: 700;
         text-align: center;
         padding: 0.4rem;
-        color: rgba(255, 255, 255, 0.82);
-        background: rgba(255, 255, 255, 0.04);
-        border: 1px dashed rgba(255, 255, 255, 0.2);
+        color: rgba(255, 255, 255, 0.88);
+        background: rgba(255, 255, 255, 0.06);
+        border: 1px dashed rgba(226, 232, 255, 0.38);
         border-radius: 0.45rem;
       }
 
@@ -922,11 +976,18 @@
         z-index: -1;
       }
       .sn-hero-tag {
-        color: var(--muted-fg);
-        font-size: 1rem;
-        font-weight: 500;
-        margin: 0.55rem 0 0;
+        color: var(--text);
+        font-size: 1.05rem;
+        font-weight: 600;
+        letter-spacing: -0.005em;
+        margin: 1.35rem 0 0;
         max-width: 62ch;
+        opacity: 0.94;
+      }
+      .sn-hero #subhead {
+        color: var(--text);
+        opacity: 0.74;
+        font-weight: 500;
       }
 
       /* Big section headers (matching the 'Team Presence' treatment) */
@@ -1462,8 +1523,99 @@
         }
       }
 
-      /* Hide the small meta text on narrow screens, keep the avatar. */
+      /* --------------------------------------------------------------
+         Top-nav utility row — icon-only actions spread across the top
+         bar between the Gen brand and the user chip. Mirrors Gen
+         Central's utility strip (grid / directory / compose /
+         downloads / notifications / search).
+         -------------------------------------------------------------- */
+      .sn-topnav-utility {
+        flex: 1;
+        display: inline-flex;
+        align-items: center;
+        justify-content: space-evenly;
+        gap: 0.25rem;
+        max-width: 34rem;
+        margin: 0 auto;
+      }
+      .sn-topnav-action {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 2.25rem;
+        height: 2.25rem;
+        border-radius: 0.55rem;
+        background: transparent;
+        border: none;
+        color: var(--muted-fg);
+        cursor: pointer;
+        text-decoration: none;
+        transition: background 140ms ease, color 140ms ease,
+          transform 140ms ease;
+      }
+      .sn-topnav-action svg {
+        width: 1.15rem;
+        height: 1.15rem;
+        flex: none;
+      }
+      .sn-topnav-action:hover {
+        background: color-mix(in srgb, var(--gen-blue) 10%, transparent);
+        color: var(--gen-blue);
+      }
+      .sn-topnav-action:focus-visible {
+        outline: 2px solid var(--gen-blue);
+        outline-offset: 2px;
+      }
+      .sn-topnav-badge {
+        position: absolute;
+        top: 0.2rem;
+        right: 0.15rem;
+        min-width: 1.05rem;
+        height: 1.05rem;
+        padding: 0 0.3rem;
+        background: var(--gen-blue);
+        color: #ffffff;
+        font-size: 0.58rem;
+        font-weight: 800;
+        letter-spacing: 0.02em;
+        border-radius: 999px;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        box-shadow: 0 0 0 2px var(--surface);
+        pointer-events: none;
+      }
+      html.theme-dark .sn-topnav-action,
+      html:not(.theme-light) .sn-topnav-action {
+        color: rgba(230, 232, 255, 0.72);
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) .sn-topnav-action:hover {
+          background: rgba(255, 255, 255, 0.08);
+          color: #ffffff;
+        }
+        html:not(.theme-light) .sn-topnav-badge {
+          box-shadow: 0 0 0 2px rgba(10, 13, 26, 0.95);
+        }
+      }
+      html.theme-dark .sn-topnav-action:hover {
+        background: rgba(255, 255, 255, 0.08);
+        color: #ffffff;
+      }
+      html.theme-dark .sn-topnav-badge {
+        box-shadow: 0 0 0 2px rgba(10, 13, 26, 0.95);
+      }
+
+      /* Shrink the utility icons on tablet-ish widths before hiding
+         them entirely on phones. */
+      @media (max-width: 900px) {
+        .sn-topnav-utility { gap: 0; max-width: 100%; }
+        .sn-topnav-action { width: 2rem; height: 2rem; }
+        .sn-topnav-action svg { width: 1rem; height: 1rem; }
+      }
       @media (max-width: 640px) {
+        .sn-topnav-utility { display: none; }
         .sn-user-meta { display: none; }
         .sn-topnav-crumb { display: none; }
         .sn-topnav-inner { padding: 0.5rem 1rem; }
@@ -1480,6 +1632,90 @@
             <span id="topnav-product-name">Pulse</span>
           </span>
         </a>
+        <!--
+          Utility icon row — mirrors Gen Central's top-bar strip.
+          Spread evenly between the brand and the user chip so the
+          options are quick to reach from anywhere on the page.
+        -->
+        <div class="sn-topnav-utility" role="group" aria-label="Quick actions">
+          <a
+            class="sn-topnav-action"
+            href="/"
+            title="All apps"
+            aria-label="All apps"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="7" height="7" rx="1.2"></rect>
+              <rect x="14" y="3" width="7" height="7" rx="1.2"></rect>
+              <rect x="3" y="14" width="7" height="7" rx="1.2"></rect>
+              <rect x="14" y="14" width="7" height="7" rx="1.2"></rect>
+            </svg>
+          </a>
+          <a
+            class="sn-topnav-action"
+            href="#widget-team-presence"
+            title="Team directory"
+            aria-label="Team directory"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="9" cy="8" r="3.5"></circle>
+              <path d="M2.5 20c0-3.6 2.9-6.5 6.5-6.5s6.5 2.9 6.5 6.5"></path>
+              <circle cx="17" cy="10" r="2.5"></circle>
+              <path d="M15 18.5c0-2.2 1.8-4 4-4h2"></path>
+            </svg>
+          </a>
+          <button
+            class="sn-topnav-action"
+            type="button"
+            title="Compose update"
+            aria-label="Compose update"
+            disabled
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M4 20h4l10-10-4-4L4 16v4z"></path>
+              <path d="M14 6l4 4"></path>
+            </svg>
+          </button>
+          <a
+            class="sn-topnav-action"
+            href="/api/widgets/weekly-throughput"
+            title="Latest report"
+            aria-label="Latest report"
+            target="_blank"
+            rel="noopener noreferrer"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <path d="M7 10l5 5 5-5"></path>
+              <path d="M12 15V3"></path>
+            </svg>
+          </a>
+          <button
+            id="topnav-notifications"
+            class="sn-topnav-action"
+            type="button"
+            title="Notifications"
+            aria-label="Notifications"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M6 9a6 6 0 0 1 12 0c0 7 3 7 3 9H3c0-2 3-2 3-9z"></path>
+              <path d="M10 21a2 2 0 0 0 4 0"></path>
+            </svg>
+            <span id="topnav-notifications-badge" class="sn-topnav-badge" aria-label="unread notifications">3</span>
+          </button>
+          <button
+            id="topnav-search"
+            class="sn-topnav-action"
+            type="button"
+            title="Search"
+            aria-label="Search"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="7"></circle>
+              <path d="M20 20l-3.5-3.5"></path>
+            </svg>
+          </button>
+        </div>
         <div class="sn-topnav-right">
           <button
             id="user-chip"
@@ -1553,26 +1789,14 @@
       </div>
     </nav>
     <main class="mx-auto max-w-6xl px-6 py-10">
-      <header class="sn-hero flex flex-wrap items-end justify-between gap-4">
-        <div class="min-w-0">
-          <h1 class="sn-hero-title" aria-label="Gen Pulse">
-            <span class="gen-logo" aria-hidden="true">
-              <span class="gen-logo-word">Gen</span><span class="gen-logo-tm">™</span>
-            </span>
-            <span class="hero-pulse">Pulse</span>
-          </h1>
-          <p class="sn-hero-tag">
-            Gen Digital · {{BRAND_NAME}} — the team, the week, and the numbers in one live view.
-          </p>
-          <p id="subhead" class="sn-muted mt-1 text-sm">Loading…</p>
-        </div>
-        <div class="sn-hero-right">
-          <!--
-            Quick-links pill row — the team's most-used destinations.
-            Edit URLs here; the HTML structure is copy-pasteable so you
-            can add / remove links without touching any JS.
-          -->
-          <nav class="sn-quicklinks" aria-label="Quick links">
+      <!--
+        Quick-links nav — centered destination bar that sits between
+        the top-nav utility strip and the hero. Mirrors Gen Central's
+        two-tier nav pattern: icons up top, named destinations below.
+        Edit URLs here; the HTML structure is copy-pasteable so you
+        can add / remove links without touching any JS.
+      -->
+      <nav class="sn-quicklinks sn-quicklinks-bar" aria-label="Quick links">
             <a
               class="sn-quicklink"
               href="https://jira.corp.nortonlifelock.com/secure/Dashboard.jspa?selectPageId=63427"
@@ -1641,9 +1865,30 @@
               </svg>
               <span>Confluence</span>
             </a>
-          </nav>
+      </nav>
 
-          <div class="flex items-center gap-3 text-sm">
+      <header class="sn-hero flex flex-wrap items-end justify-between gap-x-6 gap-y-8">
+        <div class="min-w-0">
+          <h1 class="sn-hero-title" aria-label="Gen Pulse">
+            <span class="gen-logo" aria-hidden="true">
+              <span class="gen-logo-word">Gen</span><span class="gen-logo-tm">™</span>
+            </span>
+            <span class="hero-pulse">Pulse</span>
+          </h1>
+          <p class="sn-hero-tag">
+            Gen Digital · {{BRAND_NAME}} — the team, the week, and the numbers in one live view.
+          </p>
+          <p id="subhead" class="sn-muted mt-1 text-sm">Loading…</p>
+        </div>
+        <div class="sn-hero-right">
+          <!--
+            Status + controls — right-aligned in the hero so the trio
+            (last-updated · theme toggle · refresh) sits directly
+            under the user chip in the top-nav. Both containers share
+            the same max-width (72rem) and side padding (1.5rem), so
+            the right edges line up exactly.
+          -->
+          <div class="sn-hero-controls flex items-center gap-3 text-sm">
             <span id="refreshed" class="sn-muted"></span>
             <button
               id="theme-toggle"
