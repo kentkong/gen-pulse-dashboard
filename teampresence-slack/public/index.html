@@ -1688,14 +1688,15 @@
           margin-top: 1.5rem;
         }
         .sn-hero {
-          padding: 1rem 0 1.25rem;
+          padding: 0.5rem 0 0.85rem;
         }
         .sn-hero-title {
-          font-size: clamp(1.85rem, 9vw, 2.6rem);
+          font-size: clamp(1.75rem, 8.5vw, 2.4rem);
+          margin-top: 0.25rem;
         }
         .sn-hero-tag {
-          font-size: 0.95rem;
-          margin-top: 1rem;
+          font-size: 0.88rem;
+          margin-top: 0.7rem;
           /* Hard-cap the tag to viewport width minus main's 1.5rem
              horizontal padding on each side. `!important` guards
              against the base-rule `max-width: 62ch` (~470px) winning
@@ -1714,6 +1715,14 @@
         }
       }
 
+      /* When a widget is anchor-linked (e.g. ?#widget-weekly-throughput
+         from a deep-link / marketing screenshot), give it breathing
+         room at the top of the viewport so the section header doesn't
+         jam against the URL bar. */
+      :target {
+        scroll-margin-top: 0.5rem;
+      }
+
       /* ---------------------------------------------------------------
          Mobile widget layouts — optimised for phones (<= 640px).
          Goal: every widget feels native, not a shrunken desktop table.
@@ -1729,9 +1738,35 @@
             no horizontal scroll, no squinting.
       --------------------------------------------------------------- */
       @media (max-width: 640px) {
+        /* Nuclear guard: clip horizontal overflow at every level of
+           the layout so no child widget can ever push past the
+           viewport. This is the safety net behind all the per-widget
+           tuning below — if one cell has an odd sub-pixel width on
+           an untested browser, it's still contained. */
+        html, body {
+          overflow-x: hidden;
+        }
+        main.mx-auto {
+          padding-left: 0.9rem;
+          padding-right: 0.9rem;
+          max-width: 100%;
+        }
+        .sn-feed-canvas,
+        .sn-feed-canvas > div,
+        .sn-feed-canvas section {
+          max-width: 100%;
+        }
+        .sn-feed-canvas .sn-card {
+          max-width: 100%;
+          box-sizing: border-box;
+        }
+
         /* Weekly throughput — stack the headline number on top of
            the sparkline, center-align, and let the sparkline span
            the full card width. */
+        #widget-weekly-throughput .sn-card {
+          padding: 1rem 0.95rem;
+        }
         #widget-weekly-throughput .sn-card > div:first-child {
           flex-direction: column;
           align-items: stretch;
@@ -1743,12 +1778,53 @@
         #widget-weekly-throughput .min-w-\[240px\] {
           min-width: 0;
         }
+        /* Sparkline SVG: make sure it never dictates a min-width.  */
+        #wt-spark {
+          width: 100%;
+          min-width: 0;
+          max-width: 100%;
+        }
+        /* Week-range note: let long "updated 10:42 AM" string wrap
+           instead of overflowing. */
+        #wt-note {
+          word-break: break-word;
+          overflow-wrap: anywhere;
+        }
 
-        /* Backlog + Lifecycle — already collapses to single column
-           below md, but tighten card padding for phone. */
+        /* Backlog + Lifecycle — tighten card padding; make the 4-up
+           age bucket grid into 2×2 on phone; let the priority legend
+           and the priority-by-row blocks wrap and shrink cleanly. */
         #widget-backlog-overview,
         #widget-ticket-lifecycle {
-          padding: 1.1rem 1rem;
+          padding: 1rem 0.95rem;
+        }
+        #bo-age {
+          grid-template-columns: repeat(2, minmax(0, 1fr));
+        }
+        #bo-age > * {
+          min-width: 0;
+        }
+        #bo-legend {
+          gap: 0.4rem 0.75rem;
+        }
+        #bo-legend > * {
+          min-width: 0;
+          flex: 0 1 auto;
+        }
+        #bo-bar,
+        #bo-bar > * {
+          max-width: 100%;
+        }
+        #tl-priority,
+        #tl-priority > * {
+          max-width: 100%;
+          min-width: 0;
+        }
+        #bo-note,
+        #tl-note,
+        #tl-summary {
+          word-break: break-word;
+          overflow-wrap: anywhere;
         }
 
         /* --- Kanban scroll-snap carousel --------------------------- */
@@ -1796,14 +1872,25 @@
           gap: 0.45rem;
         }
 
-        /* --- Tables → cards -------------------------------------- */
-        .sn-card:has(> .sn-table),
+        /* --- Tables → stacked rows inside the card --------------- */
+        /* Keep the outer .sn-card wrapper intact (it owns the proper
+           gutters inside the feed canvas). Each <tr> becomes a
+           stacked row inside the card, separated by a hairline.
+           This avoids nested "card in a card" visuals and — crucially
+           — avoids the overflow that was letting tables escape the
+           right edge of the feed canvas. `overflow: hidden` on the
+           wrapper is the belt-and-suspenders: even if the inner grid
+           produces a pixel of overflow on some browsers, it gets
+           clipped at the card's rounded border, not at the viewport. */
         .sn-card.overflow-x-auto {
-          overflow-x: visible;
-          padding: 0;
-          background: transparent;
-          border: 0;
-          box-shadow: none;
+          overflow: hidden;
+          padding: 0.5rem 0.85rem;
+          max-width: 100%;
+          box-sizing: border-box;
+        }
+        .sn-card.overflow-x-auto,
+        .sn-card.overflow-x-auto * {
+          box-sizing: border-box;
         }
         .sn-table,
         .sn-table thead,
@@ -1812,10 +1899,9 @@
         .sn-table td {
           display: block;
           width: 100%;
+          max-width: 100%;
         }
         .sn-table thead {
-          /* Accessible but visually hidden — screen readers still
-             read the column headers. */
           position: absolute;
           width: 1px;
           height: 1px;
@@ -1824,31 +1910,36 @@
           white-space: nowrap;
         }
         .sn-table tbody tr {
-          background: var(--card-bg);
-          border: 1px solid var(--card-border);
-          border-radius: 0.85rem;
-          padding: 0.85rem 0.95rem;
-          margin-bottom: 0.65rem;
-          box-shadow: var(--card-shadow, 0 1px 2px rgba(10, 13, 26, 0.04));
+          padding: 0.75rem 0;
+          border-bottom: 1px solid var(--border);
         }
         .sn-table tbody tr:last-child {
-          margin-bottom: 0;
+          border-bottom: 0;
+          padding-bottom: 0.25rem;
+        }
+        .sn-table tbody tr:first-child {
+          padding-top: 0.25rem;
         }
         .sn-table td {
           border: 0;
-          padding: 0.3rem 0;
+          padding: 0.28rem 0;
+          /* minmax(0, 1fr) lets the value column shrink below its
+             intrinsic width so long strings don't push the grid
+             wider than the card. This is the fix for the pills
+             "cutting off" at the right edge. */
           display: grid;
-          grid-template-columns: 6.5rem 1fr;
+          grid-template-columns: 5.75rem minmax(0, 1fr);
           align-items: center;
-          gap: 0.75rem;
+          gap: 0.6rem;
           font-size: 0.85rem;
+          min-width: 0;
+          word-break: break-word;
+          overflow-wrap: anywhere;
         }
-        /* First cell (Member / Meeting) is the card title — full
-           width, label hidden, bigger type. */
         .sn-table td:first-child {
-          grid-template-columns: 1fr;
-          padding: 0 0 0.55rem;
-          margin-bottom: 0.45rem;
+          grid-template-columns: minmax(0, 1fr);
+          padding: 0 0 0.5rem;
+          margin-bottom: 0.35rem;
           border-bottom: 1px dashed var(--border);
           font-size: 0.95rem;
         }
@@ -1857,34 +1948,61 @@
         }
         .sn-table td::before {
           content: attr(data-label);
-          font-size: 0.65rem;
+          font-size: 0.62rem;
           font-weight: 700;
-          letter-spacing: 0.08em;
+          letter-spacing: 0.09em;
           text-transform: uppercase;
           color: var(--muted-fg);
         }
-        /* Pills inside the card should left-align in the value
-           column, not stretch. */
         .sn-table td .sn-pill {
           justify-self: start;
+          max-width: 100%;
         }
-        /* Roll calls: the narrow count columns (attending/late/absent/total)
-           tend to be 1-3 chars. Cluster them nicely. */
+
+        /* Member "title" cell: force the name-row to wrap the team
+           pill below the name on narrow viewports so it never clips. */
+        .sn-member {
+          display: flex;
+          flex-wrap: wrap;
+          align-items: flex-start;
+          gap: 0.65rem;
+          width: 100%;
+          min-width: 0;
+        }
+        .sn-member > .min-w-0 {
+          flex: 1 1 auto;
+          min-width: 0;
+        }
+        .sn-member-name-row {
+          flex-wrap: wrap;
+          row-gap: 0.25rem;
+        }
+        .sn-member-name {
+          white-space: normal;
+          overflow: visible;
+          text-overflow: clip;
+          min-width: 0;
+          overflow-wrap: anywhere;
+        }
+
+        /* Roll calls: cluster the narrow count columns into a 2-col
+           grid so attending/late and absent/total sit side-by-side. */
         #rollcalls tr {
           display: grid;
-          grid-template-columns: 1fr 1fr;
+          grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
           grid-template-areas:
             "meeting meeting"
             "started started"
             "attending late"
             "absent total"
             "id id";
-          gap: 0.3rem 0.75rem;
+          gap: 0.25rem 0.65rem;
+          padding: 0.75rem 0;
         }
         #rollcalls td {
-          padding: 0.25rem 0;
+          padding: 0.22rem 0;
           font-size: 0.8rem;
-          grid-template-columns: 5rem 1fr;
+          grid-template-columns: 4.5rem minmax(0, 1fr);
         }
         #rollcalls td:nth-child(1) { grid-area: meeting; }
         #rollcalls td:nth-child(2) { grid-area: started; }
@@ -2274,7 +2392,7 @@
         <div id="kb-note" class="sn-muted mt-2 text-xs"></div>
       </section>
 
-      <section class="mt-12">
+      <section id="widget-team-presence" class="mt-12">
         <h2 class="sn-section-head">
           <span class="sn-section-dot" aria-hidden="true"></span>
           <span class="sn-brand">{{BRAND_NAME}}</span>
@@ -3244,6 +3362,34 @@
         refreshMenuThemeLabel();
 
         loadMe();
+      })();
+
+      // Marketing screenshot helper — allow the page to be deep-linked
+      // to a specific widget via `?scroll=widget-id`. This is safer
+      // than relying on the URL hash (which some headless browsers
+      // trip over when the target isn't in the initial layout), and
+      // it fires AFTER the widgets have loaded their data so the
+      // screenshot captures a fully populated widget at the top of
+      // the viewport rather than a half-rendered placeholder.
+      (function initScrollParam() {
+        try {
+          const m = /[?&]scroll=([\w-]+)/.exec(window.location.search || "");
+          if (!m) return;
+          const target = document.getElementById(m[1]);
+          if (!target) return;
+          const go = () => target.scrollIntoView({
+            behavior: "auto",
+            block: "start",
+          });
+          // Give the dashboard fetch a moment to populate; otherwise
+          // the widget height grows after we scroll and we'd land
+          // at the wrong offset.
+          if (document.readyState === "complete") {
+            setTimeout(go, 1200);
+          } else {
+            window.addEventListener("load", () => setTimeout(go, 1200));
+          }
+        } catch (e) {}
       })();
 
       // Theme toggle — cycles between light and dark, persisted in localStorage.
