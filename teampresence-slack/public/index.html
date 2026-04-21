@@ -3,7 +3,11 @@
   <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
-    <title>Gen Pulse — live team &amp; reports</title>
+    <title>Gen Pulse — the daily command center for CSM teams</title>
+    <meta
+      name="description"
+      content="The daily command center for CSM teams — a mobile-first companion to Gen Central with real-time performance, workflow, and team presence."
+    />
     <script>
       // Apply the stored theme before first paint so there's no flash.
       // A `?theme=light|dark` URL param wins over localStorage so
@@ -1688,7 +1692,23 @@
           margin-top: 1.5rem;
         }
         .sn-hero {
+          /* On phones, drop flex entirely and just stack the two
+             children (title block / controls block) naturally.
+             Removing flex eliminates a whole class of flex-basis
+             overflow bugs where the left block ends up sized to the
+             tag's intrinsic content width rather than the viewport. */
+          display: block;
           padding: 0.5rem 0 0.85rem;
+        }
+        .sn-hero > .min-w-0,
+        .sn-hero > .sn-hero-right {
+          display: block;
+          width: 100%;
+          max-width: 100%;
+          min-width: 0;
+        }
+        .sn-hero-right {
+          margin-top: 0.9rem;
         }
         .sn-hero-title {
           font-size: clamp(1.75rem, 8.5vw, 2.4rem);
@@ -1697,11 +1717,21 @@
         .sn-hero-tag {
           font-size: 0.88rem;
           margin-top: 0.7rem;
-          /* Hard-cap the tag to viewport width minus main's 1.5rem
-             horizontal padding on each side. `!important` guards
-             against the base-rule `max-width: 62ch` (~470px) winning
-             on cascade if this block is ever moved. */
-          max-width: calc(100vw - 3rem) !important;
+          /* Use a hard px max-width instead of calc(100vw - ...). On
+             headless Chrome under --force-device-scale-factor, 100vw
+             sometimes evaluates larger than the actual viewport,
+             which lets long taglines overflow the right edge in
+             marketing screenshots. 360px covers iPhone 15 Pro (393)
+             with our main gutters and is narrow enough to also cover
+             smaller phones like iPhone SE (375). */
+          max-width: 360px !important;
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
+        .sn-hero > .min-w-0 {
+          flex: 1 1 100%;
+          min-width: 0;
+          max-width: 360px;
         }
         .sn-hero #subhead {
           font-size: 0.82rem;
@@ -2019,6 +2049,276 @@
           font-size: 1.75rem;
         }
       }
+
+      /* -----------------------------------------------------------------
+         Team switcher — indicator + dropdown showing which CSM team
+         this Pulse instance is displaying. Four options: EMAIL-NORTON,
+         IPM, MOBILE, AVAST. The button looks like a refined pill with
+         a tiny uppercase kicker ("Viewing team") above the team name
+         and a brand-coloured dot, so users see what they're looking
+         at without hunting. The menu drops below, floats above the
+         hero, and uses the same card treatment as the feed widgets
+         so it feels native to the rest of the UI.
+      ----------------------------------------------------------------- */
+      .sn-team-switcher {
+        position: relative;
+        display: inline-block;
+        margin-top: 1.15rem;
+        /* A very high z-index here isn't enough — the feed-canvas
+           below creates its own stacking context via transforms /
+           filters / opacity and renders atop the hero. We raise both
+           here AND on the open menu. Also give the whole hero a
+           positive z-index so the whole dropdown surface wins. */
+        z-index: 60;
+      }
+      .sn-hero {
+        position: relative;
+        z-index: 50;
+      }
+      .sn-team-switcher-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.85rem;
+        padding: 0.55rem 0.85rem 0.55rem 1rem;
+        background: var(--card);
+        border: 1px solid var(--border);
+        border-radius: 999px;
+        color: var(--text);
+        font: inherit;
+        cursor: pointer;
+        transition: border-color 140ms ease, background 140ms ease,
+          box-shadow 140ms ease, transform 140ms ease;
+        box-shadow: 0 1px 2px rgba(10, 13, 26, 0.08);
+        line-height: 1.1;
+        max-width: 100%;
+      }
+      .sn-team-switcher-btn:hover {
+        border-color: var(--gen-blue);
+        box-shadow: 0 6px 16px rgba(43, 79, 255, 0.18);
+        transform: translateY(-1px);
+      }
+      .sn-team-switcher-btn:focus-visible {
+        outline: 2px solid var(--gen-blue);
+        outline-offset: 2px;
+      }
+      .sn-team-switcher-btn[aria-expanded="true"] {
+        border-color: var(--gen-blue);
+        box-shadow: 0 8px 20px rgba(43, 79, 255, 0.22);
+      }
+      .sn-team-switcher-kicker {
+        font-size: 0.62rem;
+        letter-spacing: 0.12em;
+        text-transform: uppercase;
+        font-weight: 700;
+        color: var(--muted-fg);
+        padding-right: 0.2rem;
+        border-right: 1px solid var(--border);
+        margin-right: 0.15rem;
+      }
+      .sn-team-switcher-value {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-width: 0;
+      }
+      .sn-team-switcher-dot {
+        width: 0.6rem;
+        height: 0.6rem;
+        border-radius: 50%;
+        background: #f5b400;
+        box-shadow: 0 0 0 3px rgba(245, 180, 0, 0.15);
+        flex: 0 0 auto;
+      }
+      .sn-team-switcher-name {
+        font-weight: 700;
+        letter-spacing: 0.01em;
+        font-size: 0.95rem;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 12rem;
+      }
+      .sn-team-switcher-chevron {
+        width: 1rem;
+        height: 1rem;
+        color: var(--muted-fg);
+        transition: transform 160ms ease, color 160ms ease;
+        flex: 0 0 auto;
+      }
+      .sn-team-switcher-btn[aria-expanded="true"] .sn-team-switcher-chevron {
+        transform: rotate(180deg);
+        color: var(--gen-blue);
+      }
+
+      .sn-team-switcher-menu {
+        position: absolute;
+        top: calc(100% + 0.6rem);
+        left: 0;
+        min-width: 18rem;
+        max-width: min(22rem, calc(100vw - 2rem));
+        margin: 0;
+        padding: 0.4rem;
+        list-style: none;
+        /* Solid opaque background — the menu floats over the hero
+           gradient + tagline + controls, so translucency makes the
+           options unreadable. Use an explicit light/dark colour
+           rather than --card (which may be translucent on themes). */
+        background: #ffffff;
+        border: 1px solid var(--border);
+        border-radius: 0.9rem;
+        box-shadow: 0 20px 40px rgba(10, 13, 26, 0.35),
+          0 2px 6px rgba(10, 13, 26, 0.15);
+        z-index: 1000;
+        animation: sn-team-switcher-in 160ms ease;
+        backdrop-filter: none;
+      }
+      html.theme-dark .sn-team-switcher-menu,
+      html:not(.theme-light) .sn-team-switcher-menu {
+        background: #151a2e;
+        border-color: rgba(255, 255, 255, 0.12);
+        box-shadow: 0 22px 44px rgba(0, 0, 0, 0.55),
+          0 2px 6px rgba(0, 0, 0, 0.35);
+      }
+      .sn-team-switcher-menu[hidden] {
+        display: none;
+      }
+      @keyframes sn-team-switcher-in {
+        from {
+          opacity: 0;
+          transform: translateY(-4px);
+        }
+        to {
+          opacity: 1;
+          transform: translateY(0);
+        }
+      }
+      .sn-team-switcher-opt {
+        display: flex;
+        align-items: center;
+        gap: 0.7rem;
+        padding: 0.55rem 0.65rem;
+        border-radius: 0.6rem;
+        cursor: pointer;
+        color: var(--text);
+        transition: background 120ms ease;
+      }
+      .sn-team-switcher-opt:hover,
+      .sn-team-switcher-opt:focus-visible {
+        background: var(--muted);
+        outline: none;
+      }
+      .sn-team-switcher-opt.is-selected {
+        background: color-mix(in srgb, var(--gen-blue) 10%, transparent);
+      }
+      .sn-team-switcher-opt-dot {
+        width: 0.65rem;
+        height: 0.65rem;
+        border-radius: 50%;
+        flex: 0 0 auto;
+        box-shadow: 0 0 0 3px color-mix(in srgb, currentColor 6%, transparent);
+      }
+      .sn-team-switcher-opt-body {
+        display: flex;
+        flex-direction: column;
+        min-width: 0;
+        flex: 1 1 auto;
+      }
+      .sn-team-switcher-opt-name {
+        font-weight: 700;
+        font-size: 0.92rem;
+        letter-spacing: 0.01em;
+        line-height: 1.2;
+      }
+      .sn-team-switcher-opt-meta {
+        font-size: 0.72rem;
+        color: var(--muted-fg);
+        margin-top: 0.1rem;
+      }
+      .sn-team-switcher-opt-check {
+        width: 1.1rem;
+        height: 1.1rem;
+        color: var(--gen-blue);
+        opacity: 0;
+        flex: 0 0 auto;
+        transition: opacity 120ms ease;
+      }
+      .sn-team-switcher-opt.is-selected .sn-team-switcher-opt-check {
+        opacity: 1;
+      }
+
+      /* Light-mode tuning — keep the pill readable on the gradient. */
+      html.theme-light .sn-team-switcher-btn {
+        background: rgba(255, 255, 255, 0.92);
+      }
+      html.theme-light .sn-team-switcher-menu {
+        background: #ffffff;
+      }
+
+      @media (max-width: 640px) {
+        .sn-team-switcher {
+          display: block;
+          margin-top: 1rem;
+        }
+        .sn-team-switcher-btn {
+          width: 100%;
+          justify-content: space-between;
+          padding: 0.6rem 0.85rem;
+        }
+        .sn-team-switcher-menu {
+          left: 0;
+          right: 0;
+          min-width: 0;
+          max-width: 100%;
+        }
+      }
+
+      /* -----------------------------------------------------------------
+         Hero spacing — give the new pitch-ready tagline room to
+         breathe before the date/timezone meta line and the controls
+         trio. The goal is at least two blank lines between the
+         tagline and what comes next, so the tagline reads as the
+         hero message and the meta info reads as supporting detail.
+      ----------------------------------------------------------------- */
+      .sn-hero-subhead {
+        margin-top: 2rem; /* ≈ 2 blank lines vs the tagline's line-height */
+      }
+      .sn-hero-right {
+        margin-top: 1rem;
+      }
+      @media (max-width: 640px) {
+        .sn-hero-subhead {
+          margin-top: 1.75rem;
+        }
+        .sn-hero-right {
+          margin-top: 2rem;
+        }
+      }
+
+      /* -----------------------------------------------------------------
+         Mobile viewport lockdown — absolute final cascade step.
+         iPhone-sized viewports kept getting a `<main>` wider than the
+         visible viewport (something inside — a <pre>, an un-wrapped
+         label, an SVG — was pushing the intrinsic width out). Clamp
+         the document root, body, and main to exactly 100vw so nothing
+         inside can ever force a wider scroll box. This is a safety
+         net, not a substitute for per-widget fixes; it just guarantees
+         that on a 393px phone, `main` is *exactly* 393px wide.
+      ----------------------------------------------------------------- */
+      @media (max-width: 640px) {
+        html,
+        body {
+          width: 100vw;
+          max-width: 100vw;
+          overflow-x: hidden;
+        }
+        main.mx-auto {
+          width: 100vw;
+          max-width: 100vw;
+          padding-left: 0.9rem;
+          padding-right: 0.9rem;
+          box-sizing: border-box;
+        }
+      }
     </style>
   </head>
   <body class="min-h-screen">
@@ -2274,10 +2574,182 @@
             </span>
             <span class="hero-pulse">Pulse</span>
           </h1>
+          <!--
+            Team switcher — tells the user (at a glance) which CSM team
+            this Pulse instance is displaying, and lets them jump to
+            another team's feed. Sits between the wordmark and the
+            tagline so the "which team am I looking at?" answer is the
+            second thing on the page, right after the product name.
+
+            Behaviour is wired in the main <script> below (toggle /
+            keyboard / click-outside / persist to localStorage).
+            Selecting a team also updates the visible brand name
+            throughout the dashboard for the demo (e.g. "Norton EMAIL
+            Reports" becomes "AVAST EMAIL Reports"), so directors can
+            see the multi-team vision without needing live IPM/Mobile/
+            Avast data wired up.
+          -->
+          <div class="sn-team-switcher" id="team-switcher">
+            <button
+              type="button"
+              class="sn-team-switcher-btn"
+              id="team-switcher-btn"
+              aria-haspopup="listbox"
+              aria-expanded="false"
+              aria-controls="team-switcher-menu"
+              aria-label="Switch team — currently viewing EMAIL-NORTON"
+            >
+              <span class="sn-team-switcher-kicker">Viewing team</span>
+              <span class="sn-team-switcher-value">
+                <span
+                  class="sn-team-switcher-dot"
+                  id="team-switcher-dot"
+                  aria-hidden="true"
+                ></span>
+                <span
+                  class="sn-team-switcher-name"
+                  id="team-switcher-current"
+                >EMAIL-NORTON</span>
+              </span>
+              <svg
+                class="sn-team-switcher-chevron"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2.2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M6 9l6 6 6-6"></path>
+              </svg>
+            </button>
+            <ul
+              id="team-switcher-menu"
+              class="sn-team-switcher-menu"
+              role="listbox"
+              aria-labelledby="team-switcher-btn"
+              tabindex="-1"
+              hidden
+            >
+              <li
+                role="option"
+                class="sn-team-switcher-opt is-selected"
+                data-team="email-norton"
+                data-brand="Norton EMAIL"
+                data-slug="EMAIL-NORTON"
+                data-accent="#f5b400"
+                aria-selected="true"
+                tabindex="0"
+              >
+                <span class="sn-team-switcher-opt-dot" style="background:#f5b400"></span>
+                <span class="sn-team-switcher-opt-body">
+                  <span class="sn-team-switcher-opt-name">EMAIL-NORTON</span>
+                  <span class="sn-team-switcher-opt-meta">Norton · email marketing & ops</span>
+                </span>
+                <svg
+                  class="sn-team-switcher-opt-check"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12l5 5 9-11"></path>
+                </svg>
+              </li>
+              <li
+                role="option"
+                class="sn-team-switcher-opt"
+                data-team="ipm"
+                data-brand="IPM"
+                data-slug="IPM"
+                data-accent="#7c3aed"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                <span class="sn-team-switcher-opt-dot" style="background:#7c3aed"></span>
+                <span class="sn-team-switcher-opt-body">
+                  <span class="sn-team-switcher-opt-name">IPM</span>
+                  <span class="sn-team-switcher-opt-meta">Identity Protection · CSM</span>
+                </span>
+                <svg
+                  class="sn-team-switcher-opt-check"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12l5 5 9-11"></path>
+                </svg>
+              </li>
+              <li
+                role="option"
+                class="sn-team-switcher-opt"
+                data-team="mobile"
+                data-brand="Mobile"
+                data-slug="MOBILE"
+                data-accent="#14b8a6"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                <span class="sn-team-switcher-opt-dot" style="background:#14b8a6"></span>
+                <span class="sn-team-switcher-opt-body">
+                  <span class="sn-team-switcher-opt-name">MOBILE</span>
+                  <span class="sn-team-switcher-opt-meta">Mobile security · cross-brand</span>
+                </span>
+                <svg
+                  class="sn-team-switcher-opt-check"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12l5 5 9-11"></path>
+                </svg>
+              </li>
+              <li
+                role="option"
+                class="sn-team-switcher-opt"
+                data-team="avast"
+                data-brand="Avast"
+                data-slug="AVAST"
+                data-accent="#ff7800"
+                aria-selected="false"
+                tabindex="-1"
+              >
+                <span class="sn-team-switcher-opt-dot" style="background:#ff7800"></span>
+                <span class="sn-team-switcher-opt-body">
+                  <span class="sn-team-switcher-opt-name">AVAST</span>
+                  <span class="sn-team-switcher-opt-meta">Avast · consumer & premium</span>
+                </span>
+                <svg
+                  class="sn-team-switcher-opt-check"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2.5"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                  aria-hidden="true"
+                >
+                  <path d="M5 12l5 5 9-11"></path>
+                </svg>
+              </li>
+            </ul>
+          </div>
           <p class="sn-hero-tag">
-            Gen Digital · {{BRAND_NAME}} — the team, the week, and the numbers in one live view.
+            The daily command center for CSM teams — a mobile-first companion to Gen Central with real-time performance, workflow, and team presence.
           </p>
-          <p id="subhead" class="sn-muted mt-1 text-sm">Loading…</p>
+          <p id="subhead" class="sn-hero-subhead sn-muted text-sm">Loading…</p>
         </div>
         <div class="sn-hero-right">
           <!--
@@ -3362,6 +3834,220 @@
         refreshMenuThemeLabel();
 
         loadMe();
+      })();
+
+      // Team switcher — toggles the dropdown of CSM teams this Pulse
+      // instance can be pointed at (EMAIL-NORTON / IPM / MOBILE /
+      // AVAST). Selection is persisted in localStorage so reloads
+      // remember, and the visible brand prefix ("Norton EMAIL Reports"
+      // → "AVAST EMAIL Reports") is rewritten on the fly so the demo
+      // doesn't require four backends to feel real. A `team:changed`
+      // CustomEvent is dispatched so other widgets (or a future
+      // multi-tenant backend) can refetch their data.
+      (function initTeamSwitcher() {
+        const KEY = "gen-pulse-team";
+        const root = document.getElementById("team-switcher");
+        if (!root) return;
+        const btn = root.querySelector("#team-switcher-btn");
+        const menu = root.querySelector("#team-switcher-menu");
+        const currentLabel = root.querySelector("#team-switcher-current");
+        const currentDot = root.querySelector("#team-switcher-dot");
+        const opts = Array.from(
+          root.querySelectorAll(".sn-team-switcher-opt")
+        );
+        if (!btn || !menu || !currentLabel || opts.length === 0) return;
+
+        function open() {
+          menu.hidden = false;
+          btn.setAttribute("aria-expanded", "true");
+          const selected =
+            opts.find((o) => o.classList.contains("is-selected")) || opts[0];
+          selected.focus();
+          document.addEventListener("mousedown", onOutside, true);
+          document.addEventListener("keydown", onKey, true);
+        }
+        function close(focusBtn = false) {
+          menu.hidden = true;
+          btn.setAttribute("aria-expanded", "false");
+          document.removeEventListener("mousedown", onOutside, true);
+          document.removeEventListener("keydown", onKey, true);
+          if (focusBtn) btn.focus();
+        }
+        function onOutside(e) {
+          if (!root.contains(e.target)) close();
+        }
+        function onKey(e) {
+          if (e.key === "Escape") {
+            e.preventDefault();
+            close(true);
+          } else if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+            e.preventDefault();
+            const active = document.activeElement;
+            const i = opts.indexOf(active);
+            const next =
+              e.key === "ArrowDown"
+                ? opts[(i + 1 + opts.length) % opts.length]
+                : opts[(i - 1 + opts.length) % opts.length];
+            next.focus();
+          } else if (e.key === "Enter" || e.key === " ") {
+            const active = document.activeElement;
+            if (opts.includes(active)) {
+              e.preventDefault();
+              select(active);
+            }
+          } else if (e.key === "Home") {
+            e.preventDefault();
+            opts[0].focus();
+          } else if (e.key === "End") {
+            e.preventDefault();
+            opts[opts.length - 1].focus();
+          }
+        }
+
+        function select(opt) {
+          opts.forEach((o) => {
+            o.classList.toggle("is-selected", o === opt);
+            o.setAttribute(
+              "aria-selected",
+              o === opt ? "true" : "false"
+            );
+            o.setAttribute("tabindex", o === opt ? "0" : "-1");
+          });
+          const slug = opt.dataset.slug || opt.dataset.team;
+          const brand = opt.dataset.brand || slug;
+          const accent = opt.dataset.accent || "#2b4fff";
+          currentLabel.textContent = slug;
+          if (currentDot) {
+            currentDot.style.background = accent;
+            currentDot.style.boxShadow =
+              "0 0 0 3px " +
+              "color-mix(in srgb, " +
+              accent +
+              " 18%, transparent)";
+          }
+          btn.setAttribute(
+            "aria-label",
+            "Switch team — currently viewing " + slug
+          );
+          document.body.dataset.team = opt.dataset.team;
+          try {
+            localStorage.setItem(KEY, opt.dataset.team);
+          } catch (e) {}
+          rewriteBrand(brand, slug);
+          close(true);
+          document.dispatchEvent(
+            new CustomEvent("team:changed", {
+              detail: {
+                team: opt.dataset.team,
+                brand,
+                slug,
+                accent,
+              },
+            })
+          );
+        }
+
+        // Rewrite the visible brand prefix inside each widget's
+        // <span class="sn-brand"> so selecting e.g. AVAST makes the
+        // whole dashboard read as "AVAST EMAIL Reports" / "AVAST
+        // Email — Backlog Overview" etc. We only touch the brand
+        // span, not the trailing " — Weekly throughput" tail, so the
+        // widget's purpose stays clear. When real per-team data
+        // lands this is replaced by a proper refetch with `?team=`.
+        function rewriteBrand(brand, slug) {
+          const rules = [
+            // "Norton EMAIL Reports" → "<slug> EMAIL Reports"
+            { sel: "#widget-weekly-throughput .sn-brand",
+              text: slug + " EMAIL Reports" },
+            // "Norton Email" → "<brand> Email" for the 3 widgets that
+            // share that prefix (backlog, lifecycle, kanban header).
+            { sel: "#widget-backlog-overview .sn-brand",
+              text: brand + " Email" },
+            { sel: "#widget-ticket-lifecycle .sn-brand",
+              text: brand + " Email" },
+            { sel: "#widget-kanban-board .sn-brand",
+              text: brand + " Email" },
+            // Team presence currently reads "EMAIL NORTON" (from the
+            // server template). Point it at the current team's slug.
+            { sel: "#widget-team-presence .sn-brand",
+              text: slug },
+          ];
+          rules.forEach(({ sel, text }) => {
+            const el = document.querySelector(sel);
+            if (el) el.textContent = text;
+          });
+          // Page <title> follows the same brand prefix.
+          document.title =
+            "Gen Pulse · " + slug + " — the daily command center";
+        }
+
+        btn.addEventListener("click", () => {
+          if (menu.hidden) open();
+          else close();
+        });
+        opts.forEach((opt) => {
+          opt.addEventListener("click", () => select(opt));
+        });
+
+        // Marketing / deep-link helpers.
+        //   ?team=<slug>              - preselects that team on load
+        //                               (e.g. `?team=avast` or `?team=ipm`)
+        //   ?open-team-switcher=1     - pops the dropdown on load so we
+        //                               can screenshot the open state.
+        try {
+          const teamMatch = /[?&]team=([\w-]+)/.exec(
+            window.location.search || ""
+          );
+          if (teamMatch) {
+            const wanted = teamMatch[1].toLowerCase();
+            const opt = opts.find(
+              (o) =>
+                o.dataset.team === wanted ||
+                (o.dataset.slug || "").toLowerCase() === wanted
+            );
+            if (opt) select(opt);
+          }
+          if (/[?&]open-team-switcher=1\b/.test(window.location.search || "")) {
+            const openAfterLoad = () => setTimeout(() => open(), 300);
+            if (document.readyState === "complete") openAfterLoad();
+            else window.addEventListener("load", openAfterLoad);
+          }
+        } catch (e) {}
+
+        // Restore saved team on load.
+        try {
+          const saved = localStorage.getItem(KEY);
+          if (saved) {
+            const opt = opts.find((o) => o.dataset.team === saved);
+            if (opt) {
+              // Apply without closing/focusing (we're on first paint).
+              opts.forEach((o) => {
+                o.classList.toggle("is-selected", o === opt);
+                o.setAttribute(
+                  "aria-selected",
+                  o === opt ? "true" : "false"
+                );
+                o.setAttribute("tabindex", o === opt ? "0" : "-1");
+              });
+              const slug = opt.dataset.slug || opt.dataset.team;
+              const brand = opt.dataset.brand || slug;
+              const accent = opt.dataset.accent || "#2b4fff";
+              currentLabel.textContent = slug;
+              if (currentDot) {
+                currentDot.style.background = accent;
+                currentDot.style.boxShadow =
+                  "0 0 0 3px color-mix(in srgb, " +
+                  accent +
+                  " 18%, transparent)";
+              }
+              document.body.dataset.team = opt.dataset.team;
+              // Brand rewrite needs the widget titles in the DOM;
+              // they exist at parse time (not lazy-rendered), so we
+              // can do it synchronously.
+              rewriteBrand(brand, slug);
+            }
+          }
+        } catch (e) {}
       })();
 
       // Marketing screenshot helper — allow the page to be deep-linked
