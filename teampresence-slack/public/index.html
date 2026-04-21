@@ -128,6 +128,11 @@
         background: var(--page-bg);
         background-attachment: fixed;
         color: var(--text);
+        /* Safety net against any wide child escaping on phone screens
+           where individual words (e.g. "Europe/Prague") can push the
+           subhead past the viewport. `clip` keeps scroll intact on the
+           Y axis while hiding horizontal overflow. */
+        overflow-x: clip;
       }
 
       .sn-brand {
@@ -374,33 +379,10 @@
           margin-left: 0;
         }
       }
-      /* Phone polish — tighter spacing so the quick-links fit in
-         three items per row on a 393px viewport and the feed canvas
-         doesn't overflow its padding box. */
-      @media (max-width: 520px) {
-        .sn-quicklinks {
-          gap: 0.45rem 1rem;
-        }
-        .sn-quicklink {
-          font-size: 0.66rem;
-          letter-spacing: 0.08em;
-        }
-        .sn-quicklinks-bar {
-          padding: 0.65rem 0 0.8rem;
-        }
-        .sn-feed-canvas {
-          padding: 1.4rem 1rem 1.6rem;
-          border-radius: 1rem;
-          margin-top: 1.5rem;
-        }
-        .sn-hero-title {
-          font-size: clamp(1.85rem, 9vw, 2.6rem);
-        }
-        .sn-hero-tag {
-          font-size: 0.95rem;
-          margin-top: 1rem;
-        }
-      }
+      /* Phone polish lives in a dedicated block at the END of the
+         stylesheet (search for "Phone polish — final cascade") so
+         its rules win against later base rules with equal
+         specificity. */
 
       /* --------------------------------------------------------------
          Feed canvas — atmospheric Gen-blue panel that sits behind
@@ -1016,6 +998,16 @@
         margin: 1.35rem 0 0;
         max-width: 62ch;
         opacity: 0.94;
+      }
+      /* On phone-sized viewports, swap the ch-based cap for a
+         viewport-based one so the tagline wraps inside the visible
+         hero column instead of extending past the right edge. The
+         dedicated media query at the end of this stylesheet tunes
+         font size and spacing to match. */
+      @media (max-width: 520px) {
+        .sn-hero-tag {
+          max-width: 340px;
+        }
       }
       .sn-hero #subhead {
         color: var(--text);
@@ -1652,6 +1644,74 @@
         .sn-user-meta { display: none; }
         .sn-topnav-crumb { display: none; }
         .sn-topnav-inner { padding: 0.5rem 1rem; }
+      }
+
+      /* ---------------------------------------------------------------
+         Phone polish — final cascade.
+         This block sits at the END of <style> on purpose: many earlier
+         base rules (e.g. `.sn-hero-tag { max-width: 62ch }`) would win
+         on specificity ties if our mobile overrides came first, so we
+         place the phone-specific rules last to guarantee they apply
+         on iPhone-sized viewports. Sized for iPhone 15 Pro (393px)
+         up through Pro Max (430px).
+      ---------------------------------------------------------------- */
+      @media (max-width: 520px) {
+        /* When the hero wraps its children, each child gets its own
+           row — force them to actually fill the viewport so their
+           text content wraps within, not past, the right edge. */
+        .sn-hero > div {
+          width: 100%;
+          min-width: 0;
+        }
+        .sn-quicklinks {
+          gap: 0.45rem 0.85rem;
+        }
+        .sn-quicklink {
+          font-size: 0.64rem;
+          letter-spacing: 0.06em;
+          /* Allow labels like "#EMAIL-NORTON" to wrap inside the
+             link (icon + label) instead of pushing past the right
+             edge of a 393px viewport. */
+          flex-shrink: 1;
+          min-width: 0;
+        }
+        .sn-quicklink > span {
+          overflow-wrap: anywhere;
+          word-break: break-word;
+        }
+        .sn-quicklinks-bar {
+          padding: 0.65rem 0.25rem 0.8rem;
+        }
+        .sn-feed-canvas {
+          padding: 1.4rem 1rem 1.6rem;
+          border-radius: 1rem;
+          margin-top: 1.5rem;
+        }
+        .sn-hero {
+          padding: 1rem 0 1.25rem;
+        }
+        .sn-hero-title {
+          font-size: clamp(1.85rem, 9vw, 2.6rem);
+        }
+        .sn-hero-tag {
+          font-size: 0.95rem;
+          margin-top: 1rem;
+          /* Hard-cap the tag to viewport width minus main's 1.5rem
+             horizontal padding on each side. `!important` guards
+             against the base-rule `max-width: 62ch` (~470px) winning
+             on cascade if this block is ever moved. */
+          max-width: calc(100vw - 3rem) !important;
+        }
+        .sn-hero #subhead {
+          font-size: 0.82rem;
+          /* Break long hyphen-free tokens like "Europe/Prague" so
+             they never extend past the right edge of the hero. */
+          overflow-wrap: anywhere;
+        }
+        .sn-hero-controls {
+          flex-wrap: wrap;
+          gap: 0.5rem 0.75rem;
+        }
       }
     </style>
   </head>
