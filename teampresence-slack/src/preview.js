@@ -201,6 +201,313 @@ function buildDemoLifecycle() {
   };
 }
 
+function buildDemoInflowVsResolved() {
+  // 8 completed weeks, oldest first. Mix of "getting ahead" and "falling
+  // behind" weeks so the chart looks real, ending with a modest net-positive
+  // recovery week (resolved > created by a small margin).
+  const trendCreated  = [112, 118, 126, 121, 115, 130, 122, 119];
+  const trendResolved = [ 98, 104, 120, 131, 117, 112, 118, 124];
+  const created = trendCreated[trendCreated.length - 1];
+  const resolved = trendResolved[trendResolved.length - 1];
+  const previousCreated = trendCreated[trendCreated.length - 2];
+  const previousResolved = trendResolved[trendResolved.length - 2];
+  const net = resolved - created;
+  const previousNet = previousResolved - previousCreated;
+  return {
+    weekLabel: "2026-W15",
+    weekRange: "7 Apr – 13 Apr",
+    created,
+    resolved,
+    net,
+    previousCreated,
+    previousResolved,
+    previousNet,
+    netDeltaAbs: net - previousNet,
+    trendCreated,
+    trendResolved,
+    trendLabels: [
+      "2026-W08",
+      "2026-W09",
+      "2026-W10",
+      "2026-W11",
+      "2026-W12",
+      "2026-W13",
+      "2026-W14",
+      "2026-W15",
+    ],
+    generatedAt: Date.now(),
+    timezone: TEAM_TIMEZONE,
+    jql: "project = EMAIL AND type in (Task, Bug, Story)",
+    preview: true,
+  };
+}
+
+function buildDemoSlaAgingRisk() {
+  return {
+    total: 87,
+    atRisk: 16,
+    buckets: { breaching: 3, imminent: 5, warning: 8, ok: 71 },
+    byPriority: [
+      { priority: "Critical", count: 4, atRisk: 3 },
+      { priority: "High", count: 18, atRisk: 7 },
+      { priority: "Medium", count: 41, atRisk: 5 },
+      { priority: "Low", count: 24, atRisk: 1 },
+    ],
+    thresholds: { Critical: 1, High: 3, Medium: 7, Low: 14 },
+    topRisks: [
+      {
+        key: "EMOPS-289",
+        summary: "Yahoo postmaster: unblock consumer sending domain",
+        assignee: "Petr Studený",
+        priority: "Critical",
+        status: "In Progress",
+        ageDays: 4.2,
+        thresholdDays: 1,
+        overdueDays: 3.2,
+        bucket: "breaching",
+      },
+      {
+        key: "EMOPS-272",
+        summary: "Suppression file ingest failing for EU segment",
+        assignee: "Iryna Botulinska",
+        priority: "Critical",
+        status: "To Do",
+        ageDays: 2.1,
+        thresholdDays: 1,
+        overdueDays: 1.1,
+        bucket: "breaching",
+      },
+      {
+        key: "EMOPS-268",
+        summary: "Renewal journey — segmentation join error on cohort builder",
+        assignee: "Victor Shapochkin",
+        priority: "High",
+        status: "In Progress",
+        ageDays: 3.4,
+        thresholdDays: 3,
+        overdueDays: 0.4,
+        bucket: "breaching",
+      },
+      {
+        key: "EMOPS-275",
+        summary: "Legal sign-off blocking April trust digest send",
+        assignee: "Jan Bartončík",
+        priority: "High",
+        status: "In Review",
+        ageDays: 2.3,
+        thresholdDays: 3,
+        overdueDays: -0.7,
+        bucket: "imminent",
+      },
+      {
+        key: "EMOPS-281",
+        summary: "Braze template variant — Outlook dark-mode regression",
+        assignee: "Daniel Žabenský",
+        priority: "High",
+        status: "In Progress",
+        ageDays: 1.6,
+        thresholdDays: 3,
+        overdueDays: -1.4,
+        bucket: "warning",
+      },
+    ],
+    generatedAt: Date.now(),
+    timezone: TEAM_TIMEZONE,
+    jql: "project = EMAIL AND statusCategory != Done",
+    preview: true,
+  };
+}
+
+function buildDemoTopPriorityTickets() {
+  const hoursAgo = (n) => new Date(now - n * 3600 * 1000).toISOString();
+  const daysAgo = (n) => new Date(now - n * 86400 * 1000).toISOString();
+  const r1 = (x) => Math.round(x * 10) / 10;
+
+  // Scoped to the "To Do" column of board 101032 — the team's
+  // next-up queue rather than the entire open backlog.
+  const rawTickets = [
+    {
+      key: "EMOPS-311",
+      summary: "Q2 launch — hero banner copy variants (EN-US / EN-GB)",
+      assignee: "Iryna Botulinska",
+      assigneeKey: "iryna.botulinska",
+      priority: "Critical",
+      status: "To Do",
+      statusCategory: "new",
+      issueType: "Task",
+      createdAt: daysAgo(1.3),
+      updatedAt: hoursAgo(2),
+    },
+    {
+      key: "EMOPS-289",
+      summary: "Yahoo postmaster: unblock consumer sending domain",
+      assignee: "Iryna Botulinska",
+      assigneeKey: "iryna.botulinska",
+      priority: "Critical",
+      status: "To Do",
+      statusCategory: "new",
+      issueType: "Incident",
+      createdAt: daysAgo(4.2),
+      updatedAt: hoursAgo(5),
+    },
+    {
+      key: "EMOPS-307",
+      summary: "Legal review for renewal reminder footer",
+      assignee: "Jan Bartončík",
+      assigneeKey: "jan.bartoncik",
+      priority: "High",
+      status: "To Do",
+      statusCategory: "new",
+      issueType: "Story",
+      createdAt: daysAgo(2.1),
+      updatedAt: hoursAgo(7),
+    },
+    {
+      key: "EMOPS-304",
+      summary: "Darkmode-safe logo lockup for Outlook rendering",
+      assignee: "Victor Shapochkin",
+      assigneeKey: "victor.shapochkin",
+      priority: "High",
+      status: "To Do",
+      statusCategory: "new",
+      issueType: "Task",
+      createdAt: daysAgo(1.9),
+      updatedAt: daysAgo(1),
+    },
+    {
+      key: "EMOPS-309",
+      summary: "Segment win-back cohort for inactive 90+ day subs",
+      assignee: "Kristýna Šimková",
+      assigneeKey: "kristyna.simkova",
+      priority: "High",
+      status: "To Do",
+      statusCategory: "new",
+      issueType: "Task",
+      createdAt: daysAgo(2.4),
+      updatedAt: hoursAgo(5),
+    },
+    {
+      key: "EMOPS-302",
+      summary: "Suppression list cleanup — bounce threshold rules",
+      assignee: "Kristýna Šimková",
+      assigneeKey: "kristyna.simkova",
+      priority: "High",
+      status: "To Do",
+      statusCategory: "new",
+      issueType: "Task",
+      createdAt: daysAgo(3.6),
+      updatedAt: daysAgo(2),
+    },
+  ];
+
+  const tickets = rawTickets.map((t) => ({
+    ...t,
+    ageDays: t.createdAt
+      ? r1((now - Date.parse(t.createdAt)) / 86400000)
+      : null,
+  }));
+
+  return {
+    total: 9,
+    priorities: ["Highest", "Critical", "High"],
+    status: "To Do",
+    topN: 6,
+    byPriority: [
+      { priority: "Critical", count: 2 },
+      { priority: "High", count: 7 },
+    ],
+    tickets,
+    truncated: 3,
+    generatedAt: Date.now(),
+    timezone: TEAM_TIMEZONE,
+    jql:
+      "(project = EMAIL AND filter = 'Norton Email Kanban') AND " +
+      "priority in (\"Highest\", \"Critical\", \"High\") AND status = \"To Do\"",
+    preview: true,
+  };
+}
+
+function buildDemoSprintBacklog() {
+  return {
+    total: 28,
+    status: "To Do",
+    byPriority: [
+      { priority: "Critical", count: 2 },
+      { priority: "High", count: 7 },
+      { priority: "Medium", count: 13 },
+      { priority: "Low", count: 6 },
+    ],
+    byAssignee: [
+      { name: "Iryna Botulinska", count: 6 },
+      { name: "Victor Shapochkin", count: 5 },
+      { name: "Kristýna Šimková", count: 4 },
+      { name: "Daniel Žabenský", count: 3 },
+    ],
+    unassigned: 4,
+    medianAgeDays: 2.4,
+    oldestAgeDays: 11.2,
+    boardUrl:
+      "https://jira.corp.nortonlifelock.com/secure/RapidBoard.jspa?rapidView=101032&view=planning.nodetail&issueLimit=100",
+    generatedAt: Date.now(),
+    timezone: TEAM_TIMEZONE,
+    jql:
+      "(project = EMAIL AND filter = 'Norton Email Kanban') AND " +
+      "status = \"To Do\"",
+    preview: true,
+  };
+}
+
+function buildDemoReopenRate() {
+  const hoursAgo = (n) => new Date(now - n * 3600 * 1000).toISOString();
+  const daysAgo = (n) => new Date(now - n * 86400 * 1000).toISOString();
+
+  const resolved = 124;
+  const reopened = 9; // ~7.3% rate — realistic for a healthy team
+  return {
+    windowDays: 30,
+    resolvedInWindow: resolved,
+    reopenedInWindow: reopened,
+    cleanClosed: resolved - reopened,
+    rate: 7.3,
+    doneStatuses: ["Done", "Closed", "Resolved"],
+    topReopened: [
+      {
+        key: "EMOPS-268",
+        summary: "Renewal journey — segmentation join error on cohort builder",
+        assignee: "Victor Shapochkin",
+        priority: "High",
+        status: "In Progress",
+        statusCategory: "indeterminate",
+        updatedAt: hoursAgo(6),
+      },
+      {
+        key: "EMOPS-256",
+        summary: "Braze template: Outlook dark-mode regression on CTA",
+        assignee: "Daniel Žabenský",
+        priority: "High",
+        status: "To Do",
+        statusCategory: "new",
+        updatedAt: hoursAgo(14),
+      },
+      {
+        key: "EMOPS-241",
+        summary: "Preference centre opt-down wiring — missed tag",
+        assignee: "Jan Bartončík",
+        priority: "Medium",
+        status: "In Progress",
+        statusCategory: "indeterminate",
+        updatedAt: daysAgo(1.3),
+      },
+    ],
+    generatedAt: Date.now(),
+    timezone: TEAM_TIMEZONE,
+    jql:
+      "(project = EMAIL) AND status changed TO " +
+      "(\"Done\", \"Closed\", \"Resolved\") AFTER \"-30d\"",
+    preview: true,
+  };
+}
+
 function buildDemoKanban() {
   const hoursAgo = (n) => new Date(now - n * 3600 * 1000).toISOString();
   const daysAgo = (n) => new Date(now - n * 86400 * 1000).toISOString();
@@ -557,6 +864,31 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (pathname === "/api/widgets/inflow-vs-resolved") {
+    sendJson(res, 200, buildDemoInflowVsResolved());
+    return;
+  }
+
+  if (pathname === "/api/widgets/sla-aging-risk") {
+    sendJson(res, 200, buildDemoSlaAgingRisk());
+    return;
+  }
+
+  if (pathname === "/api/widgets/top-priority-tickets") {
+    sendJson(res, 200, buildDemoTopPriorityTickets());
+    return;
+  }
+
+  if (pathname === "/api/widgets/sprint-backlog") {
+    sendJson(res, 200, buildDemoSprintBacklog());
+    return;
+  }
+
+  if (pathname === "/api/widgets/reopen-rate") {
+    sendJson(res, 200, buildDemoReopenRate());
+    return;
+  }
+
   if (pathname === "/api/widgets") {
     sendJson(res, 200, {
       widgets: [
@@ -580,6 +912,41 @@ const server = http.createServer((req, res) => {
           size: "1x1",
           dataEndpoint: "/api/widgets/ticket-lifecycle",
           refreshSeconds: 1800,
+        },
+        {
+          id: "inflow-vs-resolved",
+          title: "Norton Email — Inflow vs Resolved",
+          size: "1x1",
+          dataEndpoint: "/api/widgets/inflow-vs-resolved",
+          refreshSeconds: 900,
+        },
+        {
+          id: "sla-aging-risk",
+          title: "Norton Email — SLA / Aging Risk",
+          size: "1x1",
+          dataEndpoint: "/api/widgets/sla-aging-risk",
+          refreshSeconds: 300,
+        },
+        {
+          id: "sprint-backlog",
+          title: "Norton Email — CSM Sprint Backlog",
+          size: "1x1",
+          dataEndpoint: "/api/widgets/sprint-backlog",
+          refreshSeconds: 300,
+        },
+        {
+          id: "reopen-rate",
+          title: "Norton Email — Reopen / Escalation Rate",
+          size: "1x1",
+          dataEndpoint: "/api/widgets/reopen-rate",
+          refreshSeconds: 900,
+        },
+        {
+          id: "top-priority-tickets",
+          title: "Norton Email — Top Priority Tickets",
+          size: "3x1",
+          dataEndpoint: "/api/widgets/top-priority-tickets",
+          refreshSeconds: 300,
         },
         {
           id: "kanban-board",

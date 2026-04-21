@@ -15,6 +15,12 @@ import {
   buildBacklogOverview,
   buildTicketLifecycle,
   buildKanbanBoard,
+  buildInflowVsResolved,
+  buildSlaAgingRisk,
+  parseSlaThresholds,
+  buildTopPriorityTickets,
+  buildSprintBacklog,
+  buildReopenRate,
 } from "./reports.js";
 import { jiraFromEnv } from "./jira.js";
 import { TEAM, findBySlackId, initialsFor } from "./team.js";
@@ -66,6 +72,51 @@ export function registerWebRoutes({
   const kanbanJql = (process.env.JIRA_KANBAN_JQL ?? "").trim();
   const kanbanColumns = parseCsv(process.env.JIRA_KANBAN_COLUMNS);
   const kanbanBoardUrl = (process.env.JIRA_KANBAN_URL ?? "").trim() || null;
+  // Inflow vs Resolved: defaults to the throughput JQL's "base" (without
+  // the date filters). Fallback to the throughput JQL itself — the
+  // builder wraps with created/resolved range filters so either works.
+  const inflowJql =
+    (process.env.JIRA_INFLOW_JQL ?? "").trim() || throughputJql;
+  // SLA / aging risk: defaults to the backlog JQL (all open tickets).
+  const slaJql = (process.env.JIRA_SLA_JQL ?? "").trim() || backlogJql;
+  const slaThresholds = parseSlaThresholds(process.env.JIRA_SLA_THRESHOLDS);
+  // Top priority tickets: scope to the single "To Do" column of the
+  // team's RapidBoard by default (minimal Jira load). Falls back to
+  // the backlog JQL if the Kanban JQL isn't set.
+  const topPriorityJql =
+    (process.env.JIRA_TOP_PRIORITY_JQL ?? "").trim() ||
+    kanbanJql ||
+    backlogJql;
+  const topPriorityPriorities =
+    parseCsv(process.env.JIRA_TOP_PRIORITIES).length > 0
+      ? parseCsv(process.env.JIRA_TOP_PRIORITIES)
+      : ["Highest", "Critical", "High"];
+  const topPriorityStatus = (
+    process.env.JIRA_TOP_PRIORITY_STATUS ?? "To Do"
+  ).trim();
+  const topPriorityLimit =
+    Number(process.env.JIRA_TOP_PRIORITY_LIMIT ?? 6) || 6;
+
+  // Sprint backlog: defaults to the Kanban JQL's To Do column.
+  const sprintBacklogJql =
+    (process.env.JIRA_SPRINT_BACKLOG_JQL ?? "").trim() ||
+    kanbanJql ||
+    backlogJql;
+  const sprintBacklogStatus = (
+    process.env.JIRA_SPRINT_BACKLOG_STATUS ?? "To Do"
+  ).trim();
+
+  // Reopen / escalation rate: scope is the whole project (uses
+  // throughput JQL by default, falls back to backlog). Done statuses
+  // list matters for status-change queries.
+  const reopenJql =
+    (process.env.JIRA_REOPEN_JQL ?? "").trim() || throughputJql || backlogJql;
+  const reopenDoneStatuses =
+    parseCsv(process.env.JIRA_DONE_STATUSES).length > 0
+      ? parseCsv(process.env.JIRA_DONE_STATUSES)
+      : ["Done", "Closed", "Resolved"];
+  const reopenWindowDays =
+    Number(process.env.JIRA_REOPEN_WINDOW_DAYS ?? 30) || 30;
 
   const VERY_SHORT_TTL_MS = 90 * 1000;
   const SHORT_TTL_MS = 5 * 60 * 1000;
@@ -132,6 +183,64 @@ export function registerWebRoutes({
         columns: kanbanColumns.length > 0 ? kanbanColumns : null,
         timezone,
         boardUrl: kanbanBoardUrl,
+      }),
+  });
+
+  const getInflow = makeCachedBuilder({
+    ttlMs: MEDIUM_TTL_MS,
+    reasonNoJql: "JIRA_INFLOW_JQL / JIRA_THROUGHPUT_JQL not set",
+    getJql: () => inflowJql,
+    buildFn: ({ jira, jql }) => buildInflowVsResolved({ jira, jql, timezone }),
+  });
+
+  const getSlaRisk = makeCachedBuilder({
+    ttlMs: SHORT_TTL_MS,
+    reasonNoJql: "JIRA_SLA_JQL / JIRA_BACKLOG_JQL not set",
+    getJql: () => slaJql,
+    buildFn: ({ jira, jql }) =>
+      buildSlaAgingRisk({ jira, jql, thresholds: slaThresholds, timezone }),
+  });
+
+  const getTopPriority = makeCachedBuilder({
+    ttlMs: SHORT_TTL_MS,
+    reasonNoJql: "JIRA_TOP_PRIORITY_JQL / JIRA_KANBAN_JQL not set",
+    getJql: () => topPriorityJql,
+    buildFn: ({ jira, jql }) =>
+      buildTopPriorityTickets({
+        jira,
+        jql,
+        priorities: topPriorityPriorities,
+        status: topPriorityStatus,
+        topN: topPriorityLimit,
+        timezone,
+      }),
+  });
+
+  const getSprintBacklog = makeCachedBuilder({
+    ttlMs: SHORT_TTL_MS,
+    reasonNoJql: "JIRA_SPRINT_BACKLOG_JQL / JIRA_KANBAN_JQL not set",
+    getJql: () => sprintBacklogJql,
+    buildFn: ({ jira, jql }) =>
+      buildSprintBacklog({
+        jira,
+        jql,
+        status: sprintBacklogStatus,
+        boardUrl: kanbanBoardUrl,
+        timezone,
+      }),
+  });
+
+  const getReopenRate = makeCachedBuilder({
+    ttlMs: MEDIUM_TTL_MS,
+    reasonNoJql: "JIRA_REOPEN_JQL / JIRA_THROUGHPUT_JQL not set",
+    getJql: () => reopenJql,
+    buildFn: ({ jira, jql }) =>
+      buildReopenRate({
+        jira,
+        jql,
+        doneStatuses: reopenDoneStatuses,
+        windowDays: reopenWindowDays,
+        timezone,
       }),
   });
 
@@ -426,6 +535,11 @@ export function registerWebRoutes({
   registerWidgetRoute("weekly-throughput", getThroughput);
   registerWidgetRoute("backlog-overview", getBacklog);
   registerWidgetRoute("ticket-lifecycle", getLifecycle);
+  registerWidgetRoute("inflow-vs-resolved", getInflow);
+  registerWidgetRoute("sla-aging-risk", getSlaRisk);
+  registerWidgetRoute("sprint-backlog", getSprintBacklog);
+  registerWidgetRoute("reopen-rate", getReopenRate);
+  registerWidgetRoute("top-priority-tickets", getTopPriority);
   registerWidgetRoute("kanban-board", getKanban);
 
   console.log(

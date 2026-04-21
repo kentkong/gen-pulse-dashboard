@@ -412,6 +412,513 @@ export async function buildKanbanBoard({
   };
 }
 
+/**
+ * Inflow vs Resolved — weekly "are we getting ahead or falling behind?"
+ *
+ * Pulls two counts per week:
+ *   created:  tickets that entered the queue
+ *   resolved: tickets that left the queue (reached Done / resolved)
+ *
+ * Reports:
+ *   - This week's created / resolved / net (resolved - created)
+ *   - Previous week's values + delta
+ *   - Last N weeks' trend for each series (for dual-line chart)
+ *
+ * Expects `jql` to describe the population of tickets this team cares
+ * about (e.g. `project = EMAIL AND type in (Task, Bug, Story)`). The
+ * builder wraps it with created/resolved range filters.
+ */
+export async function buildInflowVsResolved({
+  jira,
+  jql,
+  timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
+  now = new Date(),
+  weeksOfTrend = WEEKS_OF_TREND,
+}) {
+  if (!jira) throw new Error("buildInflowVsResolved: jira client required");
+  if (!jql) throw new Error("buildInflowVsResolved: jql required");
+
+  const thisMonday = mondayOfWeek(now, timezone);
+  const lastMonday = addDays(thisMonday, -7);
+  const prevMonday = addDays(lastMonday, -7);
+
+  const createdWithin = (from, to) =>
+    `(${jql}) AND created >= "${from}" AND created < "${to}"`;
+  const resolvedWithin = (from, to) =>
+    `(${jql}) AND resolved >= "${from}" AND resolved < "${to}"`;
+
+  // Build week boundaries (N most recent completed weeks, oldest first,
+  // ending with the just-finished "last week").
+  const weeks = [];
+  for (let i = weeksOfTrend - 1; i >= 0; i--) {
+    const from = addDays(lastMonday, -7 * i);
+    const to = addDays(from, 7);
+    weeks.push({ from, to });
+  }
+  const trendLabels = weeks.map(({ from }) =>
+    isoWeekLabel(new Date(`${from.split(" ")[0]}T00:00:00Z`))
+  );
+
+  const createdTrendP = weeks.map(({ from, to }) =>
+    jira.searchCount(createdWithin(from, to))
+  );
+  const resolvedTrendP = weeks.map(({ from, to }) =>
+    jira.searchCount(resolvedWithin(from, to))
+  );
+  const [trendCreated, trendResolved] = await Promise.all([
+    Promise.all(createdTrendP),
+    Promise.all(resolvedTrendP),
+  ]);
+
+  const created = trendCreated[trendCreated.length - 1] ?? 0;
+  const resolved = trendResolved[trendResolved.length - 1] ?? 0;
+  const previousCreated = trendCreated[trendCreated.length - 2] ?? 0;
+  const previousResolved = trendResolved[trendResolved.length - 2] ?? 0;
+
+  const net = resolved - created;
+  const previousNet = previousResolved - previousCreated;
+  const netDeltaAbs = net - previousNet;
+
+  return {
+    weekLabel: isoWeekLabel(
+      new Date(`${lastMonday.split(" ")[0]}T00:00:00Z`)
+    ),
+    weekRange: prettyWeekRange(lastMonday, addDays(lastMonday, 6)),
+    created,
+    resolved,
+    net,
+    previousCreated,
+    previousResolved,
+    previousNet,
+    netDeltaAbs,
+    trendCreated,
+    trendResolved,
+    trendLabels,
+    generatedAt: Date.now(),
+    timezone,
+    jql,
+  };
+}
+
+/**
+ * Default priority-based SLA thresholds (in days) used when the team
+ * hasn't configured their own. Tickets that exceed their threshold are
+ * considered "breaching"; within 24h / 48h of breach are "imminent" /
+ * "warning". Everything else is "ok".
+ *
+ * These are intentionally conservative — tune via JIRA_SLA_THRESHOLDS
+ * (e.g. `Critical:1,High:3,Medium:7,Low:14`).
+ */
+export const DEFAULT_SLA_THRESHOLDS_DAYS = {
+  Highest: 1,
+  Critical: 1,
+  High: 3,
+  Medium: 7,
+  Low: 14,
+  Lowest: 21,
+  Unprioritised: 14,
+};
+
+export function parseSlaThresholds(raw) {
+  if (!raw) return { ...DEFAULT_SLA_THRESHOLDS_DAYS };
+  const out = { ...DEFAULT_SLA_THRESHOLDS_DAYS };
+  for (const part of String(raw).split(",")) {
+    const [k, v] = part.split(":").map((s) => s?.trim());
+    const n = Number(v);
+    if (k && Number.isFinite(n) && n > 0) out[k] = n;
+  }
+  return out;
+}
+
+/**
+ * SLA / Aging Risk — "which open tickets are in danger right now?"
+ *
+ * For every open ticket in `jql`, compute age-since-created, compare to
+ * the priority-based SLA threshold, and bucket:
+ *   - breaching:  age >= threshold
+ *   - imminent:   threshold - 1d <= age < threshold     (≤24h to breach)
+ *   - warning:    threshold - 2d <= age < threshold-1d  (≤48h to breach)
+ *   - ok:         everything else
+ *
+ * Returns bucket totals, the top N at-risk tickets (by priority then age),
+ * and the thresholds used so the UI can surface them.
+ */
+export async function buildSlaAgingRisk({
+  jira,
+  jql,
+  thresholds = DEFAULT_SLA_THRESHOLDS_DAYS,
+  topN = 5,
+  hardCap = 500,
+  timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
+}) {
+  if (!jira) throw new Error("buildSlaAgingRisk: jira client required");
+  if (!jql) throw new Error("buildSlaAgingRisk: jql required");
+
+  const issues = await jira.searchAll(jql, {
+    fields: ["summary", "status", "assignee", "priority", "created", "updated"],
+    pageSize: 100,
+    hardCap,
+  });
+
+  const now = Date.now();
+  const buckets = { breaching: 0, imminent: 0, warning: 0, ok: 0 };
+  const byPriorityCounts = new Map();
+  const risks = [];
+
+  for (const iss of issues) {
+    const created = iss.fields?.created;
+    if (!created) continue;
+    const ageDays = (now - Date.parse(created)) / 86_400_000;
+    if (!Number.isFinite(ageDays) || ageDays < 0) continue;
+
+    const priority = iss.fields?.priority?.name ?? "Unprioritised";
+    const threshold =
+      thresholds[priority] ??
+      DEFAULT_SLA_THRESHOLDS_DAYS[priority] ??
+      DEFAULT_SLA_THRESHOLDS_DAYS.Unprioritised;
+
+    let bucket;
+    if (ageDays >= threshold) bucket = "breaching";
+    else if (ageDays >= threshold - 1) bucket = "imminent";
+    else if (ageDays >= threshold - 2) bucket = "warning";
+    else bucket = "ok";
+
+    buckets[bucket] += 1;
+
+    const pc = byPriorityCounts.get(priority) ?? { priority, count: 0, atRisk: 0 };
+    pc.count += 1;
+    if (bucket !== "ok") pc.atRisk += 1;
+    byPriorityCounts.set(priority, pc);
+
+    if (bucket !== "ok") {
+      risks.push({
+        key: iss.key,
+        summary: iss.fields?.summary ?? "(no summary)",
+        assignee: iss.fields?.assignee?.displayName ?? null,
+        priority,
+        status: iss.fields?.status?.name ?? "Unknown",
+        ageDays: round1(ageDays),
+        thresholdDays: threshold,
+        overdueDays: round1(ageDays - threshold),
+        bucket,
+      });
+    }
+  }
+
+  // Rank risks: breaching first, then imminent, then warning; within each,
+  // highest priority first, then most overdue first.
+  const bucketRank = { breaching: 0, imminent: 1, warning: 2, ok: 3 };
+  const prioRank = (p) => {
+    const i = PRIORITY_ORDER.indexOf(p);
+    return i === -1 ? 999 : i;
+  };
+  risks.sort((a, b) => {
+    if (bucketRank[a.bucket] !== bucketRank[b.bucket]) {
+      return bucketRank[a.bucket] - bucketRank[b.bucket];
+    }
+    if (prioRank(a.priority) !== prioRank(b.priority)) {
+      return prioRank(a.priority) - prioRank(b.priority);
+    }
+    return b.overdueDays - a.overdueDays;
+  });
+
+  const byPriority = sortPriorities(
+    Array.from(byPriorityCounts.values()).filter((x) => x.count > 0)
+  );
+
+  const total = issues.length;
+  const atRisk = buckets.breaching + buckets.imminent + buckets.warning;
+
+  return {
+    total,
+    atRisk,
+    buckets,
+    byPriority,
+    thresholds,
+    topRisks: risks.slice(0, topN),
+    generatedAt: Date.now(),
+    timezone,
+    jql,
+  };
+}
+
+/**
+ * Top Priority Tickets — the small set of open tickets that leadership
+ * most needs eyes on right now. Unlike SLA / Aging Risk (time-based),
+ * this is strictly importance-based: highest priority first, most
+ * recently updated within priority.
+ *
+ * Expects `jql` to describe "all open tickets" — the builder adds the
+ * priority filter on top. `priorities` is the allow-list (defaults to
+ * Highest / Critical / High so we only surface the stuff that matters).
+ */
+export async function buildTopPriorityTickets({
+  jira,
+  jql,
+  priorities = ["Highest", "Critical", "High"],
+  status = "To Do",
+  topN = 6,
+  hardCap = 60,
+  timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
+}) {
+  if (!jira) throw new Error("buildTopPriorityTickets: jira client required");
+  if (!jql) throw new Error("buildTopPriorityTickets: jql required");
+
+  const priList = priorities.map((p) => `"${p}"`).join(", ");
+  // Scope defaults to the single "To Do" column of the team's RapidBoard
+  // so this widget stays cheap and fast — leadership just wants the
+  // next ~6 tickets queued up, not the entire backlog.
+  const statusClause = status ? ` AND status = "${status}"` : "";
+  const scopedJql =
+    `(${jql}) AND priority in (${priList})${statusClause}` +
+    ` ORDER BY priority DESC, updated DESC`;
+
+  // Cap the server-side fetch tightly — we only ever surface `topN`,
+  // so there's no value in pulling the whole queue.
+  const capped = Math.max(topN * 2, 20);
+  const issues = await jira.searchAll(scopedJql, {
+    fields: [
+      "summary",
+      "status",
+      "assignee",
+      "priority",
+      "created",
+      "updated",
+      "issuetype",
+    ],
+    pageSize: capped,
+    hardCap: Math.min(hardCap, capped),
+  });
+
+  const prioRank = (p) => {
+    const i = PRIORITY_ORDER.indexOf(p);
+    return i === -1 ? 999 : i;
+  };
+
+  const tickets = issues.map((iss) => {
+    const created = iss.fields?.created ?? null;
+    const updated = iss.fields?.updated ?? null;
+    const ageDays = created
+      ? Math.max(0, (Date.now() - Date.parse(created)) / 86_400_000)
+      : null;
+    return {
+      key: iss.key,
+      summary: iss.fields?.summary ?? "(no summary)",
+      assignee: iss.fields?.assignee?.displayName ?? null,
+      assigneeKey:
+        iss.fields?.assignee?.key ?? iss.fields?.assignee?.name ?? null,
+      priority: iss.fields?.priority?.name ?? "Unprioritised",
+      status: iss.fields?.status?.name ?? "Unknown",
+      statusCategory:
+        iss.fields?.status?.statusCategory?.key ??
+        iss.fields?.status?.statusCategory?.name?.toLowerCase() ??
+        null,
+      issueType: iss.fields?.issuetype?.name ?? null,
+      createdAt: created,
+      updatedAt: updated,
+      ageDays: ageDays === null ? null : round1(ageDays),
+    };
+  });
+
+  tickets.sort((a, b) => {
+    if (prioRank(a.priority) !== prioRank(b.priority)) {
+      return prioRank(a.priority) - prioRank(b.priority);
+    }
+    const au = a.updatedAt ? Date.parse(a.updatedAt) : 0;
+    const bu = b.updatedAt ? Date.parse(b.updatedAt) : 0;
+    return bu - au;
+  });
+
+  const byPriorityMap = new Map();
+  for (const t of tickets) {
+    byPriorityMap.set(t.priority, (byPriorityMap.get(t.priority) ?? 0) + 1);
+  }
+  const byPriority = sortPriorities(
+    Array.from(byPriorityMap.entries()).map(([priority, count]) => ({
+      priority,
+      count,
+    }))
+  );
+
+  return {
+    total: tickets.length,
+    priorities,
+    status,
+    topN,
+    byPriority,
+    tickets: tickets.slice(0, topN),
+    truncated: Math.max(0, tickets.length - topN),
+    generatedAt: Date.now(),
+    timezone,
+    jql: scopedJql,
+  };
+}
+
+/**
+ * CSM Sprint Backlog — snapshot of the team's planning-view backlog
+ * (the "To Do" column of the RapidBoard). Designed to answer "how much
+ * work is queued up and what's the shape of it?" at a glance.
+ *
+ * Aggregates only — no per-ticket rows, so it stays cheap even on
+ * a large board.
+ */
+export async function buildSprintBacklog({
+  jira,
+  jql,
+  status = "To Do",
+  topAssignees = 4,
+  hardCap = 200,
+  boardUrl = null,
+  timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
+}) {
+  if (!jira) throw new Error("buildSprintBacklog: jira client required");
+  if (!jql) throw new Error("buildSprintBacklog: jql required");
+
+  const scopedJql = status ? `(${jql}) AND status = "${status}"` : `(${jql})`;
+  const issues = await jira.searchAll(scopedJql, {
+    fields: ["summary", "priority", "assignee", "created", "updated"],
+    pageSize: 100,
+    hardCap,
+  });
+
+  const total = issues.length;
+
+  const byPriorityMap = new Map();
+  const byAssigneeMap = new Map();
+  let unassigned = 0;
+  const now = Date.now();
+  const ageDays = [];
+
+  for (const iss of issues) {
+    const p = iss.fields?.priority?.name ?? "Unprioritised";
+    byPriorityMap.set(p, (byPriorityMap.get(p) ?? 0) + 1);
+
+    const aName = iss.fields?.assignee?.displayName ?? null;
+    if (aName) {
+      byAssigneeMap.set(aName, (byAssigneeMap.get(aName) ?? 0) + 1);
+    } else {
+      unassigned += 1;
+    }
+
+    const created = iss.fields?.created;
+    if (created) {
+      const d = (now - Date.parse(created)) / 86_400_000;
+      if (Number.isFinite(d) && d >= 0) ageDays.push(d);
+    }
+  }
+
+  const byPriority = sortPriorities(
+    Array.from(byPriorityMap.entries()).map(([priority, count]) => ({
+      priority,
+      count,
+    }))
+  );
+
+  const byAssignee = Array.from(byAssigneeMap.entries())
+    .map(([name, count]) => ({ name, count }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, topAssignees);
+
+  return {
+    total,
+    status,
+    byPriority,
+    byAssignee,
+    unassigned,
+    medianAgeDays: round1(median(ageDays)),
+    oldestAgeDays: ageDays.length > 0 ? round1(Math.max(...ageDays)) : 0,
+    boardUrl,
+    generatedAt: Date.now(),
+    timezone,
+    jql: scopedJql,
+  };
+}
+
+/**
+ * Reopen / Escalation Rate — quality signal measuring what share of
+ * tickets that reached Done in a window were kicked back out.
+ *
+ * Uses Jira's `status changed` operator so the metric holds even when
+ * a ticket has been reopened and re-closed multiple times. Both
+ * queries are unique-issue counts — an issue that bounced Done → Open
+ * → Done → Open during the window still only counts once in each
+ * bucket, which is what leadership intuitively wants.
+ *
+ * Rate = reopenedInWindow / resolvedInWindow  (capped at 0..1)
+ */
+export async function buildReopenRate({
+  jira,
+  jql,
+  doneStatuses = ["Done", "Closed", "Resolved"],
+  windowDays = 30,
+  topN = 3,
+  timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
+}) {
+  if (!jira) throw new Error("buildReopenRate: jira client required");
+  if (!jql) throw new Error("buildReopenRate: jql required");
+
+  const doneList = doneStatuses.map((s) => `"${s}"`).join(", ");
+  const fromRel = `-${Math.max(1, Math.round(windowDays))}d`;
+
+  // Total issues that reached "done" in the window.
+  const resolvedJql =
+    `(${jql}) AND status changed TO (${doneList}) AFTER "${fromRel}"`;
+  // Of those (or overlapping in the window), issues that also left the
+  // done state — i.e. were reopened or re-escalated.
+  const reopenedJql =
+    `(${jql}) AND status changed TO (${doneList}) AFTER "${fromRel}"` +
+    ` AND status changed FROM (${doneList}) AFTER "${fromRel}"`;
+  // Detail list: tickets currently NOT done that were done in the
+  // window — these are the clearest "came back" examples for the UI.
+  const topReopenedJql =
+    `(${jql}) AND status changed FROM (${doneList}) AFTER "${fromRel}"` +
+    ` AND statusCategory != Done` +
+    ` ORDER BY updated DESC`;
+
+  const [resolvedInWindow, reopenedInWindow, topIssues] = await Promise.all([
+    jira.searchCount(resolvedJql),
+    jira.searchCount(reopenedJql),
+    jira
+      .search(topReopenedJql, {
+        fields: ["summary", "status", "assignee", "priority", "updated"],
+        maxResults: topN,
+      })
+      .then((r) => r.issues ?? []),
+  ]);
+
+  const safeResolved = Math.max(0, resolvedInWindow);
+  const safeReopened = Math.max(0, Math.min(reopenedInWindow, safeResolved));
+  const cleanClosed = Math.max(0, safeResolved - safeReopened);
+  const rate =
+    safeResolved > 0 ? (safeReopened / safeResolved) * 100 : 0;
+
+  const topReopened = topIssues.map((iss) => ({
+    key: iss.key,
+    summary: iss.fields?.summary ?? "(no summary)",
+    assignee: iss.fields?.assignee?.displayName ?? null,
+    priority: iss.fields?.priority?.name ?? "Unprioritised",
+    status: iss.fields?.status?.name ?? "Unknown",
+    statusCategory:
+      iss.fields?.status?.statusCategory?.key ??
+      iss.fields?.status?.statusCategory?.name?.toLowerCase() ??
+      null,
+    updatedAt: iss.fields?.updated ?? null,
+  }));
+
+  return {
+    windowDays,
+    resolvedInWindow: safeResolved,
+    reopenedInWindow: safeReopened,
+    cleanClosed,
+    rate: round1(rate),
+    doneStatuses,
+    topReopened,
+    generatedAt: Date.now(),
+    timezone,
+    jql: resolvedJql,
+  };
+}
+
 /** Slack-friendly mrkdwn + a quickchart.io sparkline image for the Monday post. */
 export function formatThroughputForSlack(payload, { dashboardUrl } = {}) {
   const arrow =
