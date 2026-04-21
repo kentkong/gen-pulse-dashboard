@@ -1713,6 +1713,194 @@
           gap: 0.5rem 0.75rem;
         }
       }
+
+      /* ---------------------------------------------------------------
+         Mobile widget layouts — optimised for phones (<= 640px).
+         Goal: every widget feels native, not a shrunken desktop table.
+
+         1. Weekly throughput: KPI number + sparkline stack cleanly.
+         2. Backlog / Lifecycle: already stacks at md, tighten spacing.
+         3. Kanban: scroll-snap carousel with one column per viewport
+            and the next column peeking on the right so swipe is
+            discoverable. Snap is "mandatory" so fingers land clean.
+         4. Tables (Team + Roll calls): transform into stacked cards
+            via CSS. `<thead>` is hidden, `<tr>` becomes a card, each
+            `<td>` shows its data-label in a left gutter. No pinch,
+            no horizontal scroll, no squinting.
+      --------------------------------------------------------------- */
+      @media (max-width: 640px) {
+        /* Weekly throughput — stack the headline number on top of
+           the sparkline, center-align, and let the sparkline span
+           the full card width. */
+        #widget-weekly-throughput .sn-card > div:first-child {
+          flex-direction: column;
+          align-items: stretch;
+          gap: 0.75rem;
+        }
+        #widget-weekly-throughput .max-w-\[420px\] {
+          max-width: 100%;
+        }
+        #widget-weekly-throughput .min-w-\[240px\] {
+          min-width: 0;
+        }
+
+        /* Backlog + Lifecycle — already collapses to single column
+           below md, but tighten card padding for phone. */
+        #widget-backlog-overview,
+        #widget-ticket-lifecycle {
+          padding: 1.1rem 1rem;
+        }
+
+        /* --- Kanban scroll-snap carousel --------------------------- */
+        .sn-kb {
+          /* Let the columns escape the padded feed canvas so the
+             snapped column centers in the viewport and the next one
+             peeks on the right edge. */
+          margin: 0 -1rem;
+          padding: 0.25rem 1rem 0.85rem;
+          grid-auto-columns: 82vw;
+          gap: 0.7rem;
+          scroll-snap-type: x mandatory;
+          scroll-padding-inline: 1rem;
+          /* iOS momentum scroll for that native-feeling swipe. */
+          -webkit-overflow-scrolling: touch;
+          scroll-behavior: smooth;
+        }
+        .sn-kb-col {
+          scroll-snap-align: center;
+          scroll-snap-stop: always;
+          /* On phones, drop the heavy inset highlight so backgrounds
+             don't compete with the widget header above. */
+          box-shadow:
+            inset 0 1px 0 rgba(255, 255, 255, 0.22),
+            0 6px 18px -14px rgba(4, 0, 245, 0.55);
+        }
+        .sn-kb-col-body {
+          /* Slightly shorter max-height so more than one ticket fits
+             without the column scroll eating the whole card. */
+          max-height: 58vh;
+        }
+        /* Hide the native scrollbar on iOS Safari; the snap points
+           already communicate the affordance. */
+        .sn-kb::-webkit-scrollbar {
+          display: none;
+        }
+        .sn-kb {
+          scrollbar-width: none;
+        }
+        /* Kanban header: let the "Open full board" link wrap under
+           the title on narrow screens so it's not cramped. */
+        .sn-kb-head {
+          flex-direction: column;
+          align-items: flex-start;
+          gap: 0.45rem;
+        }
+
+        /* --- Tables → cards -------------------------------------- */
+        .sn-card:has(> .sn-table),
+        .sn-card.overflow-x-auto {
+          overflow-x: visible;
+          padding: 0;
+          background: transparent;
+          border: 0;
+          box-shadow: none;
+        }
+        .sn-table,
+        .sn-table thead,
+        .sn-table tbody,
+        .sn-table tr,
+        .sn-table td {
+          display: block;
+          width: 100%;
+        }
+        .sn-table thead {
+          /* Accessible but visually hidden — screen readers still
+             read the column headers. */
+          position: absolute;
+          width: 1px;
+          height: 1px;
+          overflow: hidden;
+          clip: rect(0 0 0 0);
+          white-space: nowrap;
+        }
+        .sn-table tbody tr {
+          background: var(--card-bg);
+          border: 1px solid var(--card-border);
+          border-radius: 0.85rem;
+          padding: 0.85rem 0.95rem;
+          margin-bottom: 0.65rem;
+          box-shadow: var(--card-shadow, 0 1px 2px rgba(10, 13, 26, 0.04));
+        }
+        .sn-table tbody tr:last-child {
+          margin-bottom: 0;
+        }
+        .sn-table td {
+          border: 0;
+          padding: 0.3rem 0;
+          display: grid;
+          grid-template-columns: 6.5rem 1fr;
+          align-items: center;
+          gap: 0.75rem;
+          font-size: 0.85rem;
+        }
+        /* First cell (Member / Meeting) is the card title — full
+           width, label hidden, bigger type. */
+        .sn-table td:first-child {
+          grid-template-columns: 1fr;
+          padding: 0 0 0.55rem;
+          margin-bottom: 0.45rem;
+          border-bottom: 1px dashed var(--border);
+          font-size: 0.95rem;
+        }
+        .sn-table td:first-child::before {
+          display: none;
+        }
+        .sn-table td::before {
+          content: attr(data-label);
+          font-size: 0.65rem;
+          font-weight: 700;
+          letter-spacing: 0.08em;
+          text-transform: uppercase;
+          color: var(--muted-fg);
+        }
+        /* Pills inside the card should left-align in the value
+           column, not stretch. */
+        .sn-table td .sn-pill {
+          justify-self: start;
+        }
+        /* Roll calls: the narrow count columns (attending/late/absent/total)
+           tend to be 1-3 chars. Cluster them nicely. */
+        #rollcalls tr {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          grid-template-areas:
+            "meeting meeting"
+            "started started"
+            "attending late"
+            "absent total"
+            "id id";
+          gap: 0.3rem 0.75rem;
+        }
+        #rollcalls td {
+          padding: 0.25rem 0;
+          font-size: 0.8rem;
+          grid-template-columns: 5rem 1fr;
+        }
+        #rollcalls td:nth-child(1) { grid-area: meeting; }
+        #rollcalls td:nth-child(2) { grid-area: started; }
+        #rollcalls td:nth-child(3) { grid-area: attending; }
+        #rollcalls td:nth-child(4) { grid-area: late; }
+        #rollcalls td:nth-child(5) { grid-area: absent; }
+        #rollcalls td:nth-child(6) { grid-area: total; }
+        #rollcalls td:nth-child(7) { grid-area: id; }
+
+        /* Team Presence KPI grid already goes 2x2 on mobile via
+           Tailwind — tighten the internal type so the numbers don't
+           overflow the tile. */
+        #kpi-in, #kpi-wfh, #kpi-out, #kpi-none {
+          font-size: 1.75rem;
+        }
+      }
     </style>
   </head>
   <body class="min-h-screen">
@@ -2363,7 +2551,7 @@
             const teamPill = teamPillHtml(m.team);
             return `
               <tr class="${tone}">
-                <td>
+                <td data-label="Member">
                   <div class="sn-member">
                     ${memberAvatarHtml(m)}
                     <div class="min-w-0">
@@ -2375,13 +2563,13 @@
                     </div>
                   </div>
                 </td>
-                <td>${ciHtml}</td>
-                <td>${prHtml}</td>
-                <td class="sn-muted">${esc(
+                <td data-label="Today">${ciHtml}</td>
+                <td data-label="Presence">${prHtml}</td>
+                <td class="sn-muted" data-label="Note">${esc(
                   note || (m.checkin || m.presence ? "—" : "no update yet")
                 )}</td>
-                <td>${esc(until)}</td>
-                <td class="sn-muted">${esc(updated)}</td>
+                <td data-label="Until">${esc(until)}</td>
+                <td class="sn-muted" data-label="Updated">${esc(updated)}</td>
               </tr>`;
           })
           .join("");
@@ -2458,13 +2646,13 @@
           .map(
             (rc) => `
               <tr>
-                <td class="font-semibold">${esc(rc.title)}</td>
-                <td class="sn-muted">${esc(fmtDateTime(rc.createdAt))}</td>
-                <td><span class="sn-pill sn-pill-green">${rc.counts.attending}</span></td>
-                <td><span class="sn-pill sn-pill-yellow">${rc.counts.late}</span></td>
-                <td><span class="sn-pill sn-pill-red">${rc.counts.absent}</span></td>
-                <td>${rc.totalResponses}</td>
-                <td><code class="sn-code">${esc(rc.id)}</code></td>
+                <td class="font-semibold" data-label="Meeting">${esc(rc.title)}</td>
+                <td class="sn-muted" data-label="Started">${esc(fmtDateTime(rc.createdAt))}</td>
+                <td data-label="Attending"><span class="sn-pill sn-pill-green">${rc.counts.attending}</span></td>
+                <td data-label="Late"><span class="sn-pill sn-pill-yellow">${rc.counts.late}</span></td>
+                <td data-label="Absent"><span class="sn-pill sn-pill-red">${rc.counts.absent}</span></td>
+                <td data-label="Total">${rc.totalResponses}</td>
+                <td data-label="ID"><code class="sn-code">${esc(rc.id)}</code></td>
               </tr>`
           )
           .join("");
