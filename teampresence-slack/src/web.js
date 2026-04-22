@@ -25,6 +25,18 @@ import {
 } from "./reports.js";
 import { jiraFromEnv } from "./jira.js";
 import { TEAM, findBySlackId, initialsFor } from "./team.js";
+import {
+  filterForWeeklyThroughput,
+  filterForBacklogOverview,
+  filterForTicketLifecycle,
+  filterForInflowVsResolved,
+  filterForSlaAgingRisk,
+  filterForKanban,
+  filterForTopPriority,
+  filterForSprintBacklog,
+  filterForReopenRate,
+  filterForThroughputLeaderboard,
+} from "./filters.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
@@ -136,7 +148,7 @@ export function registerWebRoutes({
 
   function makeCachedBuilder({ ttlMs, buildFn, reasonNoJql, getJql }) {
     const cache = { payload: null, fetchedAt: 0 };
-    return async function ({ force = false } = {}) {
+    const getter = async function ({ force = false } = {}) {
       if (!force && cache.payload && Date.now() - cache.fetchedAt < ttlMs) {
         return cache.payload;
       }
@@ -154,6 +166,27 @@ export function registerWebRoutes({
       cache.fetchedAt = Date.now();
       return payload;
     };
+    // Expose TTL so the filter drawer can say "refreshes every N".
+    getter.ttlMs = ttlMs;
+    return getter;
+  }
+
+  /**
+   * Pick which env var (of a list of candidates) actually supplied the
+   * JQL. Returns `{ source, fallbackFrom }` where `source` is the first
+   * candidate that is non-empty, and `fallbackFrom` is the *intended*
+   * first candidate when a later one had to be used.
+   */
+  function resolveSource(candidates) {
+    const nonEmpty = candidates.find(([, v]) => (v ?? "").trim().length > 0);
+    const [primary] = candidates;
+    if (!nonEmpty) {
+      return { source: primary?.[0] ?? null, fallbackFrom: null };
+    }
+    const [sourceName] = nonEmpty;
+    const fallbackFrom =
+      sourceName !== primary[0] ? primary[0] : null;
+    return { source: sourceName, fallbackFrom };
   }
 
   const getThroughput = makeCachedBuilder({
@@ -533,7 +566,14 @@ export function registerWebRoutes({
     });
   });
 
-  function registerWidgetRoute(id, getter) {
+  /**
+   * Attach structured filter metadata to every Jira widget response so
+   * the dashboard's filter drawer can show CSM teams exactly what is
+   * being queried (source env var, fallback chain, parameters, raw JQL,
+   * refresh cadence). Filter meta is computed at response time so it
+   * reflects any fallback that actually fired.
+   */
+  function registerWidgetRoute(id, getter, buildFilterMeta) {
     router.get(`/api/widgets/${id}`, async (req, res) => {
       if (!authorized(req, dashboardKey)) {
         res.status(401).json({ error: "unauthorized" });
@@ -546,7 +586,15 @@ export function registerWebRoutes({
       }
       try {
         const payload = await getter({ force: req.query?.force === "1" });
-        res.json(payload);
+        let filter = null;
+        if (buildFilterMeta && !payload?.unavailable) {
+          try {
+            filter = buildFilterMeta(payload);
+          } catch (err) {
+            console.warn(`[web] filter meta failed for ${id}:`, err?.message);
+          }
+        }
+        res.json(filter ? { ...payload, filter } : payload);
       } catch (err) {
         console.error(`[web] ${id} failed:`, err);
         res.status(500).json({
@@ -557,16 +605,166 @@ export function registerWebRoutes({
     });
   }
 
-  registerWidgetRoute("weekly-throughput", getThroughput);
-  registerWidgetRoute("backlog-overview", getBacklog);
-  registerWidgetRoute("ticket-lifecycle", getLifecycle);
-  registerWidgetRoute("inflow-vs-resolved", getInflow);
-  registerWidgetRoute("sla-aging-risk", getSlaRisk);
-  registerWidgetRoute("sprint-backlog", getSprintBacklog);
-  registerWidgetRoute("reopen-rate", getReopenRate);
-  registerWidgetRoute("top-priority-tickets", getTopPriority);
-  registerWidgetRoute("throughput-leaderboard", getThroughputLeaderboard);
-  registerWidgetRoute("kanban-board", getKanban);
+  /* ------------------------------------------------------------------ *
+   * Filter-meta builders per widget. Each captures the env-var source
+   * chain at route-registration time, then (when a response lands)
+   * reads the executed JQL + generatedAt from the payload so the UI
+   * sees exactly what was run — not what *would* have been run.
+   * ------------------------------------------------------------------ */
+
+  const throughputSrc = resolveSource([
+    ["JIRA_THROUGHPUT_JQL", process.env.JIRA_THROUGHPUT_JQL],
+  ]);
+  const backlogSrc = resolveSource([
+    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
+  ]);
+  const lifecycleSrc = resolveSource([
+    ["JIRA_LIFECYCLE_JQL", process.env.JIRA_LIFECYCLE_JQL],
+  ]);
+  const kanbanSrc = resolveSource([
+    ["JIRA_KANBAN_JQL", process.env.JIRA_KANBAN_JQL],
+  ]);
+  const inflowSrc = resolveSource([
+    ["JIRA_INFLOW_JQL", process.env.JIRA_INFLOW_JQL],
+    ["JIRA_THROUGHPUT_JQL", process.env.JIRA_THROUGHPUT_JQL],
+  ]);
+  const slaSrc = resolveSource([
+    ["JIRA_SLA_JQL", process.env.JIRA_SLA_JQL],
+    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
+  ]);
+  const topPrioritySrc = resolveSource([
+    ["JIRA_TOP_PRIORITY_JQL", process.env.JIRA_TOP_PRIORITY_JQL],
+    ["JIRA_KANBAN_JQL", process.env.JIRA_KANBAN_JQL],
+    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
+  ]);
+  const sprintBacklogSrc = resolveSource([
+    ["JIRA_SPRINT_BACKLOG_JQL", process.env.JIRA_SPRINT_BACKLOG_JQL],
+    ["JIRA_KANBAN_JQL", process.env.JIRA_KANBAN_JQL],
+    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
+  ]);
+  const reopenSrc = resolveSource([
+    ["JIRA_REOPEN_JQL", process.env.JIRA_REOPEN_JQL],
+    ["JIRA_THROUGHPUT_JQL", process.env.JIRA_THROUGHPUT_JQL],
+    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
+  ]);
+  const leaderboardSrc = resolveSource([
+    ["JIRA_LEADERBOARD_JQL", process.env.JIRA_LEADERBOARD_JQL],
+    ["JIRA_THROUGHPUT_JQL", process.env.JIRA_THROUGHPUT_JQL],
+    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
+  ]);
+
+  registerWidgetRoute("weekly-throughput", getThroughput, (p) =>
+    filterForWeeklyThroughput({
+      jql: p?.jql ?? throughputJql,
+      source: throughputSrc.source,
+      fallbackFrom: throughputSrc.fallbackFrom,
+      refreshSeconds: Math.round(getThroughput.ttlMs / 1000),
+      timezone,
+      generatedAt: p?.generatedAt,
+    })
+  );
+  registerWidgetRoute("backlog-overview", getBacklog, (p) =>
+    filterForBacklogOverview({
+      jql: p?.jql ?? backlogJql,
+      source: backlogSrc.source,
+      fallbackFrom: backlogSrc.fallbackFrom,
+      refreshSeconds: Math.round(getBacklog.ttlMs / 1000),
+      timezone,
+      generatedAt: p?.generatedAt,
+    })
+  );
+  registerWidgetRoute("ticket-lifecycle", getLifecycle, (p) =>
+    filterForTicketLifecycle({
+      jql: p?.jql ?? lifecycleJql,
+      source: lifecycleSrc.source,
+      fallbackFrom: lifecycleSrc.fallbackFrom,
+      refreshSeconds: Math.round(getLifecycle.ttlMs / 1000),
+      lookbackDays: lifecycleLookbackDays,
+      timezone,
+      generatedAt: p?.generatedAt,
+    })
+  );
+  registerWidgetRoute("inflow-vs-resolved", getInflow, (p) =>
+    filterForInflowVsResolved({
+      jql: p?.jql ?? inflowJql,
+      source: inflowSrc.source,
+      fallbackFrom: inflowSrc.fallbackFrom,
+      refreshSeconds: Math.round(getInflow.ttlMs / 1000),
+      timezone,
+      generatedAt: p?.generatedAt,
+    })
+  );
+  registerWidgetRoute("sla-aging-risk", getSlaRisk, (p) =>
+    filterForSlaAgingRisk({
+      jql: p?.jql ?? slaJql,
+      source: slaSrc.source,
+      fallbackFrom: slaSrc.fallbackFrom,
+      refreshSeconds: Math.round(getSlaRisk.ttlMs / 1000),
+      thresholds: slaThresholds,
+      timezone,
+      generatedAt: p?.generatedAt,
+    })
+  );
+  registerWidgetRoute("sprint-backlog", getSprintBacklog, (p) =>
+    filterForSprintBacklog({
+      jql: p?.jql ?? sprintBacklogJql,
+      source: sprintBacklogSrc.source,
+      fallbackFrom: sprintBacklogSrc.fallbackFrom,
+      refreshSeconds: Math.round(getSprintBacklog.ttlMs / 1000),
+      status: sprintBacklogStatus,
+      boardUrl: kanbanBoardUrl,
+      timezone,
+      generatedAt: p?.generatedAt,
+    })
+  );
+  registerWidgetRoute("reopen-rate", getReopenRate, (p) =>
+    filterForReopenRate({
+      jql: p?.jql ?? reopenJql,
+      source: reopenSrc.source,
+      fallbackFrom: reopenSrc.fallbackFrom,
+      refreshSeconds: Math.round(getReopenRate.ttlMs / 1000),
+      doneStatuses: reopenDoneStatuses,
+      windowDays: reopenWindowDays,
+      timezone,
+      generatedAt: p?.generatedAt,
+    })
+  );
+  registerWidgetRoute("top-priority-tickets", getTopPriority, (p) =>
+    filterForTopPriority({
+      jql: p?.jql ?? topPriorityJql,
+      source: topPrioritySrc.source,
+      fallbackFrom: topPrioritySrc.fallbackFrom,
+      refreshSeconds: Math.round(getTopPriority.ttlMs / 1000),
+      priorities: topPriorityPriorities,
+      status: topPriorityStatus,
+      limit: topPriorityLimit,
+      timezone,
+      generatedAt: p?.generatedAt,
+    })
+  );
+  registerWidgetRoute("throughput-leaderboard", getThroughputLeaderboard, (p) =>
+    filterForThroughputLeaderboard({
+      jql: p?.jql ?? leaderboardJql,
+      source: leaderboardSrc.source,
+      fallbackFrom: leaderboardSrc.fallbackFrom,
+      refreshSeconds: Math.round(getThroughputLeaderboard.ttlMs / 1000),
+      limit: leaderboardLimit,
+      timezone,
+      generatedAt: p?.generatedAt,
+    })
+  );
+  registerWidgetRoute("kanban-board", getKanban, (p) =>
+    filterForKanban({
+      jql: p?.jql ?? kanbanJql,
+      source: kanbanSrc.source,
+      fallbackFrom: kanbanSrc.fallbackFrom,
+      refreshSeconds: Math.round(getKanban.ttlMs / 1000),
+      columns: kanbanColumns,
+      boardUrl: kanbanBoardUrl,
+      timezone,
+      generatedAt: p?.generatedAt,
+    })
+  );
 
   console.log(
     `[web] dashboard enabled at / — ${dashboardKey ? "key required" : "no key (dev only)"}`

@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { TEAM, rosterMember } from "./team.js";
+import { FILTER_BUILDERS } from "./filters.js";
 
 /**
  * Zero-dependency preview of the EMAIL NORTON Team Presence dashboard.
@@ -39,6 +40,134 @@ function todayInTz(tz = TEAM_TIMEZONE, when = new Date()) {
 const now = Date.now();
 const minsAgo = (n) => now - n * 60 * 1000;
 const hoursAhead = (n) => now + n * 60 * 60 * 1000;
+
+/* ------------------------------------------------------------------ *
+ * Demo filter config.
+ *
+ * Preview mode serves static mock data, but we still want the Filter
+ * drawer to look identical to the real thing so UX can be iterated
+ * offline. These JQLs + env-var names mirror the defaults in web.js.
+ * ------------------------------------------------------------------ */
+const DEMO_JQL = {
+  throughput:
+    'project = EMAIL AND issuetype in (Task, Story, Bug) AND statusCategory = Done',
+  backlog:
+    'project = EMAIL AND statusCategory != Done',
+  lifecycle:
+    'project = EMAIL AND statusCategory = Done AND resolved >= -30d',
+  kanban:
+    'project = EMAIL AND statusCategory != Done AND Sprint in openSprints()',
+  topPriority:
+    'project = EMAIL AND statusCategory != Done AND priority in (Highest, Critical, High)',
+  sprintBacklog:
+    'project = EMAIL AND Sprint in openSprints() AND status = "To Do"',
+  reopen:
+    'project = EMAIL AND issuetype in (Task, Story, Bug)',
+  leaderboard:
+    'project = EMAIL AND issuetype in (Task, Story, Bug) AND statusCategory = Done',
+};
+
+const DEMO_BOARD_URL =
+  "https://gendigital.atlassian.net/jira/software/c/projects/EMAIL/boards/42";
+
+const DEMO_FILTER_INPUTS = {
+  "weekly-throughput": {
+    jql: DEMO_JQL.throughput,
+    source: "JIRA_THROUGHPUT_JQL",
+    refreshSeconds: 15 * 60,
+    timezone: TEAM_TIMEZONE,
+  },
+  "backlog-overview": {
+    jql: DEMO_JQL.backlog,
+    source: "JIRA_BACKLOG_JQL",
+    refreshSeconds: 15 * 60,
+    timezone: TEAM_TIMEZONE,
+  },
+  "ticket-lifecycle": {
+    jql: DEMO_JQL.lifecycle,
+    source: "JIRA_LIFECYCLE_JQL",
+    refreshSeconds: 30 * 60,
+    lookbackDays: 30,
+    timezone: TEAM_TIMEZONE,
+  },
+  "inflow-vs-resolved": {
+    jql: DEMO_JQL.throughput,
+    source: "JIRA_THROUGHPUT_JQL",
+    fallbackFrom: "JIRA_INFLOW_JQL",
+    refreshSeconds: 15 * 60,
+    timezone: TEAM_TIMEZONE,
+  },
+  "sla-aging-risk": {
+    jql: DEMO_JQL.backlog,
+    source: "JIRA_BACKLOG_JQL",
+    fallbackFrom: "JIRA_SLA_JQL",
+    refreshSeconds: 5 * 60,
+    thresholds: { Highest: 1, Critical: 2, High: 5, Medium: 14, Low: 30 },
+    timezone: TEAM_TIMEZONE,
+  },
+  "kanban-board": {
+    jql: DEMO_JQL.kanban,
+    source: "JIRA_KANBAN_JQL",
+    refreshSeconds: 3 * 60,
+    columns: ["To Do", "In Progress", "In Review", "Done"],
+    boardUrl: DEMO_BOARD_URL,
+    timezone: TEAM_TIMEZONE,
+  },
+  "top-priority-tickets": {
+    jql: DEMO_JQL.topPriority,
+    source: "JIRA_TOP_PRIORITY_JQL",
+    refreshSeconds: 5 * 60,
+    priorities: ["Highest", "Critical", "High"],
+    status: "To Do",
+    limit: 6,
+    timezone: TEAM_TIMEZONE,
+  },
+  "sprint-backlog": {
+    jql: DEMO_JQL.sprintBacklog,
+    source: "JIRA_SPRINT_BACKLOG_JQL",
+    refreshSeconds: 5 * 60,
+    status: "To Do",
+    boardUrl: DEMO_BOARD_URL,
+    timezone: TEAM_TIMEZONE,
+  },
+  "reopen-rate": {
+    jql: DEMO_JQL.reopen,
+    source: "JIRA_THROUGHPUT_JQL",
+    fallbackFrom: "JIRA_REOPEN_JQL",
+    refreshSeconds: 15 * 60,
+    doneStatuses: ["Done", "Closed", "Resolved"],
+    windowDays: 30,
+    timezone: TEAM_TIMEZONE,
+  },
+  "throughput-leaderboard": {
+    jql: DEMO_JQL.leaderboard,
+    source: "JIRA_THROUGHPUT_JQL",
+    fallbackFrom: "JIRA_LEADERBOARD_JQL",
+    refreshSeconds: 15 * 60,
+    limit: 6,
+    timezone: TEAM_TIMEZONE,
+  },
+};
+
+/**
+ * Attach filter metadata to a demo widget payload so the filter drawer
+ * has real-looking content in preview mode (matches the prod shape).
+ */
+function withDemoFilter(id, payload) {
+  const builder = FILTER_BUILDERS[id];
+  const input = DEMO_FILTER_INPUTS[id];
+  if (!builder || !input) return payload;
+  try {
+    const filter = builder({
+      ...input,
+      generatedAt: payload?.generatedAt ?? Date.now(),
+    });
+    return { ...payload, filter };
+  } catch (err) {
+    console.warn(`[preview] filter meta failed for ${id}:`, err?.message);
+    return payload;
+  }
+}
 
 function buildDemoPayload() {
   const date = todayInTz();
@@ -920,52 +1049,64 @@ const server = http.createServer((req, res) => {
   }
 
   if (pathname === "/api/widgets/weekly-throughput") {
-    sendJson(res, 200, buildDemoThroughput());
+    sendJson(res, 200, withDemoFilter("weekly-throughput", buildDemoThroughput()));
     return;
   }
 
   if (pathname === "/api/widgets/backlog-overview") {
-    sendJson(res, 200, buildDemoBacklog());
+    sendJson(res, 200, withDemoFilter("backlog-overview", buildDemoBacklog()));
     return;
   }
 
   if (pathname === "/api/widgets/ticket-lifecycle") {
-    sendJson(res, 200, buildDemoLifecycle());
+    sendJson(res, 200, withDemoFilter("ticket-lifecycle", buildDemoLifecycle()));
     return;
   }
 
   if (pathname === "/api/widgets/kanban-board") {
-    sendJson(res, 200, buildDemoKanban());
+    sendJson(res, 200, withDemoFilter("kanban-board", buildDemoKanban()));
     return;
   }
 
   if (pathname === "/api/widgets/inflow-vs-resolved") {
-    sendJson(res, 200, buildDemoInflowVsResolved());
+    sendJson(
+      res,
+      200,
+      withDemoFilter("inflow-vs-resolved", buildDemoInflowVsResolved())
+    );
     return;
   }
 
   if (pathname === "/api/widgets/sla-aging-risk") {
-    sendJson(res, 200, buildDemoSlaAgingRisk());
+    sendJson(res, 200, withDemoFilter("sla-aging-risk", buildDemoSlaAgingRisk()));
     return;
   }
 
   if (pathname === "/api/widgets/top-priority-tickets") {
-    sendJson(res, 200, buildDemoTopPriorityTickets());
+    sendJson(
+      res,
+      200,
+      withDemoFilter("top-priority-tickets", buildDemoTopPriorityTickets())
+    );
     return;
   }
 
   if (pathname === "/api/widgets/sprint-backlog") {
-    sendJson(res, 200, buildDemoSprintBacklog());
+    sendJson(res, 200, withDemoFilter("sprint-backlog", buildDemoSprintBacklog()));
     return;
   }
 
   if (pathname === "/api/widgets/reopen-rate") {
-    sendJson(res, 200, buildDemoReopenRate());
+    sendJson(res, 200, withDemoFilter("reopen-rate", buildDemoReopenRate()));
     return;
   }
 
   if (pathname === "/api/widgets/throughput-leaderboard") {
-    sendJson(res, 200, buildDemoThroughputLeaderboard());
+    sendJson(
+      res,
+      200,
+      withDemoFilter("throughput-leaderboard", buildDemoThroughputLeaderboard())
+    );
     return;
   }
 

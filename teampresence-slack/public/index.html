@@ -3346,6 +3346,306 @@
           word-break: break-word;
         }
       }
+
+      /* ================================================================ *
+       * Jira filter chip + drawer.
+       *
+       * Every Jira widget gets a chip in its header showing a one-line
+       * filter summary ("EMAIL · last 8 weeks · resolved"). Click opens
+       * the shared drawer with source env var, parsed parameters, raw
+       * JQL (with copy button), refresh cadence, and a link to Jira.
+       * ================================================================ */
+      .sn-filter-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        margin-left: auto;
+        padding: 0.3rem 0.7rem;
+        border-radius: 999px;
+        border: 1px solid var(--card-border, rgba(15, 23, 42, 0.1));
+        background: var(--card-bg-subtle, rgba(4, 0, 245, 0.04));
+        color: var(--ink-strong, #0f172a);
+        font: 500 0.72rem/1.15 "Inter", system-ui, sans-serif;
+        letter-spacing: 0.01em;
+        cursor: pointer;
+        transition: background 120ms ease, border-color 120ms ease, transform 120ms ease;
+        max-width: 100%;
+        min-width: 0;
+        flex-shrink: 1;
+      }
+      .sn-filter-chip:hover {
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 8%, transparent);
+        border-color: color-mix(in srgb, var(--gen-blue, #0400f5) 40%, transparent);
+      }
+      .sn-filter-chip:focus-visible {
+        outline: 2px solid var(--gen-blue, #0400f5);
+        outline-offset: 2px;
+      }
+      .sn-filter-chip[data-fallback="true"] {
+        border-color: color-mix(in srgb, var(--status-amber, #f59e0b) 55%, transparent);
+        background: color-mix(in srgb, var(--status-amber, #f59e0b) 10%, transparent);
+      }
+      .sn-filter-chip-icon {
+        width: 14px;
+        height: 14px;
+        flex-shrink: 0;
+        opacity: 0.75;
+      }
+      .sn-filter-chip-text {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        max-width: 240px;
+      }
+      @media (max-width: 640px) {
+        .sn-filter-chip {
+          padding: 0.26rem 0.55rem;
+          font-size: 0.68rem;
+        }
+        .sn-filter-chip-text { max-width: 160px; }
+      }
+
+      /* Backdrop + drawer container (shared, single instance). */
+      .sn-filter-backdrop {
+        position: fixed;
+        inset: 0;
+        background: rgba(15, 23, 42, 0.42);
+        backdrop-filter: blur(2px);
+        opacity: 0;
+        pointer-events: none;
+        transition: opacity 180ms ease;
+        z-index: 80;
+      }
+      .sn-filter-backdrop[data-open="true"] {
+        opacity: 1;
+        pointer-events: auto;
+      }
+
+      .sn-filter-drawer {
+        position: fixed;
+        right: 0;
+        top: 0;
+        bottom: 0;
+        width: min(460px, 100vw);
+        background: var(--card-bg, #ffffff);
+        color: var(--ink-strong, #0f172a);
+        box-shadow: -24px 0 48px -24px rgba(15, 23, 42, 0.35);
+        transform: translateX(100%);
+        transition: transform 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
+        z-index: 81;
+        display: flex;
+        flex-direction: column;
+        overflow: hidden;
+      }
+      .sn-filter-drawer[data-open="true"] {
+        transform: translateX(0);
+      }
+      @media (max-width: 640px) {
+        .sn-filter-drawer {
+          top: auto;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          width: 100%;
+          max-height: 88vh;
+          border-radius: 18px 18px 0 0;
+          transform: translateY(100%);
+        }
+        .sn-filter-drawer[data-open="true"] { transform: translateY(0); }
+      }
+
+      .sn-filter-drawer-head {
+        padding: 1rem 1.25rem 0.75rem;
+        border-bottom: 1px solid var(--card-border, rgba(15, 23, 42, 0.08));
+        display: flex;
+        align-items: flex-start;
+        gap: 0.75rem;
+      }
+      .sn-filter-drawer-head h3 {
+        font: 700 1.05rem/1.2 "Inter", system-ui, sans-serif;
+        margin: 0;
+        flex: 1;
+        min-width: 0;
+      }
+      .sn-filter-drawer-head .sn-filter-drawer-eyebrow {
+        display: block;
+        font: 500 0.7rem/1 "Inter", system-ui, sans-serif;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-muted, #64748b);
+        margin-bottom: 0.35rem;
+      }
+      .sn-filter-drawer-close {
+        border: 0;
+        background: transparent;
+        color: var(--ink-muted, #64748b);
+        font-size: 1.25rem;
+        cursor: pointer;
+        padding: 0.1rem 0.4rem;
+        line-height: 1;
+        border-radius: 6px;
+      }
+      .sn-filter-drawer-close:hover {
+        background: color-mix(in srgb, var(--ink-strong, #0f172a) 8%, transparent);
+        color: var(--ink-strong, #0f172a);
+      }
+
+      .sn-filter-drawer-body {
+        padding: 0.75rem 1.25rem 1.25rem;
+        overflow-y: auto;
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+        gap: 1.1rem;
+      }
+
+      .sn-filter-source {
+        display: flex;
+        align-items: center;
+        gap: 0.55rem;
+        font-family: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+        font-size: 0.78rem;
+        padding: 0.45rem 0.65rem;
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 6%, transparent);
+        border: 1px solid color-mix(in srgb, var(--gen-blue, #0400f5) 18%, transparent);
+        color: var(--gen-blue, #0400f5);
+        border-radius: 8px;
+        word-break: break-all;
+      }
+      .sn-filter-source-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: var(--gen-blue, #0400f5);
+        flex-shrink: 0;
+      }
+      .sn-filter-fallback-note {
+        font: 500 0.75rem/1.35 "Inter", system-ui, sans-serif;
+        color: color-mix(in srgb, var(--status-amber, #f59e0b) 80%, var(--ink-strong, #0f172a));
+        background: color-mix(in srgb, var(--status-amber, #f59e0b) 10%, transparent);
+        border: 1px solid color-mix(in srgb, var(--status-amber, #f59e0b) 35%, transparent);
+        border-radius: 8px;
+        padding: 0.55rem 0.75rem;
+      }
+
+      .sn-filter-section-label {
+        font: 600 0.72rem/1 "Inter", system-ui, sans-serif;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--ink-muted, #64748b);
+        margin-bottom: 0.5rem;
+      }
+
+      .sn-filter-params {
+        display: grid;
+        grid-template-columns: max-content 1fr;
+        column-gap: 0.9rem;
+        row-gap: 0.55rem;
+      }
+      .sn-filter-params dt {
+        color: var(--ink-muted, #64748b);
+        font: 500 0.82rem/1.3 "Inter", system-ui, sans-serif;
+        padding-top: 0.05rem;
+      }
+      .sn-filter-params dd {
+        margin: 0;
+        color: var(--ink-strong, #0f172a);
+        font: 500 0.85rem/1.35 "Inter", system-ui, sans-serif;
+        word-break: break-word;
+        overflow-wrap: anywhere;
+      }
+      .sn-filter-params dd .sn-filter-param-hint {
+        display: block;
+        font-size: 0.72rem;
+        color: var(--ink-muted, #64748b);
+        font-weight: 400;
+        margin-top: 0.1rem;
+      }
+
+      .sn-filter-jql {
+        position: relative;
+      }
+      .sn-filter-jql pre {
+        margin: 0;
+        padding: 0.8rem 3rem 0.8rem 0.9rem;
+        background: color-mix(in srgb, var(--ink-strong, #0f172a) 4%, var(--card-bg, #ffffff));
+        border: 1px solid var(--card-border, rgba(15, 23, 42, 0.1));
+        border-radius: 10px;
+        font: 450 0.78rem/1.45 "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+        color: var(--ink-strong, #0f172a);
+        white-space: pre-wrap;
+        word-break: break-word;
+        max-height: 240px;
+        overflow-y: auto;
+      }
+      .sn-filter-jql-copy {
+        position: absolute;
+        top: 0.5rem;
+        right: 0.5rem;
+        border: 1px solid var(--card-border, rgba(15, 23, 42, 0.12));
+        background: var(--card-bg, #ffffff);
+        color: var(--ink-strong, #0f172a);
+        border-radius: 6px;
+        padding: 0.25rem 0.5rem;
+        font: 500 0.7rem/1 "Inter", system-ui, sans-serif;
+        cursor: pointer;
+        transition: transform 120ms, background 120ms;
+      }
+      .sn-filter-jql-copy:hover {
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 8%, var(--card-bg, #ffffff));
+      }
+      .sn-filter-jql-copy[data-copied="true"] {
+        background: color-mix(in srgb, var(--status-green, #16a34a) 18%, var(--card-bg, #ffffff));
+        border-color: color-mix(in srgb, var(--status-green, #16a34a) 40%, transparent);
+      }
+
+      .sn-filter-meta {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 0.5rem 1rem;
+        font: 500 0.75rem/1.3 "Inter", system-ui, sans-serif;
+        color: var(--ink-muted, #64748b);
+      }
+      .sn-filter-meta strong {
+        color: var(--ink-strong, #0f172a);
+        font-weight: 600;
+        margin-left: 0.25rem;
+      }
+
+      .sn-filter-drawer-foot {
+        border-top: 1px solid var(--card-border, rgba(15, 23, 42, 0.08));
+        padding: 0.85rem 1.25rem;
+        display: flex;
+        gap: 0.6rem;
+        justify-content: flex-end;
+        flex-wrap: wrap;
+      }
+      .sn-filter-drawer-foot a.sn-filter-open-jira {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.35rem;
+        padding: 0.5rem 0.85rem;
+        background: var(--gen-blue, #0400f5);
+        color: #ffffff;
+        border-radius: 8px;
+        font: 600 0.8rem/1 "Inter", system-ui, sans-serif;
+        text-decoration: none;
+        transition: filter 120ms;
+      }
+      .sn-filter-drawer-foot a.sn-filter-open-jira:hover {
+        filter: brightness(1.1);
+      }
+      .sn-filter-drawer-foot a.sn-filter-open-jira[aria-disabled="true"] {
+        pointer-events: none;
+        opacity: 0.45;
+      }
+
+      /* Dark-theme tweaks — all already use theme tokens, just tune the
+         slight tints so the drawer reads well against dark cards. */
+      [data-theme="dark"] .sn-filter-drawer {
+        box-shadow: -24px 0 48px -12px rgba(0, 0, 0, 0.6);
+      }
+      [data-theme="dark"] .sn-filter-jql pre {
+        background: color-mix(in srgb, var(--ink-strong, #0f172a) 12%, var(--card-bg, #111827));
+      }
     </style>
   </head>
   <body class="min-h-screen">
@@ -6261,6 +6561,339 @@
           }
         });
         render();
+      })();
+    </script>
+
+    <!-- ================================================================ *
+     * Jira filter drawer — single shared instance, populated per-widget
+     * when the user opens the chip. Starts hidden; becomes visible when
+     * data-open="true" is set by openFilterDrawer().
+     * ================================================================ -->
+    <div
+      id="sn-filter-backdrop"
+      class="sn-filter-backdrop"
+      aria-hidden="true"
+    ></div>
+    <aside
+      id="sn-filter-drawer"
+      class="sn-filter-drawer"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="sn-filter-drawer-title"
+      aria-hidden="true"
+    >
+      <header class="sn-filter-drawer-head">
+        <div style="flex:1;min-width:0;">
+          <span class="sn-filter-drawer-eyebrow">Jira filter</span>
+          <h3 id="sn-filter-drawer-title">—</h3>
+        </div>
+        <button
+          type="button"
+          class="sn-filter-drawer-close"
+          id="sn-filter-drawer-close"
+          aria-label="Close filter drawer"
+        >×</button>
+      </header>
+      <div class="sn-filter-drawer-body">
+        <div id="sn-filter-fallback-note" class="sn-filter-fallback-note" hidden></div>
+        <div>
+          <div class="sn-filter-section-label">Source</div>
+          <div class="sn-filter-source">
+            <span class="sn-filter-source-dot" aria-hidden="true"></span>
+            <span id="sn-filter-source-env">—</span>
+          </div>
+        </div>
+        <div>
+          <div class="sn-filter-section-label">Parameters</div>
+          <dl id="sn-filter-params" class="sn-filter-params"></dl>
+        </div>
+        <div class="sn-filter-jql">
+          <div class="sn-filter-section-label">Raw JQL</div>
+          <pre id="sn-filter-jql-pre">—</pre>
+          <button
+            type="button"
+            class="sn-filter-jql-copy"
+            id="sn-filter-jql-copy"
+            aria-label="Copy JQL to clipboard"
+          >Copy</button>
+        </div>
+        <div class="sn-filter-meta" id="sn-filter-meta"></div>
+      </div>
+      <footer class="sn-filter-drawer-foot">
+        <a
+          class="sn-filter-open-jira"
+          id="sn-filter-open-jira"
+          href="#"
+          target="_blank"
+          rel="noopener"
+          aria-disabled="true"
+        >
+          Open in Jira
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M14 4h6v6M20 4l-9 9M10 6H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </a>
+      </footer>
+    </aside>
+
+    <script>
+      /* ================================================================ *
+       * Jira filter chip + drawer controller.
+       *
+       * Every Jira widget response includes a `filter` object (see
+       * src/filters.js). We:
+       *   1. Inject a chip into each Jira widget's header on page load
+       *   2. Monkey-patch fetch() to capture filter meta as responses
+       *      arrive — one implementation for all 10 widgets, no need
+       *      to touch each widget's loader/renderer
+       *   3. Render the chip label from filter.chip
+       *   4. Open the shared drawer with source, parameters, raw JQL,
+       *      copy button, refresh cadence, and an "Open in Jira" link
+       * ================================================================ */
+      (function initJiraFilterChipsAndDrawer() {
+        const JIRA_WIDGET_IDS = [
+          "weekly-throughput",
+          "backlog-overview",
+          "ticket-lifecycle",
+          "inflow-vs-resolved",
+          "sla-aging-risk",
+          "kanban-board",
+          "top-priority-tickets",
+          "sprint-backlog",
+          "reopen-rate",
+          "throughput-leaderboard",
+        ];
+        const filterMetaByWidget = new Map();
+        const drawer = document.getElementById("sn-filter-drawer");
+        const backdrop = document.getElementById("sn-filter-backdrop");
+
+        function relTime(ts) {
+          if (!ts) return "—";
+          const diff = Date.now() - ts;
+          const s = Math.round(diff / 1000);
+          if (s < 30) return "just now";
+          if (s < 90) return "a minute ago";
+          if (s < 60 * 60) return `${Math.round(s / 60)} min ago`;
+          if (s < 60 * 60 * 24) return `${Math.round(s / 3600)} h ago`;
+          return `${Math.round(s / 86400)} d ago`;
+        }
+
+        function fmtRefresh(seconds) {
+          if (!seconds || !Number.isFinite(seconds)) return "—";
+          if (seconds < 60) return `${seconds}s`;
+          if (seconds < 60 * 60) return `${Math.round(seconds / 60)} min`;
+          return `${Math.round(seconds / 3600)} h`;
+        }
+
+        /* -- Chip injection --------------------------------------------- */
+
+        function injectChips() {
+          for (const id of JIRA_WIDGET_IDS) {
+            const widget = document.getElementById(`widget-${id}`);
+            if (!widget) continue;
+            const header = widget.querySelector(".sn-section-head, .sn-subhead");
+            if (!header || header.querySelector(".sn-filter-chip")) continue;
+            const btn = document.createElement("button");
+            btn.type = "button";
+            btn.className = "sn-filter-chip";
+            btn.dataset.widgetId = id;
+            btn.hidden = true;
+            btn.title = "Show Jira filter details";
+            btn.setAttribute("aria-label", "Show Jira filter details");
+            btn.innerHTML =
+              '<svg viewBox="0 0 24 24" class="sn-filter-chip-icon" aria-hidden="true">' +
+              '<path d="M4 5h16l-6 9v5l-4 2v-7L4 5z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>' +
+              '</svg>' +
+              '<span class="sn-filter-chip-text">Filter</span>';
+            btn.addEventListener("click", () => openFilterDrawer(id));
+            header.appendChild(btn);
+          }
+        }
+
+        /* -- Meta capture via fetch interception ------------------------ */
+
+        function captureFilterMeta(widgetId, data) {
+          const filter = data && data.filter;
+          if (!filter) return;
+          filterMetaByWidget.set(widgetId, filter);
+          const chip = document.querySelector(
+            `.sn-filter-chip[data-widget-id="${widgetId}"]`
+          );
+          if (!chip) return;
+          chip.hidden = false;
+          const textEl = chip.querySelector(".sn-filter-chip-text");
+          if (textEl) textEl.textContent = filter.chip || "Filter";
+          if (filter.fallbackFrom) chip.dataset.fallback = "true";
+          else delete chip.dataset.fallback;
+        }
+
+        (function patchFetchForFilterMeta() {
+          if (!window.fetch || window.__jiraFilterFetchPatched) return;
+          const orig = window.fetch.bind(window);
+          window.__jiraFilterFetchPatched = true;
+          window.fetch = async function patchedFetch(input, init) {
+            const res = await orig(input, init);
+            try {
+              const url =
+                typeof input === "string"
+                  ? input
+                  : input && input.url
+                  ? input.url
+                  : "";
+              const m = url.match(/\/api\/widgets\/([^/?#]+)/);
+              if (m && res && res.ok) {
+                const widgetId = m[1];
+                if (JIRA_WIDGET_IDS.includes(widgetId)) {
+                  res
+                    .clone()
+                    .json()
+                    .then((json) => captureFilterMeta(widgetId, json))
+                    .catch(() => {
+                      /* non-JSON or parse error; ignore */
+                    });
+                }
+              }
+            } catch (_) {
+              /* never let the interceptor break the caller */
+            }
+            return res;
+          };
+        })();
+
+        /* -- Drawer ---------------------------------------------------- */
+
+        function openFilterDrawer(widgetId) {
+          const meta = filterMetaByWidget.get(widgetId);
+          if (!meta) return;
+          renderDrawer(meta);
+          drawer.dataset.open = "true";
+          drawer.setAttribute("aria-hidden", "false");
+          backdrop.dataset.open = "true";
+          backdrop.setAttribute("aria-hidden", "false");
+          document.body.dataset.filterDrawerOpen = "true";
+          // Focus the close button for keyboard users.
+          const close = document.getElementById("sn-filter-drawer-close");
+          if (close) close.focus();
+        }
+
+        function closeFilterDrawer() {
+          delete drawer.dataset.open;
+          drawer.setAttribute("aria-hidden", "true");
+          delete backdrop.dataset.open;
+          backdrop.setAttribute("aria-hidden", "true");
+          delete document.body.dataset.filterDrawerOpen;
+        }
+
+        function renderDrawer(meta) {
+          document.getElementById("sn-filter-drawer-title").textContent =
+            meta.title || "Filter";
+          document.getElementById("sn-filter-source-env").textContent =
+            meta.source || "(no env var set)";
+          const fallbackEl = document.getElementById("sn-filter-fallback-note");
+          if (meta.fallbackFrom) {
+            fallbackEl.hidden = false;
+            fallbackEl.textContent =
+              `Note: ${meta.fallbackFrom} is not configured, so this widget is falling back to ${meta.source}. ` +
+              "Set the primary variable to scope this widget more tightly.";
+          } else {
+            fallbackEl.hidden = true;
+            fallbackEl.textContent = "";
+          }
+          const dl = document.getElementById("sn-filter-params");
+          dl.innerHTML = "";
+          for (const p of meta.parameters || []) {
+            const dt = document.createElement("dt");
+            dt.textContent = p.label;
+            const dd = document.createElement("dd");
+            dd.textContent = p.value ?? "—";
+            if (p.hint) {
+              const hint = document.createElement("span");
+              hint.className = "sn-filter-param-hint";
+              hint.textContent = p.hint;
+              dd.appendChild(hint);
+            }
+            dl.appendChild(dt);
+            dl.appendChild(dd);
+          }
+          document.getElementById("sn-filter-jql-pre").textContent =
+            meta.jql || "(no JQL captured)";
+          const meta1 = [];
+          if (meta.refreshSeconds != null) {
+            meta1.push(
+              `<span>Refresh cadence: <strong>every ${fmtRefresh(
+                meta.refreshSeconds
+              )}</strong></span>`
+            );
+          }
+          if (meta.generatedAt) {
+            meta1.push(
+              `<span>Last refreshed: <strong>${relTime(
+                meta.generatedAt
+              )}</strong></span>`
+            );
+          }
+          if (meta.project) {
+            meta1.push(`<span>Project: <strong>${meta.project}</strong></span>`);
+          }
+          document.getElementById("sn-filter-meta").innerHTML = meta1.join("");
+
+          const openBtn = document.getElementById("sn-filter-open-jira");
+          if (meta.boardUrl) {
+            openBtn.href = meta.boardUrl;
+            openBtn.removeAttribute("aria-disabled");
+          } else {
+            openBtn.href = "#";
+            openBtn.setAttribute("aria-disabled", "true");
+          }
+        }
+
+        document
+          .getElementById("sn-filter-drawer-close")
+          ?.addEventListener("click", closeFilterDrawer);
+        backdrop.addEventListener("click", closeFilterDrawer);
+        document.addEventListener("keydown", (e) => {
+          if (e.key === "Escape" && drawer.dataset.open === "true") {
+            closeFilterDrawer();
+          }
+        });
+
+        /* -- Copy JQL button ------------------------------------------- */
+
+        const copyBtn = document.getElementById("sn-filter-jql-copy");
+        copyBtn?.addEventListener("click", async () => {
+          const text = document.getElementById("sn-filter-jql-pre")?.textContent;
+          if (!text) return;
+          try {
+            await navigator.clipboard.writeText(text);
+            copyBtn.textContent = "Copied";
+            copyBtn.dataset.copied = "true";
+            setTimeout(() => {
+              copyBtn.textContent = "Copy";
+              delete copyBtn.dataset.copied;
+            }, 1500);
+          } catch {
+            // Fallback: select the pre text so user can Cmd+C
+            const range = document.createRange();
+            range.selectNodeContents(document.getElementById("sn-filter-jql-pre"));
+            const sel = window.getSelection();
+            sel.removeAllRanges();
+            sel.addRange(range);
+          }
+        });
+
+        /* -- Init ------------------------------------------------------ */
+
+        if (document.readyState === "loading") {
+          document.addEventListener("DOMContentLoaded", injectChips, {
+            once: true,
+          });
+        } else {
+          injectChips();
+        }
+
+        window.__jiraFilter = {
+          open: openFilterDrawer,
+          close: closeFilterDrawer,
+          _all: filterMetaByWidget,
+        };
       })();
     </script>
   </body>
