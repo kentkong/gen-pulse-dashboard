@@ -164,6 +164,8 @@ export function rosterMember(
     id = null,
     presence = null,
     checkin = null,
+    slackStatus = null,
+    workday = null,
   } = {}
 ) {
   const entry = findBySlug(slug);
@@ -180,5 +182,7 @@ export function rosterMember(
     tags: entry.tags,
     checkin,
     presence,
+    slackStatus,
+    workday,
   };
 }

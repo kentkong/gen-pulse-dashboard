@@ -37,6 +37,12 @@ import {
   filterForReopenRate,
   filterForThroughputLeaderboard,
 } from "./filters.js";
+import {
+  resolvePresence,
+  createSlackStatusProvider,
+  workdayProviderFromEnv,
+  BUCKETS,
+} from "./presence/index.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
@@ -76,6 +82,57 @@ export function registerWebRoutes({
   const dashboardKey = (process.env.DASHBOARD_KEY ?? "").trim();
   const seedMemberIds = parseCsv(process.env.TEAM_MEMBER_IDS);
   const rolesByTeam = loadRolesFromEnv();
+
+  /* ---------------------------------------------------------------- *
+   * Presence model feature flag.
+   *
+   * PRESENCE_MODEL controls where the Team Presence widget gets its
+   * data from. Valid values:
+   *
+   *   bot           — legacy: SQLite check-ins + rollcalls from the
+   *                   /teampresence Slack bot. This is the default and
+   *                   what the original demo shipped with. Backwards-
+   *                   compatible; no other env vars needed.
+   *
+   *   slack         — new: pulls each roster member's status_text,
+   *                   status_emoji, and auto-presence from Slack
+   *                   (users.profile.get + users.getPresence) and maps
+   *                   it to a bucket via src/presence/mapping.js.
+   *                   "Accuracy comes from your Slack status."
+   *
+   *   slack+workday — slack mode + Workday vacation overlay. Workday
+   *                   wins for full-day OOO; Slack wins for in-the-
+   *                   moment whereabouts. Workday provider chosen via
+   *                   WORKDAY_PROVIDER (defaults to noop until IT
+   *                   confirms the endpoint shape).
+   *
+   * See docs in src/presence/*.js for the full contract.
+   * ---------------------------------------------------------------- */
+  const presenceModel = (process.env.PRESENCE_MODEL ?? "bot")
+    .trim()
+    .toLowerCase();
+  const presenceUsesSlack =
+    presenceModel === "slack" || presenceModel === "slack+workday";
+  const presenceUsesWorkday = presenceModel === "slack+workday";
+
+  let slackPresenceProvider = null;
+  let workdayPresenceProvider = null;
+  if (presenceUsesSlack) {
+    try {
+      slackPresenceProvider = createSlackStatusProvider({ app });
+      console.log(`[presence] model="${presenceModel}" (Slack status enabled)`);
+    } catch (err) {
+      console.warn(
+        `[presence] failed to init Slack status provider: ${err.message}`
+      );
+    }
+  }
+  if (presenceUsesWorkday) {
+    workdayPresenceProvider = workdayProviderFromEnv(process.env);
+    console.log(
+      `[presence] Workday provider: ${workdayPresenceProvider.kind ?? "unknown"}`
+    );
+  }
   const throughputJql = (process.env.JIRA_THROUGHPUT_JQL ?? "").trim();
   const backlogJql = (process.env.JIRA_BACKLOG_JQL ?? "").trim();
   const lifecycleJql = (process.env.JIRA_LIFECYCLE_JQL ?? "").trim();
@@ -370,87 +427,255 @@ export function registerWebRoutes({
       return;
     }
     try {
-      const date = todayInTz();
-      const checkins = listCheckinsForDate(db, date);
-      const checkinByUser = new Map(checkins.map((c) => [c.userId, c]));
-
-      const thirtyDaysAgo = Date.now() - 30 * MS_PER_DAY;
-      const knownIds = listAllKnownUserIds(db, thirtyDaysAgo);
-      const memberIds = Array.from(new Set([...seedMemberIds, ...knownIds]));
-
-      const members = await Promise.all(
-        memberIds.map(async (userId) => {
-          const presence = getPresence(db, userId);
-          const checkin = checkinByUser.get(userId) ?? null;
-          const identity = await loadIdentity(userId);
-          const rosterEntry = findBySlackId(userId);
-          const name = identity?.displayName || userId;
-          return {
-            id: userId,
-            name,
-            avatarUrl: identity?.avatarUrl ?? null,
-            initials: identity?.initials ?? null,
-            title: identity?.title ?? null,
-            role: rosterEntry?.role ?? null,
-            team: rosterEntry?.team ?? null,
-            tags: rosterEntry?.tags ?? [],
-            checkin: checkin
-              ? {
-                  state: checkin.state,
-                  note: checkin.note,
-                  updatedAt: checkin.updatedAt,
-                }
-              : null,
-            presence: presence
-              ? {
-                  state: presence.state,
-                  note: presence.note,
-                  untilTs: presence.until_ts,
-                  updatedAt: presence.updated_at,
-                }
-              : null,
-          };
-        })
-      );
-
-      const seenNames = new Set(members.map((m) => m.name.toLowerCase()));
-      for (const fallback of rosterFallbackMembers()) {
-        if (!seenNames.has(fallback.name.toLowerCase())) {
-          members.push(fallback);
-        }
+      // New presence models route through src/presence/*. Legacy bot
+      // mode keeps the SQLite check-in + rollcall flow exactly as
+      // before so flipping the flag is a zero-risk reversal.
+      if (presenceUsesSlack && slackPresenceProvider) {
+        const payload = await buildTeamPayloadFromProviders();
+        res.json(payload);
+        return;
       }
 
-      members.sort((a, b) => a.name.localeCompare(b.name));
-
-      const rollcalls = listRecentRollcalls(db, 5).map((rc) => {
-        const responses = listRollcallResponses(db, rc.id);
-        const counts = { attending: 0, late: 0, absent: 0 };
-        for (const r of responses) {
-          if (counts[r.status] !== undefined) counts[r.status] += 1;
-        }
-        return {
-          id: rc.id,
-          title: rc.title,
-          createdAt: rc.createdAt,
-          channelId: rc.channelId,
-          counts,
-          totalResponses: responses.length,
-        };
-      });
-
-      res.json({
-        brandName,
-        date,
-        timezone,
-        generatedAt: Date.now(),
-        members,
-        rollcalls,
-      });
+      const payload = await buildTeamPayloadFromBot();
+      res.json(payload);
     } catch (err) {
       console.error("[web] /api/team failed:", err);
       res.status(500).json({ error: "internal" });
     }
   });
+
+  /* ---------------------------------------------------------------- *
+   * Legacy (bot-driven) team payload. Unchanged from the original
+   * implementation — see git history for the rationale behind each
+   * field. Invoked only when PRESENCE_MODEL=bot (the default).
+   * ---------------------------------------------------------------- */
+  async function buildTeamPayloadFromBot() {
+    const date = todayInTz();
+    const checkins = listCheckinsForDate(db, date);
+    const checkinByUser = new Map(checkins.map((c) => [c.userId, c]));
+
+    const thirtyDaysAgo = Date.now() - 30 * MS_PER_DAY;
+    const knownIds = listAllKnownUserIds(db, thirtyDaysAgo);
+    const memberIds = Array.from(new Set([...seedMemberIds, ...knownIds]));
+
+    const members = await Promise.all(
+      memberIds.map(async (userId) => {
+        const presence = getPresence(db, userId);
+        const checkin = checkinByUser.get(userId) ?? null;
+        const identity = await loadIdentity(userId);
+        const rosterEntry = findBySlackId(userId);
+        const name = identity?.displayName || userId;
+        return {
+          id: userId,
+          name,
+          avatarUrl: identity?.avatarUrl ?? null,
+          initials: identity?.initials ?? null,
+          title: identity?.title ?? null,
+          role: rosterEntry?.role ?? null,
+          team: rosterEntry?.team ?? null,
+          tags: rosterEntry?.tags ?? [],
+          checkin: checkin
+            ? {
+                state: checkin.state,
+                note: checkin.note,
+                updatedAt: checkin.updatedAt,
+              }
+            : null,
+          presence: presence
+            ? {
+                state: presence.state,
+                note: presence.note,
+                untilTs: presence.until_ts,
+                updatedAt: presence.updated_at,
+              }
+            : null,
+        };
+      })
+    );
+
+    const seenNames = new Set(members.map((m) => m.name.toLowerCase()));
+    for (const fallback of rosterFallbackMembers()) {
+      if (!seenNames.has(fallback.name.toLowerCase())) {
+        members.push(fallback);
+      }
+    }
+
+    members.sort((a, b) => a.name.localeCompare(b.name));
+
+    const rollcalls = listRecentRollcalls(db, 5).map((rc) => {
+      const responses = listRollcallResponses(db, rc.id);
+      const counts = { attending: 0, late: 0, absent: 0 };
+      for (const r of responses) {
+        if (counts[r.status] !== undefined) counts[r.status] += 1;
+      }
+      return {
+        id: rc.id,
+        title: rc.title,
+        createdAt: rc.createdAt,
+        channelId: rc.channelId,
+        counts,
+        totalResponses: responses.length,
+      };
+    });
+
+    return {
+      brandName,
+      date,
+      timezone,
+      generatedAt: Date.now(),
+      model: "bot",
+      models: { bot: true, slack: false, workday: false },
+      members,
+      rollcalls,
+    };
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Provider-driven team payload (PRESENCE_MODEL=slack[+workday]).
+   *
+   * Shape stays identical to the bot payload so the UI doesn't need a
+   * second code path, PLUS two new fields on each member:
+   *
+   *   slackStatus: {
+   *     bucket,           // BUCKETS.*
+   *     reason,           // human-readable provenance
+   *     line,             // formatted "emoji text" or null
+   *     emoji, text,
+   *     expiration,       // UNIX seconds
+   *     autoPresence,     // "active" | "away" | null
+   *     source,           // "slack" | "workday" | "none"
+   *   }
+   *   workday: { type, through } | null
+   *
+   * The `checkin`/`presence` fields are preserved (set to null when
+   * running off providers) so the UI's existing code paths degrade to
+   * "use the new slackStatus field instead" without extra branching.
+   * ---------------------------------------------------------------- */
+  async function buildTeamPayloadFromProviders() {
+    const date = todayInTz();
+
+    // Seed: start from the explicit roster (source of truth) plus any
+    // TEAM_MEMBER_IDS override. We intentionally do NOT pull from the
+    // "recently interacted with the bot" table — in slack mode we
+    // want the roster to be complete from day one, not dependent on
+    // past bot use.
+    const rosterIds = TEAM.flatMap((m) => m.slackIds ?? []);
+    const memberIds = Array.from(
+      new Set([...seedMemberIds, ...rosterIds].filter(Boolean))
+    );
+
+    // Build identity first so we have email (needed for Workday CSV
+    // matching) and display names in one place.
+    const identities = await Promise.all(memberIds.map((u) => loadIdentity(u)));
+    const identityById = new Map();
+    const emailByUserId = new Map();
+    identities.forEach((id, i) => {
+      const uid = memberIds[i];
+      if (id) {
+        identityById.set(uid, id);
+        if (id.email) emailByUserId.set(uid, id.email);
+      }
+    });
+
+    const presenceByUser = slackPresenceProvider
+      ? await resolvePresence({
+          userIds: memberIds,
+          slackProvider: slackPresenceProvider,
+          workdayProvider: workdayPresenceProvider ?? undefined,
+          emailByUserId,
+        })
+      : new Map();
+
+    const members = memberIds.map((userId) => {
+      const identity = identityById.get(userId) ?? null;
+      const rosterEntry = findBySlackId(userId);
+      const presence = presenceByUser.get(userId) ?? null;
+      const name = identity?.displayName || rosterEntry?.displayName || userId;
+      return {
+        id: userId,
+        name,
+        avatarUrl: identity?.avatarUrl ?? rosterEntry?.avatarUrl ?? null,
+        initials:
+          identity?.initials ?? initialsFor(rosterEntry?.fullName ?? name),
+        title: identity?.title ?? rosterEntry?.title ?? null,
+        role: rosterEntry?.role ?? null,
+        team: rosterEntry?.team ?? null,
+        tags: rosterEntry?.tags ?? [],
+        // Preserve legacy shape so the existing UI renderers keep working.
+        checkin: null,
+        presence: null,
+        // New presence fields — the UI uses these when they're present.
+        slackStatus: presence
+          ? {
+              bucket: presence.bucket,
+              reason: presence.reason,
+              line: presence.statusLine,
+              emoji: presence.statusEmoji,
+              text: presence.statusText,
+              expiration: presence.statusExpiration,
+              autoPresence: presence.autoPresence,
+              source: presence.source,
+            }
+          : {
+              bucket: BUCKETS.UNKNOWN,
+              reason: "provider unavailable",
+              line: null,
+              emoji: "",
+              text: "",
+              expiration: 0,
+              autoPresence: null,
+              source: "none",
+            },
+        workday:
+          presence && presence.source === "workday"
+            ? { type: presence.vacationType, through: presence.through }
+            : null,
+      };
+    });
+
+    // Any roster members who aren't yet mapped to a live Slack id get
+    // appended as read-only rows (no status) so the card list stays
+    // complete.
+    const seenNames = new Set(members.map((m) => m.name.toLowerCase()));
+    for (const fallback of rosterFallbackMembers()) {
+      if (!seenNames.has(fallback.name.toLowerCase())) {
+        members.push({
+          ...fallback,
+          slackStatus: {
+            bucket: BUCKETS.UNKNOWN,
+            reason: "not mapped to a Slack user id yet",
+            line: null,
+            emoji: "",
+            text: "",
+            expiration: 0,
+            autoPresence: null,
+            source: "none",
+          },
+          workday: null,
+        });
+      }
+    }
+
+    members.sort((a, b) => a.name.localeCompare(b.name));
+
+    return {
+      brandName,
+      date,
+      timezone,
+      generatedAt: Date.now(),
+      model: presenceModel,
+      models: {
+        bot: false,
+        slack: presenceUsesSlack,
+        workday: presenceUsesWorkday,
+      },
+      members,
+      // Rollcalls are a bot-mode concept; empty in provider mode so
+      // the UI can cleanly hide that section when the new model is
+      // active.
+      rollcalls: [],
+    };
+  }
 
   const identityCache = new Map();
   const IDENTITY_TTL_MS = 10 * 60 * 1000;

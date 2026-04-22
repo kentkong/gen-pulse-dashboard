@@ -2033,6 +2033,69 @@
         color: var(--muted-fg);
         border-color: var(--border);
       }
+      /* Indigo pill — used for "In meeting" bucket in provider mode.
+         Sits between blue (WFH) and purple so it reads as
+         "focused / do-not-disturb" without colliding with Slack red. */
+      .sn-pill-indigo {
+        background: color-mix(in srgb, #6366f1 15%, transparent);
+        color: #4338ca;
+        border-color: color-mix(in srgb, #6366f1 35%, transparent);
+      }
+      html.dark .sn-pill-indigo {
+        color: #a5b4fc;
+        background: color-mix(in srgb, #6366f1 18%, transparent);
+        border-color: color-mix(in srgb, #6366f1 50%, transparent);
+      }
+
+      /* Stacks the bucket pill + source chip vertically in the
+         "Today" cell. On mobile the whole thing collapses under the
+         member name via the existing data-label cascade. */
+      .sn-status-stack {
+        display: inline-flex;
+        flex-direction: column;
+        gap: 0.25rem;
+        align-items: flex-start;
+      }
+
+      /* Source chip — very small badge showing which provider
+         (Slack / Workday) sourced this member's presence. Hovering
+         shows the classifier's reason via the title attribute. */
+      .sn-src {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.05rem 0.45rem;
+        border-radius: 9999px;
+        font-size: 0.625rem;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        text-transform: lowercase;
+        border: 1px solid var(--border);
+        background: var(--muted-bg);
+        color: var(--muted-fg);
+        white-space: nowrap;
+      }
+      .sn-src-slack {
+        background: color-mix(in srgb, #4a154b 10%, transparent);
+        color: #4a154b;
+        border-color: color-mix(in srgb, #4a154b 30%, transparent);
+      }
+      html.dark .sn-src-slack {
+        background: color-mix(in srgb, #e8b9ec 18%, transparent);
+        color: #e8b9ec;
+        border-color: color-mix(in srgb, #e8b9ec 35%, transparent);
+      }
+      .sn-src-workday {
+        background: color-mix(in srgb, #0400f5 12%, transparent);
+        color: #0400f5;
+        border-color: color-mix(in srgb, #0400f5 35%, transparent);
+      }
+      html.dark .sn-src-workday {
+        background: color-mix(in srgb, #8fa8ff 18%, transparent);
+        color: #bfd0ff;
+        border-color: color-mix(in srgb, #8fa8ff 35%, transparent);
+      }
+      .sn-src-muted { /* default styling already applied above */ }
 
       /* Row tints (subtle, left-border accent in Slack style) */
       .tone-amber td:first-child {
@@ -4439,7 +4502,7 @@
         <h2 class="sn-section-title">Team</h2>
         <div class="sn-card mt-3 overflow-x-auto">
           <table class="sn-table text-sm">
-            <thead>
+            <thead id="members-thead">
               <tr>
                 <th>Member</th>
                 <th>Today</th>
@@ -4452,6 +4515,9 @@
             <tbody id="members"></tbody>
           </table>
         </div>
+        <p id="members-hint" class="sn-muted mt-3 text-xs hidden">
+          Presence is read from your <strong>Slack status</strong> (and Workday for vacations). Update your status in Slack to change what shows here.
+        </p>
         <p id="members-empty" class="sn-muted mt-4 hidden text-sm">
           No check-ins yet today. Ask the team to try
           <code class="sn-code">/teampresence checkin in</code>.
@@ -4529,6 +4595,62 @@
       const EXCEPTION_CHECKINS = new Set(["sick", "pto", "late"]);
       const EXCEPTION_PRESENCE = new Set(["away", "ooo"]);
 
+      /* ------------------------------------------------------------------ *
+       * PRESENCE_MODEL = "slack" / "slack+workday" bucket tables.
+       *
+       * When the new provider-driven model is active, each member
+       * payload carries `slackStatus.bucket` — one of six values below.
+       * These tables drive the pill rendered on the member row + the
+       * KPI strip at the top of Team Presence. We keep them SEPARATE
+       * from the legacy CHECKIN/PRESENCE tables so flipping
+       * PRESENCE_MODEL back to "bot" is a zero-risk reversal.
+       * ------------------------------------------------------------------ */
+      const BUCKET_LABELS = {
+        available: "Available",
+        wfh: "WFH",
+        meeting: "In meeting",
+        away: "Away",
+        vacation: "Vacation",
+        unknown: "No status",
+      };
+      const BUCKET_PILL = {
+        available: "sn-pill sn-pill-green",
+        wfh: "sn-pill sn-pill-blue",
+        meeting: "sn-pill sn-pill-indigo",
+        away: "sn-pill sn-pill-yellow",
+        vacation: "sn-pill sn-pill-blue",
+        unknown: "sn-pill sn-pill-muted",
+      };
+      const BUCKET_TONES = {
+        available: "",
+        wfh: "",
+        meeting: "tone-blue",
+        away: "tone-amber",
+        vacation: "tone-blue",
+        unknown: "tone-muted",
+      };
+      // Maps a bucket → the KPI column it counts towards. Keeping the
+      // KPI strip backwards-compatible with bot mode means we fold
+      // "available" into the "in office" column and "vacation" into
+      // "out" — CSM teams only care about at-a-glance headcount, not
+      // which provider reported it.
+      const BUCKET_TO_KPI = {
+        available: "in",
+        wfh: "wfh",
+        meeting: "in",
+        away: "none",
+        vacation: "out",
+        unknown: "none",
+      };
+      // Source chip styling for the "where did this data come from?"
+      // pill next to each member's presence pill.
+      const SOURCE_CHIP = {
+        slack: { label: "via Slack", cls: "sn-src sn-src-slack" },
+        workday: { label: "via Workday", cls: "sn-src sn-src-workday" },
+        none: { label: "no data", cls: "sn-src sn-src-muted" },
+        bot: { label: "via bot", cls: "sn-src sn-src-muted" },
+      };
+
       const API_KEY = new URLSearchParams(location.search).get("key");
       const apiUrl = (p) => {
         const base = p ?? "/api/team";
@@ -4563,6 +4685,11 @@
       }
 
       function rowTone(member) {
+        // Provider mode wins when a slackStatus is present.
+        if (member.slackStatus) {
+          const t = BUCKET_TONES[member.slackStatus.bucket];
+          return t ?? "";
+        }
         if (!member.checkin && !member.presence) return "tone-muted";
         const ci = member.checkin?.state;
         if (ci && CHECKIN_TONES[ci]) return CHECKIN_TONES[ci];
@@ -4572,6 +4699,9 @@
       }
 
       function classifyBucket(member) {
+        if (member.slackStatus) {
+          return BUCKET_TO_KPI[member.slackStatus.bucket] ?? "other";
+        }
         const ci = member.checkin?.state;
         if (ci === "in") return "in";
         if (ci === "wfh") return "wfh";
@@ -4651,7 +4781,53 @@
         return `<span class="sn-team-pill ${variant}">${esc(t)}</span>`;
       }
 
-      function renderMembers(members) {
+      /**
+       * Toggle model-specific UI based on the payload's `model` field.
+       * Called once per /api/team refresh. Idempotent — safe to call
+       * on every fetch.
+       */
+      function applyPresenceModel(data) {
+        const providerMode =
+          data?.model && data.model !== "bot" && data.models?.slack;
+        const thead = document.getElementById("members-thead");
+        if (thead) {
+          thead.innerHTML = providerMode
+            ? `<tr><th>Member</th><th>Today</th><th>Slack status</th><th>Until</th></tr>`
+            : `<tr><th>Member</th><th>Today</th><th>Presence</th><th>Note</th><th>Until</th><th>Updated</th></tr>`;
+        }
+        const hint = document.getElementById("members-hint");
+        if (hint) hint.classList.toggle("hidden", !providerMode);
+
+        // Relabel the "No check-in yet" KPI in provider mode — in the
+        // Slack/Workday model, "no status" is a valid state we still
+        // want to surface as its own tile.
+        const noneLbl = document.querySelector(
+          "#widget-team-presence + section .sn-card:nth-child(4) .sn-kpi-label"
+        );
+        if (noneLbl) {
+          noneLbl.textContent = providerMode ? "No Slack status" : "No check-in yet";
+        }
+
+        // Hide the "Recent roll calls" section entirely in provider
+        // mode — rollcalls are a bot-mode concept, the backend sends
+        // an empty array so there's nothing to show anyway.
+        const rollcallSection = document
+          .getElementById("rollcalls")
+          ?.closest("section");
+        if (rollcallSection) {
+          rollcallSection.classList.toggle("hidden", providerMode);
+        }
+
+        // Empty-state copy — point users at Slack when the bot is off.
+        const empty = document.getElementById("members-empty");
+        if (empty) {
+          empty.innerHTML = providerMode
+            ? `No members have a Slack status yet — set one in Slack and it will appear here within ~2 minutes.`
+            : `No check-ins yet today. Ask the team to try <code class="sn-code">/teampresence checkin in</code>.`;
+        }
+      }
+
+      function renderMembers(members, data) {
         const tbody = document.getElementById("members");
         const empty = document.getElementById("members-empty");
         if (!members.length) {
@@ -4663,6 +4839,65 @@
         tbody.innerHTML = members
           .map((m) => {
             const tone = rowTone(m);
+            const subtitle = m.role || m.title || "";
+            const subtitleLine = subtitle
+              ? `<span class="sn-member-title" title="${esc(subtitle)}">${esc(subtitle)}</span>`
+              : "";
+            const teamPill = teamPillHtml(m.team);
+
+            // Branch: provider mode vs legacy bot mode. When
+            // `slackStatus` is present we render the new six-bucket
+            // pill + Slack status line + source chip (Slack / Workday
+            // / Roster). Otherwise we fall back to the original bot
+            // check-in + presence pair so PRESENCE_MODEL=bot looks
+            // identical to day one.
+            if (m.slackStatus) {
+              const st = m.slackStatus;
+              const label = BUCKET_LABELS[st.bucket] ?? st.bucket;
+              const pillCls = BUCKET_PILL[st.bucket] ?? "sn-pill sn-pill-muted";
+              const src =
+                SOURCE_CHIP[st.source] ?? SOURCE_CHIP.none;
+              const bucketHtml = `<span class="${pillCls}" title="${esc(st.reason ?? "")}">${esc(label)}</span>`;
+              const srcHtml = `<span class="${src.cls}" title="${esc(st.reason ?? "")}">${esc(src.label)}</span>`;
+
+              // Status line: raw Slack "emoji + text" when set, or
+              // the Workday vacation reason ("PTO through Friday")
+              // when Workday is authoritative.
+              const statusLine = st.line
+                ? esc(st.line)
+                : m.workday
+                ? `${esc(m.workday.type || "PTO")} through ${esc(m.workday.through)}`
+                : (m.slackStatus.bucket === "unknown"
+                    ? "no Slack status set"
+                    : "—");
+
+              // Until: Slack status_expiration OR Workday.through
+              const until = m.workday?.through
+                ? esc(m.workday.through)
+                : st.expiration
+                ? fmtDateTime(st.expiration * 1000)
+                : "—";
+              return `
+                <tr class="${tone}">
+                  <td data-label="Member">
+                    <div class="sn-member">
+                      ${memberAvatarHtml(m)}
+                      <div class="min-w-0">
+                        <div class="sn-member-name-row">
+                          <span class="sn-member-name">${esc(m.name)}</span>
+                          ${teamPill}
+                        </div>
+                        ${subtitleLine}
+                      </div>
+                    </div>
+                  </td>
+                  <td data-label="Today"><div class="sn-status-stack">${bucketHtml}${srcHtml}</div></td>
+                  <td class="sn-muted" data-label="Status">${statusLine}</td>
+                  <td data-label="Until">${until}</td>
+                </tr>`;
+            }
+
+            // Legacy bot-mode rendering (unchanged).
             const ciState = m.checkin?.state;
             const ciHtml = ciState
               ? `<span class="${CHECKIN_PILL[ciState] ?? "sn-pill sn-pill-muted"}">${esc(
@@ -4682,11 +4917,6 @@
             const updated = fmtTime(
               m.presence?.updatedAt ?? m.checkin?.updatedAt
             );
-            const subtitle = m.role || m.title || "";
-            const subtitleLine = subtitle
-              ? `<span class="sn-member-title" title="${esc(subtitle)}">${esc(subtitle)}</span>`
-              : "";
-            const teamPill = teamPillHtml(m.team);
             return `
               <tr class="${tone}">
                 <td data-label="Member">
@@ -4718,6 +4948,25 @@
         const empty = document.getElementById("exceptions-empty");
         const items = [];
         for (const m of members) {
+          // Provider mode: flag anything that isn't Available / WFH /
+          // Unknown. Unknown is intentionally NOT an exception — "no
+          // status" is the default, it clutters the list otherwise.
+          if (m.slackStatus) {
+            const b = m.slackStatus.bucket;
+            if (b === "vacation" || b === "away" || b === "meeting") {
+              items.push({
+                name: m.name,
+                state:
+                  b === "vacation" ? (m.workday ? `${m.workday.type || "PTO"}` : "Vacation")
+                  : b === "meeting" ? "In meeting"
+                  : "Away",
+                note: m.slackStatus.text || m.slackStatus.reason,
+                ts: m.slackStatus.updatedAt ?? Date.now(),
+                source: m.slackStatus.source,
+              });
+            }
+            continue;
+          }
           const ci = m.checkin?.state;
           if (ci && EXCEPTION_CHECKINS.has(ci)) {
             items.push({
@@ -6121,10 +6370,11 @@
           }
           const data = await res.json();
           renderHeader(data);
+          applyPresenceModel(data);
           renderKpis(data.members);
-          renderMembers(data.members);
+          renderMembers(data.members, data);
           renderExceptions(data.members);
-          renderRollcalls(data.rollcalls);
+          renderRollcalls(data.rollcalls ?? []);
         } catch (err) {
           document.getElementById("subhead").textContent =
             "Failed to load: " + (err?.message ?? err);

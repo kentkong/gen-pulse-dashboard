@@ -112,6 +112,40 @@ app.command("/teampresence", async ({ command, ack, respond, client }) => {
   const parts = tokenizeCommandText(command.text ?? "");
   const sub = (parts[0] ?? "help").toLowerCase();
 
+  /* ------------------------------------------------------------------ *
+   * Deprecation guard.
+   *
+   * When PRESENCE_MODEL is anything other than "bot", the dashboard
+   * reads presence from Slack status (+ Workday) via src/presence/*.
+   * In that world, the bot's check-in / rollcall commands are no
+   * longer the source of truth — running them would silently diverge
+   * from what the dashboard shows and undermine the "accuracy is the
+   * most important thing" promise we made to CSM teams.
+   *
+   * Rather than delete the handlers (which would break rollback),
+   * we short-circuit them here with a helpful message that points
+   * users at the new, simpler workflow. Flipping the env var back to
+   * `bot` restores the original behaviour instantly.
+   * ------------------------------------------------------------------ */
+  const presenceModel = (process.env.PRESENCE_MODEL ?? "bot")
+    .trim()
+    .toLowerCase();
+  if (presenceModel !== "bot") {
+    await respond({
+      response_type: "ephemeral",
+      text:
+        `*Team Presence is now driven by your Slack status* (model: \`${presenceModel}\`).\n` +
+        "You no longer need `/teampresence` commands — just set a Slack status and the dashboard picks it up within ~2 minutes:\n" +
+        "• 🏖️ *On vacation* — shows Vacation (confirmed by Workday when available)\n" +
+        "• 🏠 *Working from home* — shows WFH\n" +
+        "• 📅 *In a meeting* — shows Meeting\n" +
+        "• ☕ *Lunch / BRB* — shows Away\n" +
+        "• _no status + Slack active_ — shows Available\n" +
+        "_Admins: flip `PRESENCE_MODEL=bot` in the environment to restore the old commands._",
+    });
+    return;
+  }
+
   if (sub === "help" || sub === "") {
     await respond({
       response_type: "ephemeral",

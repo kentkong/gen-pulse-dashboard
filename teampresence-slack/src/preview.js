@@ -169,86 +169,137 @@ function withDemoFilter(id, payload) {
   }
 }
 
+/**
+ * Build a demo /api/team payload that mirrors the production
+ * PRESENCE_MODEL=slack+workday shape. Every member carries a
+ * plausible Slack status + bucket so the new UI source chip, status
+ * line, and Workday vacation overlay are all exercised offline.
+ *
+ * Each seed below spells out the raw Slack profile it would have
+ * come from — status_emoji, status_text, auto-presence — plus the
+ * bucket+reason the classifier would have produced. Keeping both
+ * gives the demo the same "trace the data back to its source"
+ * accuracy that CSM teams asked for.
+ */
 function buildDemoPayload() {
   const date = todayInTz();
 
-  // Seed a visually interesting board by attaching a plausible state to
-  // each roster slug. Keeps real names + headshots in preview mode.
   const seeds = {
     "iryna-botulinska": {
       id: "U001",
-      checkin: { state: "in", note: null, updatedAt: minsAgo(125) },
-      presence: {
-        state: "available",
-        note: null,
-        untilTs: null,
-        updatedAt: minsAgo(125),
+      slackStatus: {
+        bucket: "available",
+        reason: "Slack auto-presence = active",
+        line: null,
+        emoji: "",
+        text: "",
+        expiration: 0,
+        autoPresence: "active",
+        source: "slack",
       },
+      workday: null,
     },
     "victor-shapochkin": {
       id: "U002",
-      checkin: { state: "wfh", note: "Focus day on Q2 launch", updatedAt: minsAgo(95) },
-      presence: {
-        state: "available",
-        note: "WFH — Focus day on Q2 launch",
-        untilTs: null,
-        updatedAt: minsAgo(95),
+      slackStatus: {
+        bucket: "wfh",
+        reason: 'text match "focus"',
+        line: "🏠 WFH — Focus day on Q2 launch",
+        emoji: ":house:",
+        text: "WFH — Focus day on Q2 launch",
+        expiration: 0,
+        autoPresence: "active",
+        source: "slack",
       },
+      workday: null,
     },
     "petr-studeny": {
       id: "U003",
-      checkin: { state: "late", note: "Train delay", updatedAt: minsAgo(40) },
-      presence: {
-        state: "away",
-        note: "Running late — Train delay",
-        untilTs: hoursAhead(1),
-        updatedAt: minsAgo(40),
+      slackStatus: {
+        bucket: "away",
+        reason: 'text match "train"',
+        line: "🚆 Running late — train delay",
+        emoji: ":train:",
+        text: "Running late — train delay",
+        expiration: Math.floor(hoursAhead(1) / 1000),
+        autoPresence: "away",
+        source: "slack",
       },
+      workday: null,
     },
     "jan-bartoncik": {
       id: "U004",
-      checkin: { state: "sick", note: "Flu", updatedAt: minsAgo(310) },
-      presence: {
-        state: "ooo",
-        note: "Flu",
-        untilTs: null,
-        updatedAt: minsAgo(310),
+      slackStatus: {
+        bucket: "vacation",
+        reason: "emoji :face_with_thermometer: (sick/family)",
+        line: "🤒 Out sick",
+        emoji: ":face_with_thermometer:",
+        text: "Out sick",
+        expiration: 0,
+        autoPresence: "away",
+        source: "slack",
       },
+      workday: null,
     },
     "kristyna-simkova": {
+      // Workday overrides Slack: even though the card also shows
+      // her Slack status (🏖️ Ibiza), the bucket is forced to
+      // vacation by the Workday PTO entry. This is the exact
+      // priority rule resolvePresence() enforces in production.
       id: "U005",
-      checkin: { state: "pto", note: "Annual leave", updatedAt: minsAgo(1440) },
-      presence: {
-        state: "ooo",
-        note: "Annual leave",
-        untilTs: null,
-        updatedAt: minsAgo(1440),
+      slackStatus: {
+        bucket: "vacation",
+        reason: "Workday PTO through 2026-04-25",
+        line: "🏖️ Ibiza — back Monday",
+        emoji: ":beach_with_umbrella:",
+        text: "Ibiza — back Monday",
+        expiration: 0,
+        autoPresence: "away",
+        source: "workday",
       },
+      workday: { type: "PTO", through: "2026-04-25" },
     },
     "daniel-zabensky": {
       id: "U006",
-      checkin: { state: "in", note: null, updatedAt: minsAgo(60) },
-      presence: {
-        state: "away",
-        note: "In meeting: Campaign review",
-        untilTs: hoursAhead(0.5),
-        updatedAt: minsAgo(10),
+      slackStatus: {
+        bucket: "meeting",
+        reason: "emoji :spiral_calendar_pad:",
+        line: "📅 Campaign review — 30m",
+        emoji: ":spiral_calendar_pad:",
+        text: "Campaign review — 30m",
+        expiration: Math.floor(hoursAhead(0.5) / 1000),
+        autoPresence: "active",
+        source: "slack",
       },
+      workday: null,
     },
     "yanina-scholz": {
       id: "U007",
-      checkin: null,
-      presence: null,
+      slackStatus: {
+        bucket: "unknown",
+        reason: "no status or presence",
+        line: null,
+        emoji: "",
+        text: "",
+        expiration: 0,
+        autoPresence: null,
+        source: "slack",
+      },
+      workday: null,
     },
     "volodymyr-yatsenko": {
       id: "U008",
-      checkin: { state: "wfh", note: "CS escalations queue", updatedAt: minsAgo(210) },
-      presence: {
-        state: "available",
-        note: "WFH — CS escalations queue",
-        untilTs: null,
-        updatedAt: minsAgo(210),
+      slackStatus: {
+        bucket: "wfh",
+        reason: "emoji :house_with_garden:",
+        line: "🏡 WFH — CS escalations queue",
+        emoji: ":house_with_garden:",
+        text: "WFH — CS escalations queue",
+        expiration: 0,
+        autoPresence: "active",
+        source: "slack",
       },
+      workday: null,
     },
   };
 
@@ -256,32 +307,19 @@ function buildDemoPayload() {
     .map((m) => rosterMember(m.slug, seeds[m.slug] ?? { id: m.slug }))
     .filter(Boolean);
 
-  const rollcalls = [
-    {
-      id: "a1b2c3d4e5f6",
-      title: "Monday stand-up",
-      createdAt: minsAgo(180),
-      channelId: "C100",
-      counts: { attending: 6, late: 1, absent: 1 },
-      totalResponses: 8,
-    },
-    {
-      id: "b7c8d9e0f1a2",
-      title: "Campaign review",
-      createdAt: minsAgo(45),
-      channelId: "C100",
-      counts: { attending: 4, late: 1, absent: 0 },
-      totalResponses: 5,
-    },
-  ];
-
+  // preview.js intentionally emits NO rollcalls — in the new model
+  // (slack+workday) rollcalls are a bot-mode concept and the UI
+  // hides the section when the list is empty. Production web.js
+  // follows the same convention.
   return {
     brandName: BRAND_NAME,
     date,
     timezone: TEAM_TIMEZONE,
     generatedAt: Date.now(),
+    model: "slack+workday",
+    models: { bot: false, slack: true, workday: true },
     members,
-    rollcalls,
+    rollcalls: [],
     preview: true,
   };
 }
