@@ -21,6 +21,7 @@ import {
   buildTopPriorityTickets,
   buildSprintBacklog,
   buildReopenRate,
+  buildThroughputLeaderboard,
 } from "./reports.js";
 import { jiraFromEnv } from "./jira.js";
 import { TEAM, findBySlackId, initialsFor } from "./team.js";
@@ -117,6 +118,17 @@ export function registerWebRoutes({
       : ["Done", "Closed", "Resolved"];
   const reopenWindowDays =
     Number(process.env.JIRA_REOPEN_WINDOW_DAYS ?? 30) || 30;
+
+  // Team throughput leaderboard: shares the throughput JQL so the
+  // "last week total" on the leaderboard agrees with the big
+  // throughput KPI above it. Limit is tunable for teams with more
+  // than ~6 resolvers per week.
+  const leaderboardJql =
+    (process.env.JIRA_LEADERBOARD_JQL ?? "").trim() ||
+    throughputJql ||
+    backlogJql;
+  const leaderboardLimit =
+    Number(process.env.JIRA_LEADERBOARD_LIMIT ?? 6) || 6;
 
   const VERY_SHORT_TTL_MS = 90 * 1000;
   const SHORT_TTL_MS = 5 * 60 * 1000;
@@ -240,6 +252,19 @@ export function registerWebRoutes({
         jql,
         doneStatuses: reopenDoneStatuses,
         windowDays: reopenWindowDays,
+        timezone,
+      }),
+  });
+
+  const getThroughputLeaderboard = makeCachedBuilder({
+    ttlMs: MEDIUM_TTL_MS,
+    reasonNoJql: "JIRA_LEADERBOARD_JQL / JIRA_THROUGHPUT_JQL not set",
+    getJql: () => leaderboardJql,
+    buildFn: ({ jira, jql }) =>
+      buildThroughputLeaderboard({
+        jira,
+        jql,
+        topN: leaderboardLimit,
         timezone,
       }),
   });
@@ -540,6 +565,7 @@ export function registerWebRoutes({
   registerWidgetRoute("sprint-backlog", getSprintBacklog);
   registerWidgetRoute("reopen-rate", getReopenRate);
   registerWidgetRoute("top-priority-tickets", getTopPriority);
+  registerWidgetRoute("throughput-leaderboard", getThroughputLeaderboard);
   registerWidgetRoute("kanban-board", getKanban);
 
   console.log(

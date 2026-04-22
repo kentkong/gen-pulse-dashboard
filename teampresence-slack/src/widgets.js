@@ -79,6 +79,14 @@ export const WIDGETS = [
     refreshSeconds: 5 * 60,
   },
   {
+    id: "throughput-leaderboard",
+    title: "Norton Email — Team Throughput Leaderboard",
+    size: "3x1",
+    rolesAllowed: ["any"],
+    dataEndpoint: "/api/widgets/throughput-leaderboard",
+    refreshSeconds: 15 * 60,
+  },
+  {
     id: "kanban-board",
     title: "Norton Email — Kanban Snapshot",
     size: "3x1",

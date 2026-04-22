@@ -919,6 +919,161 @@ export async function buildReopenRate({
   };
 }
 
+/**
+ * Team Throughput Leaderboard — who resolved the most tickets in the
+ * window, with a per-person weekly trend sparkline.
+ *
+ * Data model intentionally mirrors the Weekly Throughput widget so the
+ * two sit next to each other naturally:
+ *   - weekly totals over the last `weeksOfTrend` completed weeks
+ *     (oldest → newest), which client-side turns into a sparkline
+ *   - last-week total, previous-week total, and a delta
+ *   - sorted by last-week total desc
+ *
+ * One Jira search call over the whole window; all bucketing happens
+ * in-process so we don't hammer Jira once per person.
+ */
+export async function buildThroughputLeaderboard({
+  jira,
+  jql,
+  timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
+  now = new Date(),
+  weeksOfTrend = WEEKS_OF_TREND,
+  topN = 6,
+  hardCap = 2000,
+}) {
+  if (!jira) throw new Error("buildThroughputLeaderboard: jira client required");
+  if (!jql) throw new Error("buildThroughputLeaderboard: jql required");
+
+  // Week boundaries — same arithmetic as buildWeeklyThroughput so the
+  // "last week" totals on both widgets agree.
+  const thisMonday = mondayOfWeek(now, timezone);
+  const lastMonday = addDays(thisMonday, -7);
+  const windowStart = addDays(lastMonday, -7 * (weeksOfTrend - 1));
+  const lastSunday23 = addDays(lastMonday, 7);
+
+  const searchJql =
+    `(${jql}) AND resolved >= "${windowStart}"` +
+    ` AND resolved < "${lastSunday23}"`;
+
+  const issues = await jira.searchAll(searchJql, {
+    fields: ["assignee", "resolutiondate"],
+    pageSize: 100,
+    hardCap,
+  });
+
+  // Build the ordered list of week-start timestamps (oldest first)
+  // and a lookup from "YYYY-MM-DD" (Monday) to index.
+  const weekStarts = [];
+  const weekLabels = [];
+  const weekIndexByDate = new Map();
+  for (let i = 0; i < weeksOfTrend; i++) {
+    const from = addDays(windowStart, 7 * i);
+    weekStarts.push(from);
+    weekLabels.push(
+      isoWeekLabel(new Date(`${from.split(" ")[0]}T00:00:00Z`))
+    );
+    weekIndexByDate.set(from.split(" ")[0], i);
+  }
+
+  // Index each ticket into (assignee, week bucket).
+  const byPerson = new Map();
+  const ensurePerson = (key, display, avatar) => {
+    if (!byPerson.has(key)) {
+      byPerson.set(key, {
+        key,
+        name: display,
+        avatarUrl: avatar ?? null,
+        weekly: new Array(weeksOfTrend).fill(0),
+        total: 0,
+      });
+    }
+    return byPerson.get(key);
+  };
+
+  for (const iss of issues) {
+    const assignee = iss.fields?.assignee;
+    const resolved = iss.fields?.resolutiondate;
+    if (!resolved) continue;
+
+    // Find which week bucket this resolution falls into. We walk the
+    // week starts instead of computing an ISO week directly — avoids
+    // off-by-one noise at the Mon boundary in the team timezone.
+    const resolvedMs = Date.parse(resolved);
+    if (!Number.isFinite(resolvedMs)) continue;
+    let bucket = -1;
+    for (let i = 0; i < weekStarts.length; i++) {
+      const fromMs = Date.parse(
+        `${weekStarts[i].split(" ")[0]}T00:00:00Z`
+      );
+      const nextStart =
+        i + 1 < weekStarts.length
+          ? Date.parse(`${weekStarts[i + 1].split(" ")[0]}T00:00:00Z`)
+          : Date.parse(`${lastSunday23.split(" ")[0]}T00:00:00Z`);
+      if (resolvedMs >= fromMs && resolvedMs < nextStart) {
+        bucket = i;
+        break;
+      }
+    }
+    if (bucket < 0) continue;
+
+    const key =
+      assignee?.key ?? assignee?.name ?? assignee?.accountId ?? "__unassigned";
+    const display = assignee?.displayName ?? "Unassigned";
+    const avatar =
+      assignee?.avatarUrls?.["48x48"] ??
+      assignee?.avatarUrls?.["32x32"] ??
+      null;
+    const person = ensurePerson(key, display, avatar);
+    person.weekly[bucket] += 1;
+    person.total += 1;
+  }
+
+  const lastIdx = weeksOfTrend - 1;
+  const prevIdx = weeksOfTrend - 2;
+
+  const rows = Array.from(byPerson.values())
+    .map((p) => {
+      const lastWeek = p.weekly[lastIdx] ?? 0;
+      const prevWeek = p.weekly[prevIdx] ?? 0;
+      return {
+        ...p,
+        lastWeek,
+        prevWeek,
+        deltaAbs: lastWeek - prevWeek,
+      };
+    })
+    .filter((p) => p.total > 0)
+    .sort(
+      (a, b) =>
+        b.lastWeek - a.lastWeek ||
+        b.total - a.total ||
+        a.name.localeCompare(b.name)
+    );
+
+  const topRows = rows.slice(0, topN);
+  const totalResolvedWindow = rows.reduce((a, r) => a + r.total, 0);
+  const totalLastWeek = rows.reduce((a, r) => a + r.lastWeek, 0);
+
+  return {
+    weekLabel: isoWeekLabel(
+      new Date(`${lastMonday.split(" ")[0]}T00:00:00Z`)
+    ),
+    weekRange: prettyWeekRange(lastMonday, addDays(lastMonday, 6)),
+    weeksOfTrend,
+    weekLabels,
+    topN,
+    rows: topRows,
+    truncated: Math.max(0, rows.length - topN),
+    contributorsCount: rows.length,
+    totalLastWeek,
+    totalResolvedWindow,
+    generatedAt: Date.now(),
+    timezone,
+    jql: searchJql,
+  };
+}
+
 /** Slack-friendly mrkdwn + a quickchart.io sparkline image for the Monday post. */
 export function formatThroughputForSlack(payload, { dashboardUrl } = {}) {
   const arrow =

@@ -457,6 +457,81 @@ function buildDemoSprintBacklog() {
   };
 }
 
+function buildDemoThroughputLeaderboard() {
+  // Weekly resolved counts per person over the last 8 ISO weeks
+  // (oldest → newest). Sparklines are drawn client-side from these.
+  // Ordering is by last-week resolved desc, so the visual hierarchy
+  // matches the medal layout (gold / silver / bronze at the top).
+  const rows = [
+    {
+      key: "iryna.botulinska",
+      name: "Iryna Botulinska",
+      avatarUrl: "/team/iryna-botulinska.png",
+      weekly: [22, 24, 19, 25, 27, 23, 28, 31],
+    },
+    {
+      key: "victor.shapochkin",
+      name: "Victor Shapochkin",
+      avatarUrl: "/team/victor-shapochkin.png",
+      weekly: [18, 17, 20, 23, 19, 22, 26, 27],
+    },
+    {
+      key: "petr.studeny",
+      name: "Petr Studený",
+      avatarUrl: "/team/petr-studeny.png",
+      weekly: [14, 16, 13, 18, 20, 19, 22, 24],
+    },
+    {
+      key: "kristyna.simkova",
+      name: "Kristýna Šimková",
+      avatarUrl: "/team/kristyna-simkova.png",
+      weekly: [11, 12, 15, 14, 13, 16, 17, 19],
+    },
+    {
+      key: "jan.bartoncik",
+      name: "Jan Bartončík",
+      avatarUrl: "/team/jan-bartoncik.png",
+      weekly: [8, 10, 9, 13, 11, 14, 15, 14],
+    },
+    {
+      key: "yanina.scholz",
+      name: "Yanina Scholz",
+      avatarUrl: "/team/yanina-scholz.png",
+      weekly: [6, 7, 5, 9, 8, 10, 11, 9],
+    },
+  ].map((p) => {
+    const total = p.weekly.reduce((a, x) => a + x, 0);
+    const lastWeek = p.weekly[p.weekly.length - 1];
+    const prevWeek = p.weekly[p.weekly.length - 2];
+    return { ...p, total, lastWeek, prevWeek, deltaAbs: lastWeek - prevWeek };
+  });
+
+  const totalLastWeek = rows.reduce((a, r) => a + r.lastWeek, 0);
+  const totalResolvedWindow = rows.reduce((a, r) => a + r.total, 0);
+
+  return {
+    weekLabel: "2026-W15",
+    weekRange: "7 Apr – 13 Apr",
+    weeksOfTrend: 8,
+    weekLabels: [
+      "2026-W08", "2026-W09", "2026-W10", "2026-W11",
+      "2026-W12", "2026-W13", "2026-W14", "2026-W15",
+    ],
+    topN: 6,
+    rows,
+    truncated: 0,
+    contributorsCount: rows.length,
+    totalLastWeek,
+    totalResolvedWindow,
+    generatedAt: Date.now(),
+    timezone: TEAM_TIMEZONE,
+    jql:
+      "(project = EMAIL AND resolution = Done) AND resolved >= " +
+      "\"2026-02-23\" AND resolved < \"2026-04-14\"",
+    preview: true,
+  };
+}
+
 function buildDemoReopenRate() {
   const hoursAgo = (n) => new Date(now - n * 3600 * 1000).toISOString();
   const daysAgo = (n) => new Date(now - n * 86400 * 1000).toISOString();
@@ -889,6 +964,11 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (pathname === "/api/widgets/throughput-leaderboard") {
+    sendJson(res, 200, buildDemoThroughputLeaderboard());
+    return;
+  }
+
   if (pathname === "/api/widgets") {
     sendJson(res, 200, {
       widgets: [
@@ -947,6 +1027,13 @@ const server = http.createServer((req, res) => {
           size: "3x1",
           dataEndpoint: "/api/widgets/top-priority-tickets",
           refreshSeconds: 300,
+        },
+        {
+          id: "throughput-leaderboard",
+          title: "Norton Email — Team Throughput Leaderboard",
+          size: "3x1",
+          dataEndpoint: "/api/widgets/throughput-leaderboard",
+          refreshSeconds: 900,
         },
         {
           id: "kanban-board",

@@ -18,7 +18,15 @@
 
 const AVATAR_BASE = "/team";
 
+// Roster order is the display order everywhere — Team Presence rows,
+// preview seeds, leaderboards. Clustered by function so the eye reads
+// them as groups rather than a random list:
+//
+//   1. Customer Success      — Daniel, Volodymyr
+//   2. Developers / engineers — Iryna, Victor
+//   3. Marketing / targeting  — Yanina, Petr, Kristýna, Jan
 export const TEAM = [
+  // --- Customer Success -------------------------------------------------
   {
     slug: "daniel-zabensky",
     fullName: "Daniel Žabenský",
@@ -30,6 +38,19 @@ export const TEAM = [
     slackIds: [],
     avatarUrl: `${AVATAR_BASE}/daniel-zabensky.png`,
   },
+  {
+    slug: "volodymyr-yatsenko",
+    fullName: "Volodymyr Yatsenko",
+    displayName: "Volodymyr Y.",
+    role: "Front-End Developer",
+    team: "Customer Success",
+    title: "Front-End Developer · Customer Success",
+    tags: ["CS"],
+    slackIds: [],
+    avatarUrl: `${AVATAR_BASE}/volodymyr-yatsenko.png`,
+  },
+
+  // --- Developers / engineers ------------------------------------------
   {
     slug: "iryna-botulinska",
     fullName: "Iryna Botulinska",
@@ -52,17 +73,8 @@ export const TEAM = [
     slackIds: [],
     avatarUrl: `${AVATAR_BASE}/victor-shapochkin.png`,
   },
-  {
-    slug: "petr-studeny",
-    fullName: "Petr Studený",
-    displayName: "Petr S.",
-    role: "Sr. Online Marketing Specialist",
-    team: "Email Marketing",
-    title: "Sr. Online Marketing Specialist · Email Marketing",
-    tags: [],
-    slackIds: [],
-    avatarUrl: `${AVATAR_BASE}/petr-studeny.png`,
-  },
+
+  // --- Marketing / targeting specialists -------------------------------
   {
     slug: "yanina-scholz",
     fullName: "Yanina Scholz",
@@ -75,15 +87,15 @@ export const TEAM = [
     avatarUrl: `${AVATAR_BASE}/yanina-scholz.png`,
   },
   {
-    slug: "volodymyr-yatsenko",
-    fullName: "Volodymyr Yatsenko",
-    displayName: "Volodymyr Y.",
-    role: "Front-End Developer",
-    team: "Customer Success",
-    title: "Front-End Developer · Customer Success",
-    tags: ["CS"],
+    slug: "petr-studeny",
+    fullName: "Petr Studený",
+    displayName: "Petr S.",
+    role: "Sr. Online Marketing Specialist",
+    team: "Email Marketing",
+    title: "Sr. Online Marketing Specialist · Email Marketing",
+    tags: [],
     slackIds: [],
-    avatarUrl: `${AVATAR_BASE}/volodymyr-yatsenko.png`,
+    avatarUrl: `${AVATAR_BASE}/petr-studeny.png`,
   },
   {
     slug: "kristyna-simkova",
