@@ -24,6 +24,14 @@ import {
   buildThroughputLeaderboard,
 } from "./reports.js";
 import { jiraFromEnv } from "./jira.js";
+import {
+  listProjects,
+  defaultProjectKey,
+  resolveJql,
+  resolveProjectScalar,
+  isValidProjectKey,
+  ALL_PROJECT_KEY,
+} from "./jira-projects.js";
 import { TEAM, findBySlackId, initialsFor } from "./team.js";
 import {
   filterForWeeklyThroughput,
@@ -41,8 +49,10 @@ import {
   resolvePresence,
   createSlackStatusProvider,
   workdayProviderFromEnv,
+  listUpcomingAbsences,
   BUCKETS,
 } from "./presence/index.js";
+import { createAuthenticator } from "./auth.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
@@ -57,7 +67,22 @@ function parseCsv(envValue) {
     .filter(Boolean);
 }
 
+/**
+ * Thin compat shim. Existing route handlers call
+ * `authorized(req, dashboardKey)` and expect a boolean; the new
+ * `auth` object is module-scoped and created inside
+ * registerWebRoutes. We keep the two-arg signature for zero-diff
+ * migration, but internally delegate to the authenticator when
+ * available so the future OIDC path is a single-file swap.
+ */
+let currentAuthenticator = null;
 function authorized(req, key) {
+  if (currentAuthenticator) {
+    const { ok } = currentAuthenticator.authenticate(req);
+    return ok;
+  }
+  // Fallback for any path that runs before registerWebRoutes()
+  // has wired the authenticator.
   if (!key) return true;
   const provided =
     req.query?.key ??
@@ -80,6 +105,12 @@ export function registerWebRoutes({
   }
 
   const dashboardKey = (process.env.DASHBOARD_KEY ?? "").trim();
+  // Central authenticator. Today: shared-key. Tomorrow: OIDC/Azure AD
+  // without touching route handlers (see USER-ACCOUNT-PLAN.md).
+  currentAuthenticator = createAuthenticator({
+    strategy: process.env.AUTH_STRATEGY ?? "shared-key",
+    sharedKey: dashboardKey,
+  });
   const seedMemberIds = parseCsv(process.env.TEAM_MEMBER_IDS);
   const rolesByTeam = loadRolesFromEnv();
 
@@ -133,230 +164,301 @@ export function registerWebRoutes({
       `[presence] Workday provider: ${workdayPresenceProvider.kind ?? "unknown"}`
     );
   }
-  const throughputJql = (process.env.JIRA_THROUGHPUT_JQL ?? "").trim();
-  const backlogJql = (process.env.JIRA_BACKLOG_JQL ?? "").trim();
-  const lifecycleJql = (process.env.JIRA_LIFECYCLE_JQL ?? "").trim();
-  const lifecyclePrevJql = (process.env.JIRA_LIFECYCLE_PREV_JQL ?? "").trim();
-  const lifecycleLookbackDays =
-    Number(process.env.JIRA_LIFECYCLE_LOOKBACK_DAYS ?? 30) || 30;
-  const kanbanJql = (process.env.JIRA_KANBAN_JQL ?? "").trim();
-  const kanbanColumns = parseCsv(process.env.JIRA_KANBAN_COLUMNS);
-  const kanbanBoardUrl = (process.env.JIRA_KANBAN_URL ?? "").trim() || null;
-  // Inflow vs Resolved: defaults to the throughput JQL's "base" (without
-  // the date filters). Fallback to the throughput JQL itself — the
-  // builder wraps with created/resolved range filters so either works.
-  const inflowJql =
-    (process.env.JIRA_INFLOW_JQL ?? "").trim() || throughputJql;
-  // SLA / aging risk: defaults to the backlog JQL (all open tickets).
-  const slaJql = (process.env.JIRA_SLA_JQL ?? "").trim() || backlogJql;
+  /* ---------------------------------------------------------------- *
+   * Jira multi-project wiring.
+   *
+   * The dashboard supports two parallel projects (EMOPS current,
+   * EMAILCO legacy) with completely independent JQL per widget. The
+   * UI switcher sends `?project=EMOPS|EMAILCO|all` and every widget
+   * endpoint routes through this layer to pick the right JQL.
+   *
+   * When JIRA_PROJECT_KEYS is unset the resolver still works — it
+   * falls back to the original single-project env vars
+   * (`JIRA_THROUGHPUT_JQL`, etc.), so existing deployments are
+   * unaffected.
+   *
+   * Non-JQL scalars (kanban columns/URL, thresholds, priorities,
+   * status names, limits, lookback windows) are also scoped per
+   * project via `resolveProjectScalar`, so the same deployment
+   * can e.g. have different "To Do" column names in the two
+   * projects' workflows without conflict.
+   * ---------------------------------------------------------------- */
+  const configuredProjects = listProjects(process.env);
+  const hasMultiProject = configuredProjects.length > 0;
+  const fallbackProjectKey = defaultProjectKey(process.env) ?? null;
+  console.log(
+    hasMultiProject
+      ? `[jira] multi-project: ${configuredProjects
+          .map((p) => p.key)
+          .join(", ")} (default=${fallbackProjectKey})`
+      : "[jira] single-project mode (no JIRA_PROJECT_KEYS set)"
+  );
+
+  // Global, project-invariant options (rarely differ per project).
   const slaThresholds = parseSlaThresholds(process.env.JIRA_SLA_THRESHOLDS);
-  // Top priority tickets: scope to the single "To Do" column of the
-  // team's RapidBoard by default (minimal Jira load). Falls back to
-  // the backlog JQL if the Kanban JQL isn't set.
-  const topPriorityJql =
-    (process.env.JIRA_TOP_PRIORITY_JQL ?? "").trim() ||
-    kanbanJql ||
-    backlogJql;
-  const topPriorityPriorities =
-    parseCsv(process.env.JIRA_TOP_PRIORITIES).length > 0
-      ? parseCsv(process.env.JIRA_TOP_PRIORITIES)
-      : ["Highest", "Critical", "High"];
-  const topPriorityStatus = (
-    process.env.JIRA_TOP_PRIORITY_STATUS ?? "To Do"
-  ).trim();
-  const topPriorityLimit =
-    Number(process.env.JIRA_TOP_PRIORITY_LIMIT ?? 6) || 6;
 
-  // Sprint backlog: defaults to the Kanban JQL's To Do column.
-  const sprintBacklogJql =
-    (process.env.JIRA_SPRINT_BACKLOG_JQL ?? "").trim() ||
-    kanbanJql ||
-    backlogJql;
-  const sprintBacklogStatus = (
-    process.env.JIRA_SPRINT_BACKLOG_STATUS ?? "To Do"
-  ).trim();
-
-  // Reopen / escalation rate: scope is the whole project (uses
-  // throughput JQL by default, falls back to backlog). Done statuses
-  // list matters for status-change queries.
-  const reopenJql =
-    (process.env.JIRA_REOPEN_JQL ?? "").trim() || throughputJql || backlogJql;
-  const reopenDoneStatuses =
-    parseCsv(process.env.JIRA_DONE_STATUSES).length > 0
-      ? parseCsv(process.env.JIRA_DONE_STATUSES)
-      : ["Done", "Closed", "Resolved"];
-  const reopenWindowDays =
-    Number(process.env.JIRA_REOPEN_WINDOW_DAYS ?? 30) || 30;
-
-  // Team throughput leaderboard: shares the throughput JQL so the
-  // "last week total" on the leaderboard agrees with the big
-  // throughput KPI above it. Limit is tunable for teams with more
-  // than ~6 resolvers per week.
-  const leaderboardJql =
-    (process.env.JIRA_LEADERBOARD_JQL ?? "").trim() ||
-    throughputJql ||
-    backlogJql;
-  const leaderboardLimit =
-    Number(process.env.JIRA_LEADERBOARD_LIMIT ?? 6) || 6;
+  // Per-project scalar resolvers. Each returns the resolved value
+  // plus which env var it came from (for the filter drawer).
+  function perProjectScalar(projectKey, suffix, fallback) {
+    const r = resolveProjectScalar(process.env, projectKey, suffix);
+    return { value: r.value || fallback, source: r.source };
+  }
+  function perProjectList(projectKey, suffix, fallback) {
+    const r = resolveProjectScalar(process.env, projectKey, suffix);
+    const list = parseCsv(r.value);
+    return { value: list.length > 0 ? list : fallback, source: r.source };
+  }
+  function perProjectNumber(projectKey, suffix, fallback) {
+    const r = resolveProjectScalar(process.env, projectKey, suffix);
+    const n = Number(r.value);
+    return {
+      value: Number.isFinite(n) && n > 0 ? n : fallback,
+      source: r.source,
+    };
+  }
 
   const VERY_SHORT_TTL_MS = 90 * 1000;
   const SHORT_TTL_MS = 5 * 60 * 1000;
   const MEDIUM_TTL_MS = 15 * 60 * 1000;
 
-  function makeCachedBuilder({ ttlMs, buildFn, reasonNoJql, getJql }) {
-    const cache = { payload: null, fetchedAt: 0 };
-    const getter = async function ({ force = false } = {}) {
-      if (!force && cache.payload && Date.now() - cache.fetchedAt < ttlMs) {
-        return cache.payload;
+  /**
+   * Normalise the caller-supplied ?project= query param.
+   * - Empty / missing  → the server-side default project (or null in
+   *   single-project mode)
+   * - Unknown key      → error (400 handled by the route)
+   * - "ALL" / "all"    → the reserved ALL_PROJECT_KEY
+   */
+  function normaliseProject(req) {
+    if (!hasMultiProject) return { key: null };
+    const raw = (req.query?.project ?? "").toString().trim();
+    if (!raw) return { key: fallbackProjectKey };
+    const upper = raw.toLowerCase() === ALL_PROJECT_KEY
+      ? ALL_PROJECT_KEY
+      : raw.toUpperCase();
+    if (!isValidProjectKey(process.env, upper)) {
+      return { key: null, error: `unknown project "${raw}"` };
+    }
+    return { key: upper };
+  }
+
+  /**
+   * Project-aware cached builder.
+   *
+   * Each widget getter now maintains a Map<projectKey,
+   * {payload,fetchedAt}> so switching projects in the UI is
+   * snappy — EMOPS data doesn't evict EMAILCO data. TTL is still
+   * per-entry.
+   *
+   * `buildFn` gets both the resolved jql string AND the project
+   * key, so builders that need project-scoped scalars (e.g. kanban
+   * columns) can pull them via resolveProjectScalar.
+   */
+  function makeCachedBuilder({ ttlMs, buildFn, widgetKey, reasonNoJql }) {
+    const caches = new Map(); // projectKey|"" → { payload, fetchedAt }
+    const getter = async function ({ force = false, project } = {}) {
+      const key = project ?? "";
+      const entry = caches.get(key);
+      if (
+        !force &&
+        entry &&
+        entry.payload &&
+        Date.now() - entry.fetchedAt < ttlMs
+      ) {
+        return entry.payload;
       }
       const jira = jiraFromEnv();
-      const jql = getJql();
+      const { jql, source, fallbackFrom } = resolveJql(
+        process.env,
+        project,
+        widgetKey
+      );
       if (!jira || !jql) {
         return {
           unavailable: true,
-          reason: !jira ? "JIRA_BASE_URL / JIRA_TOKEN not set" : reasonNoJql,
+          project: project ?? null,
+          reason: !jira
+            ? "JIRA_BASE_URL / JIRA_TOKEN not set"
+            : `${source} not set`,
+          source,
+          fallbackFrom,
           generatedAt: Date.now(),
         };
       }
-      const payload = await buildFn({ jira, jql });
-      cache.payload = payload;
-      cache.fetchedAt = Date.now();
-      return payload;
+      const payload = await buildFn({ jira, jql, project });
+      const withMeta = {
+        ...payload,
+        project: project ?? null,
+        jqlSource: source,
+        jqlFallbackFrom: fallbackFrom,
+      };
+      caches.set(key, { payload: withMeta, fetchedAt: Date.now() });
+      return withMeta;
     };
-    // Expose TTL so the filter drawer can say "refreshes every N".
     getter.ttlMs = ttlMs;
     return getter;
   }
 
-  /**
-   * Pick which env var (of a list of candidates) actually supplied the
-   * JQL. Returns `{ source, fallbackFrom }` where `source` is the first
-   * candidate that is non-empty, and `fallbackFrom` is the *intended*
-   * first candidate when a later one had to be used.
-   */
-  function resolveSource(candidates) {
-    const nonEmpty = candidates.find(([, v]) => (v ?? "").trim().length > 0);
-    const [primary] = candidates;
-    if (!nonEmpty) {
-      return { source: primary?.[0] ?? null, fallbackFrom: null };
-    }
-    const [sourceName] = nonEmpty;
-    const fallbackFrom =
-      sourceName !== primary[0] ? primary[0] : null;
-    return { source: sourceName, fallbackFrom };
+  /* Per-project scalars: resolved at request time so a JQL-only
+   * config change (restart) picks up new values without a code
+   * change here. These closures capture only the project key. */
+  function kanbanOptsFor(project) {
+    const columns = perProjectList(project, "KANBAN_COLUMNS", []).value;
+    const boardUrl = perProjectScalar(project, "KANBAN_URL", "").value || null;
+    return { columns, boardUrl };
+  }
+  function lifecycleOptsFor(project) {
+    return {
+      lookbackDays: perProjectNumber(project, "LIFECYCLE_LOOKBACK_DAYS", 30)
+        .value,
+      jqlPrevious: resolveJql(process.env, project, "LIFECYCLE_PREV").jql,
+    };
+  }
+  function topPriorityOptsFor(project) {
+    return {
+      priorities: perProjectList(project, "TOP_PRIORITIES", [
+        "Highest",
+        "Critical",
+        "High",
+      ]).value,
+      status: perProjectScalar(project, "TOP_PRIORITY_STATUS", "To Do").value,
+      limit: perProjectNumber(project, "TOP_PRIORITY_LIMIT", 6).value,
+    };
+  }
+  function sprintBacklogOptsFor(project) {
+    return {
+      status: perProjectScalar(project, "SPRINT_BACKLOG_STATUS", "To Do").value,
+      boardUrl: kanbanOptsFor(project).boardUrl,
+    };
+  }
+  function reopenOptsFor(project) {
+    return {
+      doneStatuses: perProjectList(project, "DONE_STATUSES", [
+        "Done",
+        "Closed",
+        "Resolved",
+      ]).value,
+      windowDays: perProjectNumber(project, "REOPEN_WINDOW_DAYS", 30).value,
+    };
+  }
+  function leaderboardOptsFor(project) {
+    return {
+      limit: perProjectNumber(project, "LEADERBOARD_LIMIT", 6).value,
+    };
   }
 
   const getThroughput = makeCachedBuilder({
     ttlMs: SHORT_TTL_MS,
-    reasonNoJql: "JIRA_THROUGHPUT_JQL not set",
-    getJql: () => throughputJql,
+    widgetKey: "THROUGHPUT",
     buildFn: ({ jira, jql }) => buildWeeklyThroughput({ jira, jql, timezone }),
   });
 
   const getBacklog = makeCachedBuilder({
     ttlMs: MEDIUM_TTL_MS,
-    reasonNoJql: "JIRA_BACKLOG_JQL not set",
-    getJql: () => backlogJql,
+    widgetKey: "BACKLOG",
     buildFn: ({ jira, jql }) => buildBacklogOverview({ jira, jql, timezone }),
   });
 
   const getLifecycle = makeCachedBuilder({
     ttlMs: MEDIUM_TTL_MS,
-    reasonNoJql: "JIRA_LIFECYCLE_JQL not set",
-    getJql: () => lifecycleJql,
-    buildFn: ({ jira, jql }) =>
-      buildTicketLifecycle({
+    widgetKey: "LIFECYCLE",
+    buildFn: ({ jira, jql, project }) => {
+      const o = lifecycleOptsFor(project);
+      return buildTicketLifecycle({
         jira,
         jql,
-        jqlPrevious: lifecyclePrevJql || undefined,
-        lookbackDays: lifecycleLookbackDays,
+        jqlPrevious: o.jqlPrevious || undefined,
+        lookbackDays: o.lookbackDays,
         timezone,
-      }),
+      });
+    },
   });
 
   const getKanban = makeCachedBuilder({
     ttlMs: VERY_SHORT_TTL_MS,
-    reasonNoJql: "JIRA_KANBAN_JQL not set",
-    getJql: () => kanbanJql,
-    buildFn: ({ jira, jql }) =>
-      buildKanbanBoard({
+    widgetKey: "KANBAN",
+    buildFn: ({ jira, jql, project }) => {
+      const o = kanbanOptsFor(project);
+      return buildKanbanBoard({
         jira,
         jql,
-        columns: kanbanColumns.length > 0 ? kanbanColumns : null,
+        columns: o.columns.length > 0 ? o.columns : null,
         timezone,
-        boardUrl: kanbanBoardUrl,
-      }),
+        boardUrl: o.boardUrl,
+      });
+    },
   });
 
   const getInflow = makeCachedBuilder({
     ttlMs: MEDIUM_TTL_MS,
-    reasonNoJql: "JIRA_INFLOW_JQL / JIRA_THROUGHPUT_JQL not set",
-    getJql: () => inflowJql,
+    widgetKey: "INFLOW",
     buildFn: ({ jira, jql }) => buildInflowVsResolved({ jira, jql, timezone }),
   });
 
   const getSlaRisk = makeCachedBuilder({
     ttlMs: SHORT_TTL_MS,
-    reasonNoJql: "JIRA_SLA_JQL / JIRA_BACKLOG_JQL not set",
-    getJql: () => slaJql,
+    widgetKey: "SLA",
     buildFn: ({ jira, jql }) =>
       buildSlaAgingRisk({ jira, jql, thresholds: slaThresholds, timezone }),
   });
 
   const getTopPriority = makeCachedBuilder({
     ttlMs: SHORT_TTL_MS,
-    reasonNoJql: "JIRA_TOP_PRIORITY_JQL / JIRA_KANBAN_JQL not set",
-    getJql: () => topPriorityJql,
-    buildFn: ({ jira, jql }) =>
-      buildTopPriorityTickets({
+    widgetKey: "TOP_PRIORITY",
+    buildFn: ({ jira, jql, project }) => {
+      const o = topPriorityOptsFor(project);
+      return buildTopPriorityTickets({
         jira,
         jql,
-        priorities: topPriorityPriorities,
-        status: topPriorityStatus,
-        topN: topPriorityLimit,
+        priorities: o.priorities,
+        status: o.status,
+        topN: o.limit,
         timezone,
-      }),
+      });
+    },
   });
 
   const getSprintBacklog = makeCachedBuilder({
     ttlMs: SHORT_TTL_MS,
-    reasonNoJql: "JIRA_SPRINT_BACKLOG_JQL / JIRA_KANBAN_JQL not set",
-    getJql: () => sprintBacklogJql,
-    buildFn: ({ jira, jql }) =>
-      buildSprintBacklog({
+    widgetKey: "SPRINT_BACKLOG",
+    buildFn: ({ jira, jql, project }) => {
+      const o = sprintBacklogOptsFor(project);
+      return buildSprintBacklog({
         jira,
         jql,
-        status: sprintBacklogStatus,
-        boardUrl: kanbanBoardUrl,
+        status: o.status,
+        boardUrl: o.boardUrl,
         timezone,
-      }),
+      });
+    },
   });
 
   const getReopenRate = makeCachedBuilder({
     ttlMs: MEDIUM_TTL_MS,
-    reasonNoJql: "JIRA_REOPEN_JQL / JIRA_THROUGHPUT_JQL not set",
-    getJql: () => reopenJql,
-    buildFn: ({ jira, jql }) =>
-      buildReopenRate({
+    widgetKey: "REOPEN",
+    buildFn: ({ jira, jql, project }) => {
+      const o = reopenOptsFor(project);
+      return buildReopenRate({
         jira,
         jql,
-        doneStatuses: reopenDoneStatuses,
-        windowDays: reopenWindowDays,
+        doneStatuses: o.doneStatuses,
+        windowDays: o.windowDays,
         timezone,
-      }),
+      });
+    },
   });
 
   const getThroughputLeaderboard = makeCachedBuilder({
     ttlMs: MEDIUM_TTL_MS,
-    reasonNoJql: "JIRA_LEADERBOARD_JQL / JIRA_THROUGHPUT_JQL not set",
-    getJql: () => leaderboardJql,
-    buildFn: ({ jira, jql }) =>
-      buildThroughputLeaderboard({
+    widgetKey: "LEADERBOARD",
+    buildFn: ({ jira, jql, project }) => {
+      const o = leaderboardOptsFor(project);
+      return buildThroughputLeaderboard({
         jira,
         jql,
-        topN: leaderboardLimit,
+        topN: o.limit,
         timezone,
-      }),
+      });
+    },
   });
 
   function callerUserId(req) {
@@ -440,6 +542,77 @@ export function registerWebRoutes({
       res.json(payload);
     } catch (err) {
       console.error("[web] /api/team failed:", err);
+      res.status(500).json({ error: "internal" });
+    }
+  });
+
+  /* ---------------------------------------------------------------- *
+   * /api/absences — who's out today and in the next N days.
+   *
+   * Drives the "Out today" hero strip + "Out next 7 days" carousel.
+   * Source is WORKDAY_PROVIDER (csv, ical, rest). When the flag is
+   * off (bot mode or workday=noop) this returns empty lists — the UI
+   * hides the strips automatically.
+   *
+   * Privacy note: the `type` field IS returned here (PTO / Sick /
+   * ...). The web UI is responsible for showing it only in
+   * manager/director views (filter drawer). Public cards label
+   * everything as "Vacation".
+   * ---------------------------------------------------------------- */
+  router.get("/api/absences", async (req, res) => {
+    if (!authorized(req, dashboardKey)) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    try {
+      const days = Math.max(
+        1,
+        Math.min(30, Number(req.query?.days ?? 7) || 7)
+      );
+
+      if (!presenceUsesWorkday || !workdayPresenceProvider) {
+        res.json({
+          generatedAt: Date.now(),
+          model: presenceModel,
+          source: workdayPresenceProvider?.kind ?? "none",
+          windowDays: days,
+          today: [],
+          upcoming: [],
+          totals: { today: 0, upcoming: 0 },
+        });
+        return;
+      }
+
+      // Roster enriched with emails we've already resolved this session.
+      const identitiesBySlackId = new Map();
+      for (const [uid, payload] of identityCache) {
+        if (payload?.payload) identitiesBySlackId.set(uid, payload.payload);
+      }
+
+      const all = await listUpcomingAbsences({
+        workdayProvider: workdayPresenceProvider,
+        days,
+        roster: TEAM,
+        identitiesBySlackId,
+      });
+
+      const todayYmd = todayInTz();
+      const today = all.filter(
+        (a) => todayYmd >= a.startDate && todayYmd <= a.endDate
+      );
+      const upcoming = all.filter((a) => a.startDate > todayYmd);
+
+      res.json({
+        generatedAt: Date.now(),
+        model: presenceModel,
+        source: workdayPresenceProvider.kind ?? "none",
+        windowDays: days,
+        today,
+        upcoming,
+        totals: { today: today.length, upcoming: upcoming.length },
+      });
+    } catch (err) {
+      console.error("[web] /api/absences failed:", err);
       res.status(500).json({ error: "internal" });
     }
   });
@@ -577,12 +750,21 @@ export function registerWebRoutes({
       }
     });
 
+    // Build slug lookup so the Workday CSV can match by roster slug
+    // (works even before anyone's Slack id is wired up in team.js).
+    const slugByUserId = new Map();
+    for (const uid of memberIds) {
+      const entry = findBySlackId(uid);
+      if (entry?.slug) slugByUserId.set(uid, entry.slug);
+    }
+
     const presenceByUser = slackPresenceProvider
       ? await resolvePresence({
           userIds: memberIds,
           slackProvider: slackPresenceProvider,
           workdayProvider: workdayPresenceProvider ?? undefined,
           emailByUserId,
+          slugByUserId,
         })
       : new Map();
 
@@ -809,12 +991,20 @@ export function registerWebRoutes({
         res.status(403).json({ error: "forbidden" });
         return;
       }
+      const { key: project, error: projectError } = normaliseProject(req);
+      if (projectError) {
+        res.status(400).json({ error: projectError });
+        return;
+      }
       try {
-        const payload = await getter({ force: req.query?.force === "1" });
+        const payload = await getter({
+          force: req.query?.force === "1",
+          project,
+        });
         let filter = null;
         if (buildFilterMeta && !payload?.unavailable) {
           try {
-            filter = buildFilterMeta(payload);
+            filter = buildFilterMeta(payload, project);
           } catch (err) {
             console.warn(`[web] filter meta failed for ${id}:`, err?.message);
           }
@@ -831,165 +1021,169 @@ export function registerWebRoutes({
   }
 
   /* ------------------------------------------------------------------ *
-   * Filter-meta builders per widget. Each captures the env-var source
-   * chain at route-registration time, then (when a response lands)
-   * reads the executed JQL + generatedAt from the payload so the UI
-   * sees exactly what was run — not what *would* have been run.
+   * Filter-meta builders per widget.
+   *
+   * The filter drawer needs: the executed JQL, which env var supplied
+   * it (so CSM teams can tell where to edit), any fallback that fired,
+   * and the widget-specific parameters (lookback days, thresholds,
+   * etc.). All of those are now project-aware — the env-var source
+   * string includes the project prefix (`JIRA_EMOPS_THROUGHPUT_JQL`)
+   * so the drawer UX immediately tells the operator which line in
+   * `.env` to edit.
    * ------------------------------------------------------------------ */
-
-  const throughputSrc = resolveSource([
-    ["JIRA_THROUGHPUT_JQL", process.env.JIRA_THROUGHPUT_JQL],
-  ]);
-  const backlogSrc = resolveSource([
-    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
-  ]);
-  const lifecycleSrc = resolveSource([
-    ["JIRA_LIFECYCLE_JQL", process.env.JIRA_LIFECYCLE_JQL],
-  ]);
-  const kanbanSrc = resolveSource([
-    ["JIRA_KANBAN_JQL", process.env.JIRA_KANBAN_JQL],
-  ]);
-  const inflowSrc = resolveSource([
-    ["JIRA_INFLOW_JQL", process.env.JIRA_INFLOW_JQL],
-    ["JIRA_THROUGHPUT_JQL", process.env.JIRA_THROUGHPUT_JQL],
-  ]);
-  const slaSrc = resolveSource([
-    ["JIRA_SLA_JQL", process.env.JIRA_SLA_JQL],
-    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
-  ]);
-  const topPrioritySrc = resolveSource([
-    ["JIRA_TOP_PRIORITY_JQL", process.env.JIRA_TOP_PRIORITY_JQL],
-    ["JIRA_KANBAN_JQL", process.env.JIRA_KANBAN_JQL],
-    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
-  ]);
-  const sprintBacklogSrc = resolveSource([
-    ["JIRA_SPRINT_BACKLOG_JQL", process.env.JIRA_SPRINT_BACKLOG_JQL],
-    ["JIRA_KANBAN_JQL", process.env.JIRA_KANBAN_JQL],
-    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
-  ]);
-  const reopenSrc = resolveSource([
-    ["JIRA_REOPEN_JQL", process.env.JIRA_REOPEN_JQL],
-    ["JIRA_THROUGHPUT_JQL", process.env.JIRA_THROUGHPUT_JQL],
-    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
-  ]);
-  const leaderboardSrc = resolveSource([
-    ["JIRA_LEADERBOARD_JQL", process.env.JIRA_LEADERBOARD_JQL],
-    ["JIRA_THROUGHPUT_JQL", process.env.JIRA_THROUGHPUT_JQL],
-    ["JIRA_BACKLOG_JQL", process.env.JIRA_BACKLOG_JQL],
-  ]);
 
   registerWidgetRoute("weekly-throughput", getThroughput, (p) =>
     filterForWeeklyThroughput({
-      jql: p?.jql ?? throughputJql,
-      source: throughputSrc.source,
-      fallbackFrom: throughputSrc.fallbackFrom,
+      jql: p?.jql ?? "",
+      source: p?.jqlSource,
+      fallbackFrom: p?.jqlFallbackFrom,
       refreshSeconds: Math.round(getThroughput.ttlMs / 1000),
       timezone,
       generatedAt: p?.generatedAt,
+      project: p?.project,
     })
   );
   registerWidgetRoute("backlog-overview", getBacklog, (p) =>
     filterForBacklogOverview({
-      jql: p?.jql ?? backlogJql,
-      source: backlogSrc.source,
-      fallbackFrom: backlogSrc.fallbackFrom,
+      jql: p?.jql ?? "",
+      source: p?.jqlSource,
+      fallbackFrom: p?.jqlFallbackFrom,
       refreshSeconds: Math.round(getBacklog.ttlMs / 1000),
       timezone,
       generatedAt: p?.generatedAt,
+      project: p?.project,
     })
   );
-  registerWidgetRoute("ticket-lifecycle", getLifecycle, (p) =>
-    filterForTicketLifecycle({
-      jql: p?.jql ?? lifecycleJql,
-      source: lifecycleSrc.source,
-      fallbackFrom: lifecycleSrc.fallbackFrom,
+  registerWidgetRoute("ticket-lifecycle", getLifecycle, (p, project) => {
+    const o = lifecycleOptsFor(project);
+    return filterForTicketLifecycle({
+      jql: p?.jql ?? "",
+      source: p?.jqlSource,
+      fallbackFrom: p?.jqlFallbackFrom,
       refreshSeconds: Math.round(getLifecycle.ttlMs / 1000),
-      lookbackDays: lifecycleLookbackDays,
+      lookbackDays: o.lookbackDays,
       timezone,
       generatedAt: p?.generatedAt,
-    })
-  );
+      project: p?.project,
+    });
+  });
   registerWidgetRoute("inflow-vs-resolved", getInflow, (p) =>
     filterForInflowVsResolved({
-      jql: p?.jql ?? inflowJql,
-      source: inflowSrc.source,
-      fallbackFrom: inflowSrc.fallbackFrom,
+      jql: p?.jql ?? "",
+      source: p?.jqlSource,
+      fallbackFrom: p?.jqlFallbackFrom,
       refreshSeconds: Math.round(getInflow.ttlMs / 1000),
       timezone,
       generatedAt: p?.generatedAt,
+      project: p?.project,
     })
   );
   registerWidgetRoute("sla-aging-risk", getSlaRisk, (p) =>
     filterForSlaAgingRisk({
-      jql: p?.jql ?? slaJql,
-      source: slaSrc.source,
-      fallbackFrom: slaSrc.fallbackFrom,
+      jql: p?.jql ?? "",
+      source: p?.jqlSource,
+      fallbackFrom: p?.jqlFallbackFrom,
       refreshSeconds: Math.round(getSlaRisk.ttlMs / 1000),
       thresholds: slaThresholds,
       timezone,
       generatedAt: p?.generatedAt,
+      project: p?.project,
     })
   );
-  registerWidgetRoute("sprint-backlog", getSprintBacklog, (p) =>
-    filterForSprintBacklog({
-      jql: p?.jql ?? sprintBacklogJql,
-      source: sprintBacklogSrc.source,
-      fallbackFrom: sprintBacklogSrc.fallbackFrom,
+  registerWidgetRoute("sprint-backlog", getSprintBacklog, (p, project) => {
+    const o = sprintBacklogOptsFor(project);
+    return filterForSprintBacklog({
+      jql: p?.jql ?? "",
+      source: p?.jqlSource,
+      fallbackFrom: p?.jqlFallbackFrom,
       refreshSeconds: Math.round(getSprintBacklog.ttlMs / 1000),
-      status: sprintBacklogStatus,
-      boardUrl: kanbanBoardUrl,
+      status: o.status,
+      boardUrl: o.boardUrl,
       timezone,
       generatedAt: p?.generatedAt,
-    })
-  );
-  registerWidgetRoute("reopen-rate", getReopenRate, (p) =>
-    filterForReopenRate({
-      jql: p?.jql ?? reopenJql,
-      source: reopenSrc.source,
-      fallbackFrom: reopenSrc.fallbackFrom,
+      project: p?.project,
+    });
+  });
+  registerWidgetRoute("reopen-rate", getReopenRate, (p, project) => {
+    const o = reopenOptsFor(project);
+    return filterForReopenRate({
+      jql: p?.jql ?? "",
+      source: p?.jqlSource,
+      fallbackFrom: p?.jqlFallbackFrom,
       refreshSeconds: Math.round(getReopenRate.ttlMs / 1000),
-      doneStatuses: reopenDoneStatuses,
-      windowDays: reopenWindowDays,
+      doneStatuses: o.doneStatuses,
+      windowDays: o.windowDays,
       timezone,
       generatedAt: p?.generatedAt,
-    })
-  );
-  registerWidgetRoute("top-priority-tickets", getTopPriority, (p) =>
-    filterForTopPriority({
-      jql: p?.jql ?? topPriorityJql,
-      source: topPrioritySrc.source,
-      fallbackFrom: topPrioritySrc.fallbackFrom,
+      project: p?.project,
+    });
+  });
+  registerWidgetRoute("top-priority-tickets", getTopPriority, (p, project) => {
+    const o = topPriorityOptsFor(project);
+    return filterForTopPriority({
+      jql: p?.jql ?? "",
+      source: p?.jqlSource,
+      fallbackFrom: p?.jqlFallbackFrom,
       refreshSeconds: Math.round(getTopPriority.ttlMs / 1000),
-      priorities: topPriorityPriorities,
-      status: topPriorityStatus,
-      limit: topPriorityLimit,
+      priorities: o.priorities,
+      status: o.status,
+      limit: o.limit,
       timezone,
       generatedAt: p?.generatedAt,
-    })
+      project: p?.project,
+    });
+  });
+  registerWidgetRoute(
+    "throughput-leaderboard",
+    getThroughputLeaderboard,
+    (p, project) => {
+      const o = leaderboardOptsFor(project);
+      return filterForThroughputLeaderboard({
+        jql: p?.jql ?? "",
+        source: p?.jqlSource,
+        fallbackFrom: p?.jqlFallbackFrom,
+        refreshSeconds: Math.round(getThroughputLeaderboard.ttlMs / 1000),
+        limit: o.limit,
+        timezone,
+        generatedAt: p?.generatedAt,
+        project: p?.project,
+      });
+    }
   );
-  registerWidgetRoute("throughput-leaderboard", getThroughputLeaderboard, (p) =>
-    filterForThroughputLeaderboard({
-      jql: p?.jql ?? leaderboardJql,
-      source: leaderboardSrc.source,
-      fallbackFrom: leaderboardSrc.fallbackFrom,
-      refreshSeconds: Math.round(getThroughputLeaderboard.ttlMs / 1000),
-      limit: leaderboardLimit,
-      timezone,
-      generatedAt: p?.generatedAt,
-    })
-  );
-  registerWidgetRoute("kanban-board", getKanban, (p) =>
-    filterForKanban({
-      jql: p?.jql ?? kanbanJql,
-      source: kanbanSrc.source,
-      fallbackFrom: kanbanSrc.fallbackFrom,
+  registerWidgetRoute("kanban-board", getKanban, (p, project) => {
+    const o = kanbanOptsFor(project);
+    return filterForKanban({
+      jql: p?.jql ?? "",
+      source: p?.jqlSource,
+      fallbackFrom: p?.jqlFallbackFrom,
       refreshSeconds: Math.round(getKanban.ttlMs / 1000),
-      columns: kanbanColumns,
-      boardUrl: kanbanBoardUrl,
+      columns: o.columns,
+      boardUrl: o.boardUrl,
       timezone,
       generatedAt: p?.generatedAt,
-    })
-  );
+      project: p?.project,
+    });
+  });
+
+  /* ---------------------------------------------------------------- *
+   * /api/jira-projects — tells the UI which project tabs to render.
+   *
+   * The client reads this on page load to populate the project
+   * switcher (see public/index.html). When the deployment is
+   * single-project (no JIRA_PROJECT_KEYS) we return an empty list
+   * and the switcher hides itself.
+   * ---------------------------------------------------------------- */
+  router.get("/api/jira-projects", (req, res) => {
+    if (!authorized(req, dashboardKey)) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    res.json({
+      projects: configuredProjects,
+      defaultProject: fallbackProjectKey,
+      allProjectKey: ALL_PROJECT_KEY,
+    });
+  });
 
   console.log(
     `[web] dashboard enabled at / — ${dashboardKey ? "key required" : "no key (dev only)"}`

@@ -74,16 +74,64 @@ const CHECKIN_LABELS = {
 const EXCEPTION_CHECKIN_STATES = new Set(["sick", "pto", "late"]);
 const EXCEPTION_PRESENCE_STATES = new Set(["away", "ooo"]);
 
+/* ------------------------------------------------------------------ *
+ * Boot-mode detection
+ *
+ * "Full" mode   — real Slack tokens present. Full Bolt app: slash
+ *                 commands, actions, users.info, chat.postMessage,
+ *                 and the weekly-throughput Slack post all work.
+ *
+ * "Web-only"    — no Slack tokens. The dashboard still boots so
+ *                 Jira/Workday integrations can be demonstrated
+ *                 without waiting for workspace admin approval.
+ *                 We pass placeholder strings to Bolt so the
+ *                 constructor + HTTP receiver come up; slash
+ *                 commands are registered but never fire (no real
+ *                 Slack events arrive). users.info calls from
+ *                 web.js fail cleanly — web.js already has a
+ *                 roster-based fallback that kicks in.
+ *
+ * Emit one clear banner at boot so operators know which mode
+ * they're in without reading logs in detail.
+ * ------------------------------------------------------------------ */
+const BOOT_SLACK_TOKEN = process.env.SLACK_BOT_TOKEN?.trim();
+const BOOT_SLACK_SECRET = process.env.SLACK_SIGNING_SECRET?.trim();
+const WEB_ONLY_MODE =
+  !BOOT_SLACK_TOKEN ||
+  !BOOT_SLACK_SECRET ||
+  BOOT_SLACK_TOKEN.startsWith("xoxb-your-") ||
+  BOOT_SLACK_SECRET === "your-signing-secret";
+
+if (WEB_ONLY_MODE) {
+  console.log(
+    "\n================================================================\n" +
+      " Gen Pulse — WEB-ONLY MODE\n" +
+      "----------------------------------------------------------------\n" +
+      " No valid SLACK_BOT_TOKEN / SLACK_SIGNING_SECRET detected.\n" +
+      " The dashboard will still boot so you can demo Jira and\n" +
+      " Workday integrations. Slack-sourced features (slash commands,\n" +
+      " live user profile/presence, chat alerts) are DISABLED.\n" +
+      "\n" +
+      " To enable full Slack integration, fill these values in .env:\n" +
+      "   SLACK_BOT_TOKEN=xoxb-...\n" +
+      "   SLACK_SIGNING_SECRET=...\n" +
+      "   (optionally SLACK_APP_TOKEN=xapp-... + SLACK_SOCKET_MODE=true)\n" +
+      "================================================================\n"
+  );
+}
+
 const app = new App({
-  token: process.env.SLACK_BOT_TOKEN,
-  signingSecret: process.env.SLACK_SIGNING_SECRET,
-  socketMode: process.env.SLACK_SOCKET_MODE === "true",
+  token: BOOT_SLACK_TOKEN || "xoxb-web-only-placeholder",
+  signingSecret: BOOT_SLACK_SECRET || "web-only-placeholder-signing-secret",
+  // Socket mode requires a valid app token; force-disable in web-only.
+  socketMode: !WEB_ONLY_MODE && process.env.SLACK_SOCKET_MODE === "true",
   appToken: process.env.SLACK_APP_TOKEN,
   port: Number(process.env.PORT ?? 3000),
 });
 
 async function postBossAlert(client, text) {
   if (!BOSS_CHANNEL_ID) return;
+  if (WEB_ONLY_MODE) return; // no real Slack connection
   try {
     await client.chat.postMessage({
       channel: BOSS_CHANNEL_ID,
@@ -546,6 +594,10 @@ registerWebRoutes({
 });
 
 async function runWeeklyThroughputReport() {
+  if (WEB_ONLY_MODE) {
+    console.log("[reports] weekly throughput skipped — web-only mode (no Slack posting)");
+    return;
+  }
   const jira = jiraFromEnv();
   if (!jira || !THROUGHPUT_JQL || !REPORTS_CHANNEL_ID) {
     console.log(
@@ -582,9 +634,27 @@ scheduleWeekly({
 
 
 (async () => {
-  await app.start();
-  // eslint-disable-next-line no-console
+  try {
+    await app.start();
+  } catch (err) {
+    console.error(
+      "\n[FATAL] Server failed to start on port",
+      process.env.PORT ?? 3000,
+      "\nReason:",
+      err?.message ?? err,
+      "\n\nCommon causes:\n" +
+        "  - Port already in use (try: lsof -iTCP:3000 -sTCP:LISTEN)\n" +
+        "  - Invalid Slack credentials (in full mode)\n" +
+        "  - Missing native module (try: npm rebuild better-sqlite3)\n"
+    );
+    process.exit(1);
+  }
+  const mode = WEB_ONLY_MODE ? "WEB-ONLY" : "FULL (Slack connected)";
+  const port = process.env.PORT ?? 3000;
   console.log(
-    `${BRAND_NAME} Team Presence running on port ${process.env.PORT ?? 3000} (tz ${TEAM_TIMEZONE})`
+    `\n${BRAND_NAME} Gen Pulse running on http://localhost:${port}\n` +
+      `  mode: ${mode}\n` +
+      `  tz:   ${TEAM_TIMEZONE}\n` +
+      `  open: http://localhost:${port}/?key=${(process.env.DASHBOARD_KEY ?? "").trim() || "<set DASHBOARD_KEY in .env>"}\n`
   );
 })();

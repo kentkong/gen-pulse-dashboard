@@ -129,9 +129,28 @@
           radial-gradient(900px 440px at 85% 70%, rgba(150, 160, 255, 0.08), transparent 62%),
           radial-gradient(900px 440px at 50% 118%, rgba(4, 0, 245, 0.14), transparent 65%),
           var(--gen-page);
+        /* Layered banner halo:
+             1. Soft top-to-bottom wash so the whole hero rectangle
+                reads as a single tinted surface.
+             2. Broad central radial hotspot — the "centre" of the
+                banner, stronger than the two flanking radials.
+             3. Two flanking radials (left + right) — kept from the
+                original halo so the banner has depth at its edges. */
         --hero-halo:
-          radial-gradient(580px 240px at 10% 40%, rgba(4, 0, 245, 0.18), transparent 65%),
-          radial-gradient(420px 210px at 88% 62%, rgba(42, 39, 255, 0.13), transparent 65%);
+          linear-gradient(180deg,
+            rgba(99, 102, 241, 0.09) 0%,
+            rgba(99, 102, 241, 0.11) 55%,
+            rgba(99, 102, 241, 0.00) 100%),
+          radial-gradient(820px 300px at 50% 38%, rgba(79, 70, 229, 0.18), transparent 70%),
+          radial-gradient(580px 240px at 10% 40%, rgba(4, 0, 245, 0.22), transparent 65%),
+          radial-gradient(420px 210px at 88% 62%, rgba(42, 39, 255, 0.18), transparent 65%);
+        /* Artistic line arcs that sweep across the hero banner —
+           same visual language as .sn-feed-canvas below, scaled for
+           the wide-short banner and toned down for the light page
+           background. Pure white disappears on #f7f7fb, so light
+           mode uses indigo-tinted arcs plus one brighter whisper;
+           dark mode (see @media + .theme-dark) uses true white. */
+        --hero-arcs: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 280' preserveAspectRatio='none'%3E%3Cpath d='M-40 90 Q 400 -20 1240 110' stroke='rgba(79,70,229,0.28)' stroke-width='1.3' fill='none' stroke-linecap='round'/%3E%3Cpath d='M-40 200 Q 520 300 1240 180' stroke='rgba(79,70,229,0.24)' stroke-width='1.2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M-40 50 Q 700 180 1240 40' stroke='rgba(4,0,245,0.20)' stroke-width='1' fill='none'/%3E%3Cpath d='M-40 170 Q 600 20 1240 160' stroke='rgba(79,70,229,0.18)' stroke-width='0.9' fill='none'/%3E%3Cpath d='M-40 140 Q 880 240 1240 70' stroke='rgba(255,255,255,0.55)' stroke-width='0.9' fill='none'/%3E%3C/svg%3E");
       }
 
       body {
@@ -183,6 +202,23 @@
         color: var(--text);
       }
 
+      /* Compact KPI variant used by the Team Presence 4-up grid
+         (In office / WFH / Out / No check-in). Smaller padding +
+         type so the tiles don't dominate the viewport. */
+      .sn-tp-kpi {
+        padding: 0.6rem 0.75rem;
+      }
+      .sn-tp-kpi .sn-kpi-label {
+        font-size: 0.62rem;
+        line-height: 1.2;
+      }
+      .sn-tp-kpi .sn-kpi-value {
+        font-size: 1.3rem;
+      }
+      @media (max-width: 640px) {
+        .sn-tp-kpi .sn-kpi-value { font-size: 1.2rem; }
+      }
+
       .sn-btn {
         background: var(--btn-bg);
         color: var(--btn-fg);
@@ -224,20 +260,71 @@
         letter-spacing: 0.01em;
       }
 
-      /* Impactful page hero */
+      /* Impactful page hero — rendered as a tinted banner.
+         Two pseudo-elements stack behind the content:
+           ::before  the layered halo (linear wash + 3 radials),
+                     extended upward so it bleeds above "Gen Pulse"
+                     into the quick-links area and gives the banner
+                     a visible top half.
+           ::after   a soft bottom fade + drop shadow so the banner
+                     clearly ends before the "Today at a glance"
+                     section starts. Replaces the old 1px hairline
+                     border which didn't read as separation. */
       .sn-hero {
         position: relative;
-        padding: 1.25rem 0 1.5rem;
-        border-bottom: 1px solid var(--border);
+        padding: 1.25rem 0 1.75rem;
+        margin-bottom: 1.5rem;
+        border-bottom: none;
         isolation: isolate;
       }
       .sn-hero::before {
         content: "";
         position: absolute;
-        inset: -24px -48px 0;
-        background: var(--hero-halo);
+        /* Start the gradient exactly at the hero's top edge so it
+           finishes cleanly on the bottom border of .sn-topnav (the
+           "top white line"). The nav has a translucent white bg
+           (rgba(255,255,255,0.78) + backdrop-blur), so any gradient
+           that extends above the hero bleeds through the quicklinks
+           bar and tints it — not wanted. Sideways we still extend
+           beyond the max-width so the banner reaches the page
+           gutters rather than stopping at content edges. */
+        inset: 0 -48px 0;
+        /* Layered: arc SVG on top (stretched to the banner rect),
+           halo gradient beneath. The halo's own radial layers
+           resolve via the `auto`s in background-size. */
+        background-image: var(--hero-arcs), var(--hero-halo);
+        background-size: 100% 100%, auto, auto, auto, auto;
+        background-repeat: no-repeat;
+        background-position: center, center;
         z-index: -1;
         pointer-events: none;
+      }
+      .sn-hero::after {
+        /* Visible end-of-banner: a soft horizontal fade + a subtle
+           shadow below, so "Today at a glance" clearly sits in a
+           different band of the page. */
+        content: "";
+        position: absolute;
+        left: -48px;
+        right: -48px;
+        bottom: -1.5rem;
+        height: 28px;
+        background: linear-gradient(
+          180deg,
+          color-mix(in srgb, var(--gen-blue, #0400f5) 12%, transparent) 0%,
+          transparent 100%
+        );
+        z-index: -1;
+        pointer-events: none;
+        border-top: 1px solid color-mix(in srgb, var(--gen-blue, #0400f5) 16%, transparent);
+      }
+      html.theme-dark .sn-hero::after {
+        background: linear-gradient(
+          180deg,
+          rgba(99, 102, 241, 0.25) 0%,
+          transparent 100%
+        );
+        border-top: 1px solid rgba(99, 102, 241, 0.3);
       }
 
       /* Right-side of the hero — stacks the quick-links row above
@@ -365,21 +452,12 @@
         color: #ffffff;
       }
 
-      /* Placeholder URLs — a soft amber dot before the label marks
-         which destinations still need a real URL. */
-      .sn-quicklink[data-placeholder] .sn-ql-icon {
-        color: var(--status-amber);
-        opacity: 0.9;
-      }
-      .sn-quicklink[data-placeholder]::before {
-        content: "";
-        width: 6px;
-        height: 6px;
-        border-radius: 999px;
-        background: var(--status-amber);
-        box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-amber) 22%, transparent);
-        flex: none;
-      }
+      /* Placeholder URLs previously rendered with an amber dot + amber
+         icon tint as a "still wiring this up" cue. Per design review
+         we keep the `data-placeholder` attribute in the markup (for
+         future tooling / telemetry) but strip the visual amber so all
+         four quick-links read as a consistent blue set. The hover /
+         dark-mode / focus rules above already cover colour behaviour. */
 
       /* On narrow screens collapse the hero-right column to the left
          so the controls read naturally under the title. The
@@ -1024,10 +1102,25 @@
           max-width: 340px;
         }
       }
-      .sn-hero #subhead {
-        color: var(--text);
-        opacity: 0.74;
-        font-weight: 500;
+      .sn-hero #subhead,
+      .sn-hero #refreshed {
+        /* Light mode: bold black — clean, high-contrast, reads as
+           the definitive header meta line. Dark mode keeps the
+           amber/orange (see the theme-dark override below) since
+           pure black on the navy surface would disappear. */
+        color: #0a0d1a;
+        opacity: 1;
+        font-weight: 700;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) .sn-hero #subhead,
+        html:not(.theme-light) .sn-hero #refreshed {
+          color: var(--status-amber, #f2a202);
+        }
+      }
+      html.theme-dark .sn-hero #subhead,
+      html.theme-dark .sn-hero #refreshed {
+        color: var(--status-amber, #f2a202);
       }
 
       /* Big section headers (matching the 'Team Presence' treatment) */
@@ -1750,7 +1843,11 @@
           minmax(0, 1fr) /* key + summary */
           auto; /* right-side meta */
         align-items: center;
-        gap: 0.75rem;
+        /* Wider column gap so the avatar circle in the meta column
+           has visible breathing room from the key/summary text in
+           the body column. Before: 0.75rem caused the avatar to kiss
+           a long ticket key when the body got squeezed. */
+        gap: 1.1rem;
         padding: 0.7rem 0.8rem;
         border: 1px solid var(--border);
         border-radius: 10px;
@@ -1816,12 +1913,19 @@
         display: flex;
         flex-direction: column;
         gap: 0.15rem;
+        /* Clip any rogue overflow from the keyrow or summary so the
+           avatar circle in the next grid column can never be drawn
+           on top of a long ticket key / type badge. */
+        overflow: hidden;
       }
       .sn-tp-keyrow {
         display: flex;
         align-items: center;
         gap: 0.45rem;
         min-width: 0;
+        /* Belt and braces: keyrow is narrower than its children can
+           be combined, so allow horizontal clipping here too. */
+        overflow: hidden;
       }
       .sn-tp-key {
         font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
@@ -1830,6 +1934,7 @@
         letter-spacing: 0.02em;
         color: var(--fg);
         flex: 0 0 auto;
+        white-space: nowrap;
       }
       .sn-tp-type {
         font-size: 0.6rem;
@@ -1837,7 +1942,12 @@
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--muted-fg);
-        flex: 0 0 auto;
+        /* If the keyrow runs out of room, the ticket key is sacred
+           (it's the identifier) so truncate the type label first. */
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
       }
       .sn-tp-summary {
         font-size: 0.85rem;
@@ -2041,7 +2151,7 @@
         color: #4338ca;
         border-color: color-mix(in srgb, #6366f1 35%, transparent);
       }
-      html.dark .sn-pill-indigo {
+      html.theme-dark .sn-pill-indigo {
         color: #a5b4fc;
         background: color-mix(in srgb, #6366f1 18%, transparent);
         border-color: color-mix(in srgb, #6366f1 50%, transparent);
@@ -2080,7 +2190,7 @@
         color: #4a154b;
         border-color: color-mix(in srgb, #4a154b 30%, transparent);
       }
-      html.dark .sn-src-slack {
+      html.theme-dark .sn-src-slack {
         background: color-mix(in srgb, #e8b9ec 18%, transparent);
         color: #e8b9ec;
         border-color: color-mix(in srgb, #e8b9ec 35%, transparent);
@@ -2090,12 +2200,631 @@
         color: #0400f5;
         border-color: color-mix(in srgb, #0400f5 35%, transparent);
       }
-      html.dark .sn-src-workday {
+      html.theme-dark .sn-src-workday {
         background: color-mix(in srgb, #8fa8ff 18%, transparent);
         color: #bfd0ff;
         border-color: color-mix(in srgb, #8fa8ff 35%, transparent);
       }
       .sn-src-muted { /* default styling already applied above */ }
+
+      /* ------------------------------------------------------------ *
+       * Absence surfaces — "Out today" hero strip + "Out next 7
+       * days" carousel. Shared visual grammar:
+       *   - left-hand indigo band = Workday sourced
+       *   - avatar + stacked text (name → absence type → date range)
+       *   - "Back Mon 27 Apr" badge for at-a-glance planning
+       * ------------------------------------------------------------ */
+      .sn-absence-hero {
+        display: flex;
+        align-items: stretch;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        padding: 0.85rem 1rem;
+        border-radius: 0.9rem;
+        border: 1px solid var(--border);
+        /* Solid card surface (same as .sn-card) so the content
+           remains readable when the surrounding section is tinted
+           blue. The earlier transparent blue-gradient design
+           drowned the text against the hero/panel backdrop. */
+        background: var(--surface);
+        box-shadow: 0 1px 0 rgba(29, 28, 29, 0.04);
+      }
+      html.theme-dark .sn-absence-hero {
+        background: var(--surface);
+      }
+      .sn-absence-hero-head {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        margin-right: 0.5rem;
+        padding-right: 0.75rem;
+        border-right: 1px solid var(--border);
+        min-width: 140px;
+      }
+      .sn-absence-hero-count {
+        font-size: 1.85rem;
+        font-weight: 700;
+        line-height: 1;
+        color: var(--fg);
+      }
+      .sn-absence-hero-label {
+        font-size: 0.75rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.04em;
+        color: var(--muted-fg);
+      }
+      .sn-absence-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.55rem;
+        padding: 0.4rem 0.75rem 0.4rem 0.4rem;
+        border-radius: 9999px;
+        background: var(--bg);
+        border: 1px solid var(--border);
+        font-size: 0.8rem;
+        color: var(--fg);
+        max-width: 100%;
+      }
+      .sn-absence-chip img,
+      .sn-absence-chip .sn-absence-chip-initials {
+        width: 28px;
+        height: 28px;
+        border-radius: 9999px;
+        flex-shrink: 0;
+      }
+      .sn-absence-chip-initials {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.7rem;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(135deg, var(--slack-blue), var(--slack-cyan));
+      }
+      .sn-absence-chip-name {
+        font-weight: 600;
+      }
+      .sn-absence-chip-dates {
+        color: var(--muted-fg);
+        font-size: 0.7rem;
+      }
+      /* Panel wrapper for the "Out next 7 days" section — mirrors
+         the hero strip's soft blue gradient so the two absence
+         surfaces read as a matched pair. Title + subtitle sit on
+         top of the panel instead of floating on the page. */
+      .sn-absence-panel {
+        padding: 1rem 1rem 0.75rem;
+        border-radius: 0.9rem;
+        border: 1px solid var(--border);
+        background: linear-gradient(
+          120deg,
+          color-mix(in srgb, var(--slack-blue) 10%, transparent),
+          color-mix(in srgb, var(--slack-blue) 3%, transparent) 60%,
+          transparent
+        );
+      }
+      html.theme-dark .sn-absence-panel {
+        background: linear-gradient(
+          120deg,
+          color-mix(in srgb, var(--slack-blue) 22%, transparent),
+          color-mix(in srgb, var(--slack-blue) 6%, transparent) 60%,
+          transparent
+        );
+      }
+      .sn-absence-panel > .sn-section-title {
+        margin-top: 0;
+      }
+      .sn-absence-carousel {
+        display: flex;
+        gap: 0.75rem;
+        overflow-x: auto;
+        scroll-snap-type: x mandatory;
+        padding: 0.25rem 0.5rem 0.5rem 0.25rem;
+        -webkit-overflow-scrolling: touch;
+      }
+      .sn-absence-card {
+        flex: 0 0 auto;
+        width: 240px;
+        scroll-snap-align: start;
+        position: relative;
+        padding: 0.85rem 0.9rem 0.85rem 1rem;
+        border-radius: 0.75rem;
+        border: 1px solid var(--border);
+        /* Same Gen muted-grey surface as the "Today at a glance"
+           strip so the two panels read as a matched pair and the
+           avatars/names/dates inside have a solid contrast
+           backdrop instead of a washed-out transparent card. */
+        background: color-mix(in srgb, var(--gen-border) 70%, var(--gen-muted-bg));
+        overflow: hidden;
+      }
+      html.theme-dark .sn-absence-card {
+        background: color-mix(in srgb, var(--surface) 85%, #fff 6%);
+      }
+      .sn-absence-card::before {
+        content: "";
+        position: absolute;
+        top: 0; bottom: 0; left: 0;
+        width: 4px;
+        background: linear-gradient(
+          180deg,
+          var(--slack-blue),
+          color-mix(in srgb, var(--slack-cyan) 60%, var(--slack-blue))
+        );
+      }
+      .sn-absence-card-head {
+        display: flex; align-items: center; gap: 0.6rem;
+        margin-bottom: 0.5rem;
+      }
+      .sn-absence-card img,
+      .sn-absence-card .sn-absence-card-initials {
+        width: 34px;
+        height: 34px;
+        border-radius: 9999px;
+        flex-shrink: 0;
+      }
+      .sn-absence-card-initials {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 0.8rem;
+        font-weight: 700;
+        color: #fff;
+        background: linear-gradient(135deg, var(--slack-blue), var(--slack-cyan));
+      }
+      .sn-absence-card-name {
+        font-weight: 600;
+        font-size: 0.9rem;
+        line-height: 1.2;
+      }
+      .sn-absence-card-role {
+        font-size: 0.7rem;
+        color: var(--muted-fg);
+      }
+      .sn-absence-card-reason {
+        font-size: 0.8rem;
+        color: var(--fg);
+      }
+      .sn-absence-badge {
+        display: inline-block;
+        margin-top: 0.5rem;
+        padding: 0.15rem 0.55rem;
+        border-radius: 9999px;
+        font-size: 0.7rem;
+        font-weight: 600;
+        background: color-mix(in srgb, var(--slack-blue) 15%, transparent);
+        color: var(--slack-blue);
+        border: 1px solid color-mix(in srgb, var(--slack-blue) 30%, transparent);
+      }
+      html.theme-dark .sn-absence-badge {
+        background: color-mix(in srgb, var(--slack-blue) 26%, transparent);
+        color: color-mix(in srgb, var(--slack-blue) 70%, white);
+      }
+      @media (max-width: 640px) {
+        .sn-absence-hero-head {
+          border-right: none;
+          border-bottom: 1px solid var(--border);
+          padding-right: 0;
+          padding-bottom: 0.5rem;
+          margin-right: 0;
+          margin-bottom: 0.5rem;
+          width: 100%;
+        }
+        .sn-absence-card { width: 78vw; }
+      }
+
+      /* ------------------------------------------------------------ *
+       * Executive briefing strip
+       *
+       * The at-a-glance morning summary directors see when they open
+       * the app: a horizontal row of 4 big-number stats that deep-
+       * link into the relevant widget when clicked. Built as an
+       * ordinary set of buttons so it's keyboard accessible and
+       * screen readers treat it as a nav.
+       * ------------------------------------------------------------ */
+      .sn-briefing {
+        margin: 0.5rem 0 0;
+        padding: 0.9rem 1rem;
+        border-radius: 1rem;
+        border: 1px solid var(--border);
+        /* Gen muted grey surface, nudged toward the border-grey
+           end of the palette so the strip reads as a distinct
+           raised panel. Darker than --gen-muted-bg alone, still
+           fully within the Gen neutral ramp. */
+        background: color-mix(in srgb, var(--gen-border) 70%, var(--gen-muted-bg));
+        display: grid;
+        grid-template-columns: repeat(4, 1fr);
+        gap: 0.5rem;
+        align-items: stretch;
+      }
+      /* Dark-mode briefing strip — switches to the Gen-blue feed
+         canvas family (Norton EMAIL Reports treatment) so the strip
+         reads as part of the dashboard's deep-blue atmosphere
+         instead of a bright grey slab. Applied via BOTH triggers:
+           • @media (prefers-color-scheme: dark) for OS preference
+           • html.theme-dark when the toggle forces dark mode
+         Text colours inside are re-keyed to white/translucent-white
+         so labels, values and hints stay legible on the blue. */
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) .sn-briefing {
+          background:
+            linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 35%),
+            radial-gradient(420px 240px at 95% 120%, rgba(56, 18, 184, 0.55), transparent 70%),
+            var(--gen-blue);
+          border-color: rgba(255, 255, 255, 0.18);
+          box-shadow: 0 14px 32px -18px rgba(4, 0, 245, 0.55);
+          color: #f3f4ff;
+        }
+        html:not(.theme-light) .sn-briefing .sn-briefing-label,
+        html:not(.theme-light) .sn-briefing .sn-briefing-hint,
+        html:not(.theme-light) .sn-briefing .sn-briefing-value-sub {
+          color: rgba(255, 255, 255, 0.78);
+        }
+        html:not(.theme-light) .sn-briefing .sn-briefing-value {
+          color: #ffffff;
+        }
+        html:not(.theme-light) .sn-briefing-stat + .sn-briefing-stat {
+          border-left-color: rgba(255, 255, 255, 0.18);
+        }
+        html:not(.theme-light) .sn-briefing-stat:hover,
+        html:not(.theme-light) .sn-briefing-stat:focus-visible {
+          background: rgba(255, 255, 255, 0.10);
+        }
+        /* Brighten the warn tone so amber still pops against blue
+           instead of fading into the background. */
+        html:not(.theme-light) .sn-briefing-tone-warn { color: var(--gen-yellow); }
+      }
+      html.theme-dark .sn-briefing {
+        background:
+          linear-gradient(180deg, rgba(255,255,255,0.10) 0%, rgba(255,255,255,0) 35%),
+          radial-gradient(420px 240px at 95% 120%, rgba(56, 18, 184, 0.55), transparent 70%),
+          var(--gen-blue);
+        border-color: rgba(255, 255, 255, 0.18);
+        box-shadow: 0 14px 32px -18px rgba(4, 0, 245, 0.55);
+        color: #f3f4ff;
+      }
+      html.theme-dark .sn-briefing .sn-briefing-label,
+      html.theme-dark .sn-briefing .sn-briefing-hint,
+      html.theme-dark .sn-briefing .sn-briefing-value-sub {
+        color: rgba(255, 255, 255, 0.78);
+      }
+      html.theme-dark .sn-briefing .sn-briefing-value {
+        color: #ffffff;
+      }
+      html.theme-dark .sn-briefing-stat + .sn-briefing-stat {
+        border-left-color: rgba(255, 255, 255, 0.18);
+      }
+      html.theme-dark .sn-briefing-stat:hover,
+      html.theme-dark .sn-briefing-stat:focus-visible {
+        background: rgba(255, 255, 255, 0.10);
+      }
+      html.theme-dark .sn-briefing-tone-warn { color: var(--gen-yellow); }
+      .sn-briefing-stat {
+        display: flex;
+        flex-direction: column;
+        justify-content: center;
+        gap: 0.15rem;
+        padding: 0.4rem 0.75rem;
+        border: 0;
+        border-radius: 0.65rem;
+        background: transparent;
+        color: inherit;
+        text-align: left;
+        cursor: pointer;
+        font: inherit;
+        transition: background 0.15s ease, transform 0.1s ease;
+        min-width: 0;
+      }
+      .sn-briefing-stat + .sn-briefing-stat {
+        border-left: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+      }
+      .sn-briefing-stat:hover,
+      .sn-briefing-stat:focus-visible {
+        background: color-mix(in srgb, var(--bg) 55%, transparent);
+        outline: none;
+        transform: translateY(-1px);
+      }
+      .sn-briefing-label {
+        font-size: 0.65rem;
+        font-weight: 600;
+        text-transform: uppercase;
+        letter-spacing: 0.06em;
+        color: var(--muted-fg);
+      }
+      .sn-briefing-value {
+        display: flex;
+        align-items: baseline;
+        gap: 0.4rem;
+        font-size: 1.55rem;
+        font-weight: 700;
+        line-height: 1.05;
+        color: var(--fg);
+      }
+      .sn-briefing-value-sub {
+        font-size: 0.85rem;
+        font-weight: 500;
+        color: var(--muted-fg);
+      }
+      .sn-briefing-hint {
+        font-size: 0.68rem;
+        color: var(--muted-fg);
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .sn-briefing-tone-good { color: var(--slack-green); }
+      .sn-briefing-tone-warn { color: var(--status-amber, #c88f00); }
+      .sn-briefing-tone-bad  { color: var(--status-red,   #e0443f); }
+      @media (max-width: 720px) {
+        .sn-briefing {
+          grid-template-columns: repeat(2, 1fr);
+        }
+        .sn-briefing-stat + .sn-briefing-stat {
+          border-left: none;
+        }
+        .sn-briefing-stat:nth-child(2n),
+        .sn-briefing-stat:nth-child(2n + 1) {
+          border-left: none;
+        }
+        .sn-briefing-stat:nth-child(even) {
+          border-left: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+        }
+        .sn-briefing-stat:nth-child(n + 3) {
+          border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+          margin-top: 0.35rem;
+          padding-top: 0.55rem;
+        }
+        .sn-briefing-value { font-size: 1.3rem; }
+      }
+
+      /* ------------------------------------------------------------ *
+       * Presence health chip
+       *
+       * Sits next to the "Team Presence" section title and answers
+       * the "is this data accurate?" question at a glance. Green
+       * when every member resolved; amber when partial; red when
+       * the last /api/team refresh is stale.
+       * ------------------------------------------------------------ */
+      .sn-health-chip {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.6rem;
+        padding: 0.35rem 0.7rem;
+        border-radius: 9999px;
+        border: 1px solid var(--border);
+        /* Fall back to --surface if --card-bg is undefined; keeps
+           the chip readable on tinted section backgrounds. */
+        background: var(--surface);
+        font-size: 0.7rem;
+        color: var(--fg);
+        line-height: 1.2;
+        box-shadow: 0 1px 0 rgba(29, 28, 29, 0.04);
+      }
+      .sn-health-chip[data-tone="good"] {
+        border-color: color-mix(in srgb, var(--slack-green) 40%, var(--border));
+        background: color-mix(in srgb, var(--slack-green) 10%, var(--surface));
+      }
+      .sn-health-chip[data-tone="warn"] {
+        border-color: color-mix(in srgb, var(--status-amber, #c88f00) 40%, var(--border));
+        background: color-mix(in srgb, var(--status-amber, #c88f00) 12%, var(--surface));
+      }
+      .sn-health-chip[data-tone="bad"] {
+        border-color: color-mix(in srgb, var(--status-red, #e0443f) 55%, var(--border));
+        background: color-mix(in srgb, var(--status-red, #e0443f) 12%, var(--surface));
+      }
+      .sn-health-dot {
+        width: 0.5rem;
+        height: 0.5rem;
+        border-radius: 9999px;
+        flex-shrink: 0;
+        background: var(--muted-fg);
+      }
+      .sn-health-dot-good { background: var(--slack-green); }
+      .sn-health-dot-warn { background: var(--status-amber, #c88f00); }
+      .sn-health-dot-bad  { background: var(--status-red,   #e0443f); }
+      .sn-health-dot-pulse {
+        animation: sn-health-pulse 1.6s ease-in-out infinite;
+      }
+      @keyframes sn-health-pulse {
+        0%, 100% { box-shadow: 0 0 0 0 currentColor; opacity: 1; }
+        50%      { box-shadow: 0 0 0 4px color-mix(in srgb, currentColor 40%, transparent); opacity: 0.85; }
+      }
+      .sn-health-sep {
+        color: var(--border);
+        font-weight: 400;
+      }
+      .sn-health-muted {
+        color: var(--muted-fg);
+      }
+      .sn-tp-header {
+        display: flex;
+        align-items: center;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+      }
+      @media (max-width: 640px) {
+        .sn-health-chip { font-size: 0.65rem; padding: 0.3rem 0.55rem; }
+      }
+
+      /* ------------------------------------------------------------ *
+       * Avatar rings
+       *
+       * Colored ring around any .sn-member-avatar /
+       * .sn-absence-chip img / .sn-absence-card img element whose
+       * wrapper carries a data-bucket attribute. Readers can scan
+       * the whole team's state without reading a single label.
+       * ------------------------------------------------------------ */
+      [data-bucket] > .sn-member-avatar,
+      [data-bucket] > img,
+      [data-bucket] > .sn-absence-chip-initials,
+      [data-bucket] > .sn-absence-card-initials,
+      .sn-member-avatar[data-bucket],
+      img[data-bucket],
+      .sn-absence-chip-initials[data-bucket],
+      .sn-absence-card-initials[data-bucket] {
+        box-shadow:
+          0 0 0 2px var(--card-bg),
+          0 0 0 4px var(--ring-color, transparent);
+      }
+      [data-bucket="available"] { --ring-color: var(--slack-green); }
+      [data-bucket="wfh"]       { --ring-color: var(--slack-blue); }
+      [data-bucket="meeting"]   { --ring-color: #6366f1; }
+      [data-bucket="away"]      { --ring-color: var(--status-amber, #c88f00); }
+      [data-bucket="vacation"]  { --ring-color: color-mix(in srgb, var(--slack-blue) 70%, var(--slack-cyan)); }
+      [data-bucket="unknown"]   { --ring-color: color-mix(in srgb, var(--muted-fg) 45%, transparent); }
+      .sn-avatar-ring-wrap {
+        position: relative;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+
+      /* ------------------------------------------------------------ *
+       * Project switcher (EMOPS · EMAILCO · Both)
+       *
+       * Rendered right below the exec briefing strip. Segmented
+       * control feel — one pill per project, clear "selected" state.
+       * Hidden automatically when /api/jira-projects returns an empty
+       * list (single-project deployments).
+       *
+       * When a project is active, every Jira widget refetches with
+       * `?project=<key>`, the filter drawer source labels reflect
+       * the per-project env var, and the preview data swaps
+       * labels accordingly. See apiUrl() + initProjectSwitcher in
+       * the JS section.
+       * ------------------------------------------------------------ */
+      .sn-project-switcher {
+        display: none;
+        margin-top: 0.65rem;
+        padding: 0.35rem 0.75rem;
+        gap: 0.5rem;
+        align-items: center;
+        border-radius: 9999px;
+        background: color-mix(in srgb, var(--brand-primary) 9%, var(--card));
+        border: 1px solid color-mix(in srgb, var(--brand-primary) 22%, var(--border));
+        flex-wrap: nowrap;
+        white-space: nowrap;
+        width: fit-content;
+        max-width: 100%;
+      }
+      .sn-project-switcher[data-ready="true"] {
+        display: inline-flex;
+      }
+      .sn-project-switcher-label {
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: var(--muted-fg);
+        margin-right: 0.25rem;
+      }
+      .sn-project-switcher-track {
+        display: inline-flex;
+        gap: 0.15rem;
+        padding: 0.2rem;
+        border-radius: 9999px;
+        background: color-mix(in srgb, var(--fg) 6%, transparent);
+        border: 1px solid color-mix(in srgb, var(--fg) 8%, transparent);
+      }
+      .sn-project-switcher-pill {
+        padding: 0.35rem 0.85rem;
+        border-radius: 9999px;
+        font-size: 0.78rem;
+        font-weight: 600;
+        color: var(--fg);
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        transition:
+          background 140ms ease,
+          color 140ms ease,
+          box-shadow 140ms ease;
+        white-space: nowrap;
+      }
+      .sn-project-switcher-pill:hover {
+        background: color-mix(in srgb, var(--fg) 8%, transparent);
+      }
+      .sn-project-switcher-pill[aria-pressed="true"] {
+        background: var(--brand-primary);
+        color: var(--brand-primary-on);
+        box-shadow: 0 2px 10px -2px
+          color-mix(in srgb, var(--brand-primary) 55%, transparent);
+      }
+      .sn-project-switcher-pill:focus-visible {
+        outline: 2px solid
+          color-mix(in srgb, var(--brand-primary) 60%, transparent);
+        outline-offset: 2px;
+      }
+      .sn-project-switcher-hint {
+        font-size: 0.7rem;
+        color: var(--muted-fg);
+        margin-left: 0.25rem;
+      }
+      .sn-project-switcher-hint:empty {
+        display: none;
+      }
+      @media (max-width: 640px) {
+        .sn-project-switcher {
+          padding: 0.35rem 0.55rem;
+          gap: 0.35rem;
+          width: 100%;
+          justify-content: space-between;
+        }
+        .sn-project-switcher-hint { display: none; }
+        .sn-project-switcher-track { flex: 1; justify-content: center; }
+        .sn-project-switcher-pill { padding: 0.35rem 0.65rem; font-size: 0.72rem; }
+      }
+
+      /* ------------------------------------------------------------ *
+       * Per-widget DEMO badge.
+       *
+       * Every dashboard payload from src/preview.js carries a
+       * `preview: true` marker. We surface it as a small chip next
+       * to each affected widget's title so seeded data is never
+       * mistaken for live Jira/Slack/Workday. The earlier top-of-
+       * page banner was removed per UX feedback ("too messy") —
+       * only the inline chips remain.
+       *
+       * When every endpoint becomes real (preview:true drops off),
+       * the chips disappear automatically.
+       * ------------------------------------------------------------ */
+      /* Per-widget DEMO badge. Sits next to a section title.
+         Attached by JS to any widget whose payload has preview:true. */
+      .sn-demo-badge {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.3rem;
+        padding: 0.1rem 0.45rem;
+        margin-left: 0.5rem;
+        border-radius: 9999px;
+        font-size: 0.6rem;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        color: color-mix(in srgb, var(--status-amber) 85%, var(--fg));
+        background: color-mix(in srgb, var(--status-amber) 18%, transparent);
+        border: 1px solid color-mix(in srgb, var(--status-amber) 45%, transparent);
+        vertical-align: middle;
+      }
+      .sn-demo-badge::before {
+        content: "";
+        width: 0.4rem;
+        height: 0.4rem;
+        border-radius: 9999px;
+        background: var(--status-amber);
+      }
+
+      /* Flash highlight applied briefly when the briefing strip
+         scrolls a widget into view, so the reader sees exactly
+         where their click went. Keeps the chrome subtle. */
+      .sn-widget-flash {
+        animation: sn-widget-flash-anim 1.2s ease-out;
+      }
+      @keyframes sn-widget-flash-anim {
+        0%   { box-shadow: 0 0 0 0 color-mix(in srgb, var(--slack-blue) 40%, transparent); }
+        30%  { box-shadow: 0 0 0 6px color-mix(in srgb, var(--slack-blue) 25%, transparent); }
+        100% { box-shadow: 0 0 0 0 transparent; }
+      }
 
       /* Row tints (subtle, left-border accent in Slack style) */
       .tone-amber td:first-child {
@@ -2178,9 +2907,21 @@
             radial-gradient(900px 420px at 100% -6%, rgba(74, 72, 255, 0.16), transparent 60%),
             radial-gradient(700px 360px at 50% 110%, rgba(4, 0, 245, 0.18), transparent 65%),
             #0a0d1a;
+          /* Dark-mode banner halo — see light-mode :root for the
+             layered gradient recipe. Darker surface means the
+             alphas need to be stronger for the same perceived
+             weight, and the top-to-bottom wash uses indigo/violet
+             rather than straight Gen-blue so it reads as a
+             luminous banner rather than a flat blue block. */
           --hero-halo:
-            radial-gradient(520px 220px at 12% 35%, rgba(74, 72, 255, 0.22), transparent 65%),
-            radial-gradient(380px 180px at 85% 65%, rgba(42, 39, 255, 0.16), transparent 65%);
+            linear-gradient(180deg,
+              rgba(79, 70, 229, 0.30) 0%,
+              rgba(79, 70, 229, 0.34) 55%,
+              rgba(79, 70, 229, 0.00) 100%),
+            radial-gradient(820px 300px at 50% 38%, rgba(124, 58, 237, 0.38), transparent 70%),
+            radial-gradient(520px 220px at 12% 35%, rgba(74, 72, 255, 0.32), transparent 65%),
+            radial-gradient(380px 180px at 85% 65%, rgba(42, 39, 255, 0.26), transparent 65%);
+          --hero-arcs: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 280' preserveAspectRatio='none'%3E%3Cpath d='M-40 90 Q 400 -20 1240 110' stroke='rgba(255,255,255,0.32)' stroke-width='1.3' fill='none' stroke-linecap='round'/%3E%3Cpath d='M-40 200 Q 520 300 1240 180' stroke='rgba(255,255,255,0.24)' stroke-width='1.2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M-40 50 Q 700 180 1240 40' stroke='rgba(255,255,255,0.18)' stroke-width='1' fill='none'/%3E%3Cpath d='M-40 170 Q 600 20 1240 160' stroke='rgba(210,180,255,0.24)' stroke-width='0.9' fill='none'/%3E%3Cpath d='M-40 140 Q 880 240 1240 70' stroke='rgba(255,255,255,0.14)' stroke-width='0.9' fill='none'/%3E%3C/svg%3E");
         }
       }
       html.theme-dark {
@@ -2222,9 +2963,17 @@
           radial-gradient(900px 420px at 100% -6%, rgba(74, 72, 255, 0.16), transparent 60%),
           radial-gradient(700px 360px at 50% 110%, rgba(4, 0, 245, 0.18), transparent 65%),
           #0a0d1a;
+        /* Dark-mode banner halo (explicit .theme-dark toggle).
+           Mirrors the @media dark variant above. */
         --hero-halo:
-          radial-gradient(520px 220px at 12% 35%, rgba(74, 72, 255, 0.22), transparent 65%),
-          radial-gradient(380px 180px at 85% 65%, rgba(42, 39, 255, 0.16), transparent 65%);
+          linear-gradient(180deg,
+            rgba(79, 70, 229, 0.30) 0%,
+            rgba(79, 70, 229, 0.34) 55%,
+            rgba(79, 70, 229, 0.00) 100%),
+          radial-gradient(820px 300px at 50% 38%, rgba(124, 58, 237, 0.38), transparent 70%),
+          radial-gradient(520px 220px at 12% 35%, rgba(74, 72, 255, 0.32), transparent 65%),
+          radial-gradient(380px 180px at 85% 65%, rgba(42, 39, 255, 0.26), transparent 65%);
+        --hero-arcs: url("data:image/svg+xml;utf8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1200 280' preserveAspectRatio='none'%3E%3Cpath d='M-40 90 Q 400 -20 1240 110' stroke='rgba(255,255,255,0.32)' stroke-width='1.3' fill='none' stroke-linecap='round'/%3E%3Cpath d='M-40 200 Q 520 300 1240 180' stroke='rgba(255,255,255,0.24)' stroke-width='1.2' fill='none' stroke-linecap='round'/%3E%3Cpath d='M-40 50 Q 700 180 1240 40' stroke='rgba(255,255,255,0.18)' stroke-width='1' fill='none'/%3E%3Cpath d='M-40 170 Q 600 20 1240 160' stroke='rgba(210,180,255,0.24)' stroke-width='0.9' fill='none'/%3E%3Cpath d='M-40 140 Q 880 240 1240 70' stroke='rgba(255,255,255,0.14)' stroke-width='0.9' fill='none'/%3E%3C/svg%3E");
       }
 
       /* --------------------------------------------------------------
@@ -2233,7 +2982,11 @@
       .sn-topnav {
         position: sticky;
         top: 0;
-        z-index: 30;
+        /* Raised above .sn-hero (z-index: 50) and the team switcher
+           dropdown (z-index: 60) so the user-chip menu can float over
+           the quick-links bar + hero below it. Anything higher (e.g.
+           modal drawers) still wins. */
+        z-index: 80;
         background: rgba(255, 255, 255, 0.78);
         border-bottom: 1px solid var(--border);
         backdrop-filter: saturate(150%) blur(10px);
@@ -2385,7 +3138,10 @@
         box-shadow: 0 12px 32px rgba(15, 18, 35, 0.18),
           0 2px 6px rgba(15, 18, 35, 0.06);
         padding: 0.5rem;
-        z-index: 40;
+        /* Top nav itself is now z-index: 80, so within its stacking
+           context the menu sits above the sibling quicklinks bar +
+           hero. */
+        z-index: 90;
       }
       .sn-user-menu[hidden] { display: none; }
       .sn-user-menu-header {
@@ -2666,6 +3422,30 @@
          jam against the URL bar. */
       :target {
         scroll-margin-top: 0.5rem;
+      }
+
+      /* ---------------------------------------------------------------
+         Weekly Throughput sparkline — theme-aware chart colors.
+         The SVG is built via innerHTML (see renderThroughput() in JS),
+         and reads these CSS custom properties for its line stroke and
+         the top-stop of the under-chart gradient. Light mode keeps the
+         original Slack-aubergine hue; dark mode swaps to Gen amber so
+         the trend line pops on the deep navy card surface and echoes
+         the header meta line's orange.
+         --------------------------------------------------------------- */
+      #wt-spark {
+        --wt-line: #4A154B;
+        --wt-area-top: 0.18;
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) #wt-spark {
+          --wt-line: var(--status-amber, #f59e0b);
+          --wt-area-top: 0.55;
+        }
+      }
+      html.theme-dark #wt-spark {
+        --wt-line: var(--status-amber, #f59e0b);
+        --wt-area-top: 0.55;
       }
 
       /* ---------------------------------------------------------------
@@ -2959,9 +3739,9 @@
 
         /* Team Presence KPI grid already goes 2x2 on mobile via
            Tailwind — tighten the internal type so the numbers don't
-           overflow the tile. */
+           overflow the compact tile (see .sn-tp-kpi above). */
         #kpi-in, #kpi-wfh, #kpi-out, #kpi-none {
-          font-size: 1.75rem;
+          font-size: 1.2rem;
         }
       }
 
@@ -3258,6 +4038,13 @@
         }
       }
 
+      /* =================================================================
+         Removed: experimental user pill, Team/Manager view switcher,
+         and manager roll-up styles. The existing top-nav user chip
+         (#user-chip / #user-menu) is the sole identity affordance.
+         ================================================================= */
+      /* (Block removed.) */
+
       /* -----------------------------------------------------------------
          Mobile viewport lockdown — absolute final cascade step.
          The rules in this block guarantee two things regardless of
@@ -3448,6 +4235,63 @@
         border-color: color-mix(in srgb, var(--status-amber, #f59e0b) 55%, transparent);
         background: color-mix(in srgb, var(--status-amber, #f59e0b) 10%, transparent);
       }
+      /* NEW: chip state — stale data (last fetch > 2x refresh cadence) */
+      .sn-filter-chip[data-status="stale"] {
+        border-color: color-mix(in srgb, var(--status-amber, #f59e0b) 70%, transparent);
+        background: color-mix(in srgb, var(--status-amber, #f59e0b) 16%, transparent);
+        color: #92400e;
+      }
+      html.theme-dark .sn-filter-chip[data-status="stale"] {
+        color: #fde68a;
+      }
+      /* NEW: chip state — fetch error (HTTP non-OK, JQL invalid, auth) */
+      .sn-filter-chip[data-status="error"] {
+        border-color: color-mix(in srgb, var(--status-red, #ef4444) 70%, transparent);
+        background: color-mix(in srgb, var(--status-red, #ef4444) 14%, transparent);
+        color: #991b1b;
+      }
+      html.theme-dark .sn-filter-chip[data-status="error"] {
+        color: #fecaca;
+      }
+      /* NEW: small refresh button shown next to the filter chip. Forces
+         a ?force=1 re-fetch so the operator can confirm a fix without
+         waiting for the next poll. */
+      .sn-widget-refresh-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 28px;
+        height: 28px;
+        padding: 0;
+        margin-left: 0.35rem;
+        border-radius: 999px;
+        border: 1px solid var(--card-border, rgba(15, 23, 42, 0.1));
+        background: var(--card-bg-subtle, transparent);
+        color: var(--ink-strong, #0f172a);
+        cursor: pointer;
+        transition: background 120ms ease, transform 200ms ease;
+      }
+      .sn-widget-refresh-btn:hover {
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 8%, transparent);
+      }
+      .sn-widget-refresh-btn:focus-visible {
+        outline: 2px solid var(--gen-blue, #0400f5);
+        outline-offset: 2px;
+      }
+      .sn-widget-refresh-btn[data-busy="true"] svg {
+        animation: sn-spin 0.9s linear infinite;
+      }
+      @keyframes sn-spin {
+        to { transform: rotate(360deg); }
+      }
+      /* NEW: staleness warning border on the whole widget card when
+         its last successful fetch is > 2x its refresh cadence ago. */
+      [data-stale="true"] > .sn-card,
+      [data-stale="true"].sn-card,
+      .sn-card[data-stale="true"] {
+        box-shadow: 0 0 0 2px color-mix(in srgb, var(--status-amber, #f59e0b) 65%, transparent),
+          0 12px 24px -18px rgba(0, 0, 0, 0.45);
+      }
       .sn-filter-chip-icon {
         width: 14px;
         height: 14px;
@@ -3587,6 +4431,80 @@
         border: 1px solid color-mix(in srgb, var(--status-amber, #f59e0b) 35%, transparent);
         border-radius: 8px;
         padding: 0.55rem 0.75rem;
+      }
+
+      /* NEW: error banner in the filter drawer — exact HTTP status +
+         reason from the failing widget fetch. Makes Jira-side failures
+         (401/403/400) immediately diagnosable. */
+      .sn-filter-error-note {
+        font: 500 0.78rem/1.4 "Inter", system-ui, sans-serif;
+        color: #7f1d1d;
+        background: color-mix(in srgb, var(--status-red, #ef4444) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--status-red, #ef4444) 45%, transparent);
+        border-radius: 8px;
+        padding: 0.65rem 0.8rem;
+        display: flex;
+        flex-direction: column;
+        gap: 0.35rem;
+      }
+      html.theme-dark .sn-filter-error-note {
+        color: #fecaca;
+      }
+      .sn-filter-error-note strong {
+        font-weight: 600;
+        font-size: 0.82rem;
+      }
+      .sn-filter-error-note code {
+        font: 500 0.72rem/1.35 ui-monospace, SFMono-Regular, Menlo, monospace;
+        background: color-mix(in srgb, var(--status-red, #ef4444) 18%, transparent);
+        padding: 0.1rem 0.35rem;
+        border-radius: 4px;
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+
+      /* NEW: staleness note inside the drawer. Uses the same amber
+         vocabulary as the chip so the two are visually linked. */
+      .sn-filter-stale-note {
+        font: 500 0.75rem/1.4 "Inter", system-ui, sans-serif;
+        color: #92400e;
+        background: color-mix(in srgb, var(--status-amber, #f59e0b) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--status-amber, #f59e0b) 45%, transparent);
+        border-radius: 8px;
+        padding: 0.55rem 0.75rem;
+      }
+      html.theme-dark .sn-filter-stale-note {
+        color: #fde68a;
+      }
+
+      /* NEW: "Refresh now" button in the drawer footer. Sits next to
+         the "Open in Jira" link. */
+      .sn-filter-refresh-btn {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.4rem;
+        padding: 0.45rem 0.85rem;
+        border-radius: 999px;
+        border: 1px solid color-mix(in srgb, var(--gen-blue, #0400f5) 30%, transparent);
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 8%, transparent);
+        color: var(--gen-blue, #0400f5);
+        font: 600 0.8rem/1.1 "Inter", system-ui, sans-serif;
+        cursor: pointer;
+        transition: background 120ms ease;
+      }
+      .sn-filter-refresh-btn:hover {
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 18%, transparent);
+      }
+      .sn-filter-refresh-btn:focus-visible {
+        outline: 2px solid var(--gen-blue, #0400f5);
+        outline-offset: 2px;
+      }
+      .sn-filter-refresh-btn[data-busy="true"] {
+        opacity: 0.7;
+        cursor: wait;
+      }
+      .sn-filter-refresh-btn[data-busy="true"] svg {
+        animation: sn-spin 0.9s linear infinite;
       }
 
       .sn-filter-section-label {
@@ -4125,7 +5043,7 @@
             wired in the main <script> below against the same IDs.
           -->
           <p class="sn-hero-tag">
-            The daily command center for CSM teams — a mobile-first companion to Gen Central with real-time performance, workflow, and team presence.
+            The daily command center for CSM teams — a mobile-first companion to Gen Central with real-time performance, workflow, and Team Presence.
           </p>
           <p id="subhead" class="sn-hero-subhead sn-muted text-sm">Loading…</p>
         </div>
@@ -4152,6 +5070,56 @@
           </div>
         </div>
       </header>
+
+      <!--
+        Executive briefing strip — the "morning briefing".
+        Populated by renderBriefing() from data collected across
+        /api/team, /api/absences, /api/widgets/top-priority-tickets,
+        and /api/widgets/sprint-backlog. Each stat is a button that
+        scrolls to the corresponding widget. Hidden until at least
+        one stat has real data.
+      -->
+      <section id="briefing-section" class="mt-4" aria-label="Today at a glance">
+        <h2 class="sn-section-head">
+          <span class="sn-section-dot" aria-hidden="true"></span>
+          <span class="sn-brand">Today at a glance</span>
+          <span class="sn-section-tail">— tap a stat to jump to the widget</span>
+        </h2>
+        <div id="briefing" class="sn-briefing">
+          <button type="button"
+                  class="sn-briefing-stat"
+                  data-target="widget-team-presence"
+                  aria-label="Online now">
+            <span class="sn-briefing-label">Online</span>
+            <span class="sn-briefing-value" id="brief-online">—</span>
+            <span class="sn-briefing-hint" id="brief-online-hint">loading…</span>
+          </button>
+          <button type="button"
+                  class="sn-briefing-stat"
+                  data-target="widget-team-presence"
+                  aria-label="People out today">
+            <span class="sn-briefing-label">Out today</span>
+            <span class="sn-briefing-value" id="brief-out">—</span>
+            <span class="sn-briefing-hint" id="brief-out-hint">—</span>
+          </button>
+          <button type="button"
+                  class="sn-briefing-stat"
+                  data-target="widget-top-priority-tickets"
+                  aria-label="Critical &amp; high priority tickets open">
+            <span class="sn-briefing-label">Blockers</span>
+            <span class="sn-briefing-value" id="brief-blockers">—</span>
+            <span class="sn-briefing-hint" id="brief-blockers-hint">—</span>
+          </button>
+          <button type="button"
+                  class="sn-briefing-stat"
+                  data-target="widget-sprint-backlog"
+                  aria-label="Sprint backlog">
+            <span class="sn-briefing-label">Sprint to-do</span>
+            <span class="sn-briefing-value" id="brief-sprint">—</span>
+            <span class="sn-briefing-hint" id="brief-sprint-hint">—</span>
+          </button>
+        </div>
+      </section>
 
       <div class="sn-feed-canvas" aria-label="Your feed">
       <section id="widget-weekly-throughput" class="mt-0">
@@ -4472,35 +5440,66 @@
       </section>
 
       <section id="widget-team-presence" class="mt-12">
-        <h2 class="sn-section-head">
-          <span class="sn-section-dot" aria-hidden="true"></span>
-          <span class="sn-brand">{{BRAND_NAME}}</span>
-          <span class="sn-section-tail">— Team Presence</span>
-        </h2>
+        <div class="sn-tp-header">
+          <h2 class="sn-section-head" style="margin: 0;">
+            <span class="sn-section-dot" aria-hidden="true"></span>
+            <span class="sn-brand">{{BRAND_NAME}}</span>
+            <span class="sn-section-tail">— Team Presence</span>
+          </h2>
+          <!--
+            Live presence-health chip. Answers "is the data accurate?"
+            without requiring the reader to hover or click. Colors:
+              green  — all members resolved + fresh fetch
+              amber  — partial resolution OR fetch approaching TTL
+              red    — fetch failed / > 2x TTL old
+            Rebuilt on every /api/team + /api/absences response.
+          -->
+          <div id="presence-health" class="sn-health-chip" data-tone="good"
+               title="Updated on every dashboard refresh"
+               hidden>
+            <span class="sn-health-dot sn-health-dot-good sn-health-dot-pulse"
+                  aria-hidden="true"></span>
+            <span id="ph-slack">Slack —</span>
+            <span class="sn-health-sep" aria-hidden="true">·</span>
+            <span id="ph-workday">Workday —</span>
+            <span class="sn-health-sep" aria-hidden="true">·</span>
+            <span id="ph-fetched" class="sn-health-muted">just now</span>
+          </div>
+        </div>
       </section>
 
-      <section class="mt-4 grid grid-cols-2 gap-3 md:grid-cols-4">
-        <div class="sn-card p-4">
+      <!--
+        "Out today" hero strip.
+        Hidden until /api/absences returns at least one row for today.
+        Rendered by renderAbsencesToday() on each /api/absences refresh.
+        Intended for at-a-glance manager/director scanning — one number,
+        plus the names/dates of everyone out right now.
+      -->
+      <section id="absences-today-section" class="mt-4 hidden">
+        <div id="absences-today" class="sn-absence-hero" aria-live="polite"></div>
+      </section>
+
+      <section class="sn-tp-kpis mt-4 grid grid-cols-2 gap-2 md:grid-cols-4">
+        <div class="sn-card sn-tp-kpi">
           <div class="sn-kpi-label">In office</div>
           <div id="kpi-in" class="sn-kpi-value mt-1">–</div>
         </div>
-        <div class="sn-card p-4">
+        <div class="sn-card sn-tp-kpi">
           <div class="sn-kpi-label">WFH</div>
           <div id="kpi-wfh" class="sn-kpi-value mt-1">–</div>
         </div>
-        <div class="sn-card p-4">
+        <div class="sn-card sn-tp-kpi">
           <div class="sn-kpi-label">Out (sick / PTO / OOO)</div>
           <div id="kpi-out" class="sn-kpi-value mt-1">–</div>
         </div>
-        <div class="sn-card p-4">
+        <div class="sn-card sn-tp-kpi">
           <div class="sn-kpi-label">No check-in yet</div>
           <div id="kpi-none" class="sn-kpi-value mt-1">–</div>
         </div>
       </section>
 
-      <section class="mt-10">
-        <h2 class="sn-section-title">Team</h2>
-        <div class="sn-card mt-3 overflow-x-auto">
+      <section class="mt-4">
+        <div class="sn-card overflow-x-auto">
           <table class="sn-table text-sm">
             <thead id="members-thead">
               <tr>
@@ -4522,6 +5521,25 @@
           No check-ins yet today. Ask the team to try
           <code class="sn-code">/teampresence checkin in</code>.
         </p>
+      </section>
+
+      <!--
+        "Out next 7 days" carousel.
+        Hidden until /api/absences returns at least one upcoming row.
+        Horizontally scrolling on mobile so we don't blow out the viewport.
+        Each card shows avatar, name, role, absence reason (privacy-
+        masked to "Vacation" in public view), and a "Back <day>" badge
+        so managers can plan coverage.
+      -->
+      <section id="absences-upcoming-section" class="mt-10 hidden">
+        <div class="sn-absence-panel">
+          <h2 class="sn-section-title">Out next 7 days</h2>
+          <p class="sn-muted mt-1 text-xs">
+            From Workday — use this to plan coverage for CS escalations,
+            campaign reviews, and on-call rotations.
+          </p>
+          <div id="absences-upcoming" class="sn-absence-carousel mt-3"></div>
+        </div>
       </section>
 
       <section class="mt-10">
@@ -4652,8 +5670,37 @@
       };
 
       const API_KEY = new URLSearchParams(location.search).get("key");
+      /* ------------------------------------------------------------ *
+       * apiUrl() — central URL builder for every fetch on the page.
+       *
+       * Automatically appends:
+       *   - key=...      when DASHBOARD_KEY is set (from ?key= in the
+       *                  address bar, persisted to sessionStorage)
+       *   - project=...  when the path is a Jira-scoped endpoint AND
+       *                  the user has selected a project in the
+       *                  switcher (see initProjectSwitcher below).
+       *                  Non-Jira endpoints (/api/team,
+       *                  /api/absences, /api/me, /api/jira-projects)
+       *                  are NEVER appended — project scope is
+       *                  meaningless for them.
+       *
+       * Having this single place for URL construction means widget
+       * loaders stay identical ('fetch(apiUrl(path))') and the
+       * switcher "just works" without touching each of the 10+
+       * callsites.
+       * ------------------------------------------------------------ */
+      const JIRA_SCOPED_PATHS = /^\/api\/widgets\/(weekly-throughput|backlog-overview|ticket-lifecycle|inflow-vs-resolved|sla-aging-risk|kanban-board|top-priority-tickets|sprint-backlog|reopen-rate|throughput-leaderboard)\b/;
+
       const apiUrl = (p) => {
-        const base = p ?? "/api/team";
+        let base = p ?? "/api/team";
+        if (
+          window.__activeProject &&
+          JIRA_SCOPED_PATHS.test(base.replace(/\?.*$/, ""))
+        ) {
+          base = `${base}${base.includes("?") ? "&" : "?"}project=${encodeURIComponent(
+            window.__activeProject
+          )}`;
+        }
         return API_KEY
           ? `${base}${base.includes("?") ? "&" : "?"}key=${encodeURIComponent(API_KEY)}`
           : base;
@@ -4755,17 +5802,39 @@
       }
       function memberAvatarHtml(m) {
         const initials = m.initials || memberInitials(m.name);
+        // Status ring: derive bucket from the provider-mode
+        // slackStatus, or map legacy check-in / presence state.
+        // The CSS uses `[data-bucket]` to paint a colored ring.
+        const bucketAttr = m.slackStatus
+          ? `data-bucket="${esc(m.slackStatus.bucket || "unknown")}"`
+          : legacyBucketAttr(m);
         if (m.avatarUrl) {
           return `
-            <span class="sn-member-avatar" aria-hidden="true">
+            <span class="sn-member-avatar" ${bucketAttr} aria-hidden="true">
               <img src="${esc(m.avatarUrl)}" alt="" loading="lazy"
                    onerror="this.remove();this.parentNode.textContent=${JSON.stringify(initials)};">
             </span>`;
         }
         return `
-          <span class="sn-member-avatar"
+          <span class="sn-member-avatar" ${bucketAttr}
                 style="background:${memberGradient(m.id || m.name)};"
                 aria-hidden="true">${esc(initials)}</span>`;
+      }
+
+      // Map the legacy bot-mode checkin/presence state to a ring
+      // bucket so avatars in PRESENCE_MODEL=bot still get a ring.
+      function legacyBucketAttr(m) {
+        const ci = m.checkin?.state;
+        if (ci === "in") return 'data-bucket="available"';
+        if (ci === "wfh") return 'data-bucket="wfh"';
+        if (ci === "sick" || ci === "pto" || ci === "ooo")
+          return 'data-bucket="vacation"';
+        if (ci === "late" || ci === "away")
+          return 'data-bucket="away"';
+        const pr = m.presence?.state;
+        if (pr === "active") return 'data-bucket="available"';
+        if (pr === "away") return 'data-bucket="away"';
+        return 'data-bucket="unknown"';
       }
 
       function teamPillHtml(team) {
@@ -5115,15 +6184,32 @@
         const pts = trend.map((v, i) => [pad + i * stepX, toY(v)]);
         const path = pts.map((p, i) => `${i === 0 ? "M" : "L"}${p[0].toFixed(1)},${p[1].toFixed(1)}`).join(" ");
         const area = `${path} L${pts[pts.length - 1][0].toFixed(1)},${H - pad} L${pts[0][0].toFixed(1)},${H - pad} Z`;
+        // Vertical gradient under the trend line. Stop colors /
+        // opacities resolve via the CSS custom properties set on
+        // #wt-spark — light mode keeps the aubergine wash, dark mode
+        // paints a punchy amber fade (see "Weekly Throughput
+        // sparkline" CSS block). Last point stays green in both
+        // themes so the "current week" marker reads consistently.
         spark.innerHTML = `
-          <path d="${area}" fill="rgba(74,21,75,0.15)"></path>
-          <path d="${path}" fill="none" stroke="#4A154B" stroke-width="2"></path>
+          <defs>
+            <linearGradient id="wt-area-grad" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="var(--wt-line, #4A154B)"
+                    stop-opacity="var(--wt-area-top, 0.18)"/>
+              <stop offset="100%" stop-color="var(--wt-line, #4A154B)"
+                    stop-opacity="0"/>
+            </linearGradient>
+          </defs>
+          <path d="${area}" fill="url(#wt-area-grad)"></path>
+          <path d="${path}" fill="none"
+                stroke="var(--wt-line, #4A154B)" stroke-width="2"></path>
           ${pts
             .map(
               (p, i) =>
                 `<circle cx="${p[0].toFixed(1)}" cy="${p[1].toFixed(1)}" r="${
                   i === pts.length - 1 ? 3.5 : 2.2
-                }" fill="${i === pts.length - 1 ? "#2EB67D" : "#4A154B"}"></circle>`
+                }" fill="${
+                  i === pts.length - 1 ? "#2EB67D" : "var(--wt-line, #4A154B)"
+                }"></circle>`
             )
             .join("")}
         `;
@@ -5903,18 +6989,27 @@
             cache: "no-store",
           });
           if (!res.ok) {
-            renderSprintBacklog({
+            const payload = {
               unavailable: true,
               reason: `HTTP ${res.status}`,
-            });
+            };
+            renderSprintBacklog(payload);
+            dashState.sprintBacklog = payload;
+            renderBriefing();
             return;
           }
-          renderSprintBacklog(await res.json());
+          const data = await res.json();
+          renderSprintBacklog(data);
+          dashState.sprintBacklog = data;
+          renderBriefing();
         } catch (err) {
-          renderSprintBacklog({
+          const payload = {
             unavailable: true,
             reason: "Failed to load: " + (err?.message ?? err),
-          });
+          };
+          renderSprintBacklog(payload);
+          dashState.sprintBacklog = payload;
+          renderBriefing();
         }
       }
 
@@ -6202,18 +7297,27 @@
             cache: "no-store",
           });
           if (!res.ok) {
-            renderTopPriorityTickets({
+            const payload = {
               unavailable: true,
               reason: `HTTP ${res.status}`,
-            });
+            };
+            renderTopPriorityTickets(payload);
+            dashState.topPriority = payload;
+            renderBriefing();
             return;
           }
-          renderTopPriorityTickets(await res.json());
+          const data = await res.json();
+          renderTopPriorityTickets(data);
+          dashState.topPriority = data;
+          renderBriefing();
         } catch (err) {
-          renderTopPriorityTickets({
+          const payload = {
             unavailable: true,
             reason: "Failed to load: " + (err?.message ?? err),
-          });
+          };
+          renderTopPriorityTickets(payload);
+          dashState.topPriority = payload;
+          renderBriefing();
         }
       }
 
@@ -6360,6 +7464,542 @@
         }
       }
 
+      /* ---------------------------------------------------------- *
+       * Dashboard state + briefing + presence-health chip.
+       *
+       * `dashState` caches the most recent payload from each key
+       * endpoint so the briefing strip can summarise all of them in
+       * one place. Each loader stores its result here and then
+       * triggers renderBriefing() + renderPresenceHealth().
+       *
+       * The briefing strip is the "morning briefing" view: one
+       * row of at-a-glance numbers designed for a director who
+       * opens the app at 8am, gets everything they need in 3
+       * seconds, and closes it.
+       *
+       * The health chip answers "is this data accurate?" — green
+       * when every roster member resolved and /api/team was last
+       * fetched less than one refresh cycle ago; amber on partial;
+       * red when stale.
+       * ---------------------------------------------------------- */
+      const dashState = {
+        team: null,
+        absences: null,
+        topPriority: null,
+        sprintBacklog: null,
+      };
+
+      /* ------------------------------------------------------------ *
+       * Demo-signals tracker.
+       *
+       * Every /api/* response from src/preview.js carries
+       * `preview: true`. This module observes those responses (via
+       * the monkey-patched fetch a few hundred lines below) and
+       * maintains a live map of "which endpoint is currently
+       * returning demo data?". On every update it re-renders:
+       *   - The global banner at the top of the page
+       *   - A small "DEMO" badge next to the title of each affected
+       *     widget
+       *
+       * When every endpoint becomes real (i.e. preview:true drops
+       * off every response), the banner hides and the badges are
+       * removed — no stale indicators.
+       *
+       * Endpoint → widget-section-id mapping is encoded in
+       * WIDGET_SECTION_BY_ID. Unknown widget ids are still counted
+       * in the banner but just don't get a per-widget badge.
+       * ------------------------------------------------------------ */
+      const WIDGET_SECTION_BY_ID = {
+        // Jira widgets
+        "weekly-throughput": "widget-weekly-throughput",
+        "backlog-overview": "widget-backlog-overview",
+        "ticket-lifecycle": "widget-ticket-lifecycle",
+        "inflow-vs-resolved": "widget-inflow-vs-resolved",
+        "sla-aging-risk": "widget-sla-aging-risk",
+        "kanban-board": "widget-kanban-board",
+        "top-priority-tickets": "widget-top-priority-tickets",
+        "sprint-backlog": "widget-sprint-backlog",
+        "reopen-rate": "widget-reopen-rate",
+        "throughput-leaderboard": "widget-throughput-leaderboard",
+        // Non-Jira
+        team: "widget-team-presence",
+        absences: "widget-team-presence",
+      };
+
+      window.__demoSignals = (function () {
+        const state = new Map(); // endpointPath → { widgetId, demo }
+        let renderScheduled = false;
+
+        function record(endpointPath, widgetId, isDemo) {
+          const prev = state.get(endpointPath);
+          if (prev && prev.demo === isDemo && prev.widgetId === widgetId) {
+            return; // no change, skip re-render
+          }
+          state.set(endpointPath, { widgetId, demo: Boolean(isDemo) });
+          scheduleRender();
+        }
+
+        function scheduleRender() {
+          if (renderScheduled) return;
+          renderScheduled = true;
+          // Coalesce: all concurrent loaders write in the same tick,
+          // so a single render after the microtask queue drains
+          // captures everything without thrashing the DOM.
+          Promise.resolve().then(() => {
+            renderScheduled = false;
+            renderDemoSignals();
+          });
+        }
+
+        function renderDemoSignals() {
+          // Per-widget badges only. The loud top-of-page banner
+          // was removed based on user feedback — "too messy for a
+          // demo". Widgets keep their small `demo` chip so the
+          // distinction is still visible inline in each section.
+          const alreadyBadged = new Set();
+          for (const [, { widgetId, demo }] of state) {
+            if (!demo) continue;
+            const sectionId = WIDGET_SECTION_BY_ID[widgetId];
+            if (!sectionId) continue;
+            alreadyBadged.add(sectionId);
+            applyDemoBadge(sectionId);
+          }
+          // Strip badges from sections no longer demo-sourced (e.g.
+          // after a widget is wired to real Jira it stops carrying
+          // preview:true and the badge should disappear).
+          document
+            .querySelectorAll(".sn-demo-badge[data-auto='true']")
+            .forEach((el) => {
+              const section = el.closest("[id^='widget-']");
+              if (!section || !alreadyBadged.has(section.id)) {
+                el.remove();
+              }
+            });
+        }
+
+        function applyDemoBadge(sectionId) {
+          const section = document.getElementById(sectionId);
+          if (!section) return;
+          // Skip if already badged.
+          if (section.querySelector(".sn-demo-badge[data-auto='true']")) return;
+          // Pick the most prominent heading inside the section.
+          const heading =
+            section.querySelector("h2") ||
+            section.querySelector("h3") ||
+            section.querySelector(".sn-section-head") ||
+            section.querySelector(".sn-card-title") ||
+            section;
+          const badge = document.createElement("span");
+          badge.className = "sn-demo-badge";
+          badge.dataset.auto = "true";
+          badge.title =
+            "This widget is showing seeded preview data from src/preview.js, not live data.";
+          badge.textContent = "demo";
+          heading.appendChild(badge);
+        }
+
+        return { record };
+      })();
+
+      function scrollToWidget(id) {
+        const el = document.getElementById(id);
+        if (!el) return;
+        el.scrollIntoView({ behavior: "smooth", block: "start" });
+        // Flash the target briefly so it's obvious where the click
+        // went, especially on long pages.
+        el.classList.add("sn-widget-flash");
+        setTimeout(() => el.classList.remove("sn-widget-flash"), 1400);
+      }
+
+      // Delegation: every .sn-briefing-stat scrolls to data-target.
+      document.addEventListener("click", (ev) => {
+        const btn = ev.target.closest(".sn-briefing-stat");
+        if (!btn) return;
+        const target = btn.getAttribute("data-target");
+        if (target) scrollToWidget(target);
+      });
+      function renderBriefing() {
+        const { team, absences, topPriority, sprintBacklog } = dashState;
+        if (!team && !absences && !topPriority && !sprintBacklog) return;
+
+        // ---- Online ----
+        // Provider mode: count members whose bucket is available /
+        // wfh / meeting. Bot mode: fall back to check-in "in"/"wfh".
+        let onlineEl = document.getElementById("brief-online");
+        let onlineHint = document.getElementById("brief-online-hint");
+        if (team?.members) {
+          const total = team.members.length;
+          let online = 0;
+          for (const m of team.members) {
+            const bucket = m.slackStatus?.bucket;
+            if (bucket) {
+              if (
+                bucket === "available" ||
+                bucket === "wfh" ||
+                bucket === "meeting"
+              ) online++;
+            } else if (m.checkin?.state === "in" || m.checkin?.state === "wfh") {
+              online++;
+            } else if (m.presence?.state === "active") {
+              online++;
+            }
+          }
+          onlineEl.innerHTML =
+            `<span>${online}</span>` +
+            `<span class="sn-briefing-value-sub">/ ${total}</span>`;
+          onlineEl.classList.toggle(
+            "sn-briefing-tone-good",
+            total > 0 && online / total >= 0.75
+          );
+          onlineEl.classList.toggle(
+            "sn-briefing-tone-warn",
+            total > 0 && online / total >= 0.5 && online / total < 0.75
+          );
+          onlineHint.textContent =
+            total === 0
+              ? "no roster yet"
+              : online === total
+              ? "everyone signed in"
+              : `${total - online} not signed in`;
+        }
+
+        // ---- Out today ----
+        const outEl = document.getElementById("brief-out");
+        const outHint = document.getElementById("brief-out-hint");
+        if (absences) {
+          const todays = absences.today ?? [];
+          outEl.textContent = String(todays.length);
+          outEl.classList.toggle(
+            "sn-briefing-tone-warn",
+            todays.length >= 2 && todays.length < 4
+          );
+          outEl.classList.toggle(
+            "sn-briefing-tone-bad",
+            todays.length >= 4
+          );
+          outHint.textContent = todays.length
+            ? todays
+                .slice(0, 3)
+                .map((a) => a.member?.name || a.member?.fullName || "—")
+                .join(", ") + (todays.length > 3 ? ` +${todays.length - 3}` : "")
+            : "all hands on deck";
+        } else {
+          outEl.textContent = "0";
+          outHint.textContent = "Workday off";
+        }
+
+        // ---- Blockers (Critical + Highest priority) ----
+        const blockersEl = document.getElementById("brief-blockers");
+        const blockersHint = document.getElementById("brief-blockers-hint");
+        if (topPriority && !topPriority.unavailable) {
+          const critical = (topPriority.byPriority ?? [])
+            .filter((p) => /critical|highest/i.test(p.priority))
+            .reduce((a, p) => a + (p.count ?? 0), 0);
+          const high = (topPriority.byPriority ?? [])
+            .filter((p) => /^high$/i.test(p.priority))
+            .reduce((a, p) => a + (p.count ?? 0), 0);
+          blockersEl.textContent = String(critical);
+          blockersEl.classList.toggle("sn-briefing-tone-bad", critical > 0);
+          blockersEl.classList.toggle(
+            "sn-briefing-tone-good",
+            critical === 0 && high === 0
+          );
+          blockersHint.textContent =
+            critical > 0
+              ? `Critical · ${high} High waiting`
+              : high > 0
+              ? `no Critical · ${high} High`
+              : "queue clear";
+        } else {
+          blockersEl.textContent = "—";
+          blockersHint.textContent = topPriority?.reason ?? "loading…";
+        }
+
+        // ---- Sprint to-do ----
+        const sprintEl = document.getElementById("brief-sprint");
+        const sprintHint = document.getElementById("brief-sprint-hint");
+        if (sprintBacklog && !sprintBacklog.unavailable) {
+          const total = sprintBacklog.total ?? 0;
+          sprintEl.textContent = String(total);
+          const oldest = sprintBacklog.oldestAgeDays;
+          const median = sprintBacklog.medianAgeDays;
+          sprintHint.textContent =
+            total === 0
+              ? "empty queue"
+              : oldest != null
+              ? `median ${median}d · oldest ${oldest}d`
+              : median != null
+              ? `median age ${median}d`
+              : `${sprintBacklog.status ?? "To Do"}`;
+        } else {
+          sprintEl.textContent = "—";
+          sprintHint.textContent = sprintBacklog?.reason ?? "loading…";
+        }
+      }
+
+      function renderPresenceHealth() {
+        const chip = document.getElementById("presence-health");
+        if (!chip) return;
+        const { team, absences } = dashState;
+        if (!team) return;
+        chip.hidden = false;
+
+        // Bot mode doesn't have slackStatus, so "resolved" is
+        // meaningless — summarise differently.
+        const model = team.model ?? "bot";
+        const total = team.members?.length ?? 0;
+        let tone = "good";
+
+        // Slack resolution count. In bot mode the chip reports the
+        // check-in table instead — different data source, same idea.
+        const slackEl = document.getElementById("ph-slack");
+        if (model === "bot") {
+          const checkedIn = team.members.filter(
+            (m) => m.checkin?.state
+          ).length;
+          slackEl.textContent = `Check-ins ${checkedIn}/${total}`;
+          if (total > 0 && checkedIn / total < 0.5) tone = "warn";
+        } else {
+          const resolved = team.members.filter(
+            (m) => m.slackStatus?.source === "slack" ||
+                   m.slackStatus?.source === "workday"
+          ).length;
+          slackEl.textContent = `Slack ${resolved}/${total}`;
+          if (total === 0) tone = "warn";
+          else if (resolved === 0) tone = "bad";
+          else if (resolved < total) tone = "warn";
+        }
+
+        // Workday line.
+        const wdEl = document.getElementById("ph-workday");
+        if (model === "slack+workday") {
+          const src = absences?.source ?? "none";
+          const today = absences?.totals?.today ?? 0;
+          const upcoming = absences?.totals?.upcoming ?? 0;
+          if (src === "none" || src === "noop") {
+            wdEl.textContent = "Workday off";
+          } else {
+            wdEl.textContent =
+              `Workday (${src}) ${today} out · ${upcoming} upcoming`;
+          }
+        } else if (model === "slack") {
+          wdEl.textContent = "Workday not in model";
+        } else {
+          wdEl.textContent = "Bot mode";
+        }
+
+        // Fetch age.
+        const fetchedEl = document.getElementById("ph-fetched");
+        const ageMs = Date.now() - (team.generatedAt ?? Date.now());
+        fetchedEl.textContent = humanAge(ageMs);
+        if (ageMs > 120 * 1000) tone = "bad";
+        else if (ageMs > 60 * 1000 && tone === "good") tone = "warn";
+
+        chip.setAttribute("data-tone", tone);
+        const dot = chip.querySelector(".sn-health-dot");
+        if (dot) {
+          dot.classList.remove(
+            "sn-health-dot-good",
+            "sn-health-dot-warn",
+            "sn-health-dot-bad"
+          );
+          dot.classList.add("sn-health-dot-" + tone);
+        }
+      }
+
+      function humanAge(ms) {
+        if (ms < 5000) return "just now";
+        const s = Math.round(ms / 1000);
+        if (s < 60) return `${s}s ago`;
+        const m = Math.round(s / 60);
+        if (m < 60) return `${m}m ago`;
+        const h = Math.round(m / 60);
+        return `${h}h ago`;
+      }
+
+      // Keep the health chip's "just now / 47s ago / 2m ago" label
+      // fresh between /api/team refreshes so the user doesn't have
+      // to wait 30s to see the clock move.
+      setInterval(() => {
+        if (dashState.team) renderPresenceHealth();
+      }, 10_000);
+
+      /* ---------------------------------------------------------- *
+       * Absences (Workday) — drives the "Out today" hero strip and
+       * the "Out next 7 days" carousel. Both are hidden until we
+       * have at least one row to show, so this is a no-op in
+       * PRESENCE_MODEL=bot or when WORKDAY_PROVIDER=noop.
+       *
+       * PRIVACY: The server returns the raw absence `type` (PTO /
+       * Sick / Personal / ...) but the public view here shows
+       * "Vacation" for everyone. The exact type is exposed only via
+       * the hover tooltip (planned: gate behind director role).
+       * ---------------------------------------------------------- */
+      async function loadAbsences() {
+        const todaySection = document.getElementById("absences-today-section");
+        const upcomingSection = document.getElementById(
+          "absences-upcoming-section"
+        );
+        try {
+          const res = await fetch(apiUrl("/api/absences?days=7"), {
+            cache: "no-store",
+          });
+          if (!res.ok) throw new Error("HTTP " + res.status);
+          const data = await res.json();
+          dashState.absences = data;
+          renderAbsencesToday(data.today ?? []);
+          renderAbsencesUpcoming(data.upcoming ?? []);
+          todaySection.classList.toggle(
+            "hidden",
+            (data.today ?? []).length === 0
+          );
+          upcomingSection.classList.toggle(
+            "hidden",
+            (data.upcoming ?? []).length === 0
+          );
+          renderBriefing();
+          renderPresenceHealth();
+        } catch (err) {
+          // Hide both surfaces silently — Workday being unreachable
+          // shouldn't break the rest of the dashboard.
+          todaySection.classList.add("hidden");
+          upcomingSection.classList.add("hidden");
+          dashState.absences = null;
+          renderBriefing();
+          renderPresenceHealth();
+        }
+      }
+
+      // Public-view label for any absence type. Keeps Sick / Personal
+      // / Bereavement out of the public dashboard. Managers who need
+      // the specifics get them from the filter drawer tooltip.
+      function publicAbsenceLabel() {
+        return "Vacation";
+      }
+
+      function formatShortDate(ymd) {
+        if (!ymd) return "";
+        const [y, m, d] = ymd.split("-").map((n) => parseInt(n, 10));
+        if (!y || !m || !d) return ymd;
+        const date = new Date(Date.UTC(y, m - 1, d));
+        return date.toLocaleDateString(undefined, {
+          weekday: "short",
+          day: "numeric",
+          month: "short",
+        });
+      }
+
+      function dayAfter(ymd) {
+        const [y, m, d] = ymd.split("-").map((n) => parseInt(n, 10));
+        if (!y || !m || !d) return ymd;
+        const date = new Date(Date.UTC(y, m - 1, d));
+        date.setUTCDate(date.getUTCDate() + 1);
+        return date.toISOString().slice(0, 10);
+      }
+
+      function absenceAvatarEl(member, cls) {
+        // All absence surfaces represent "out" people — they get
+        // the vacation ring regardless of their last Slack status.
+        if (member?.avatarUrl) {
+          const img = document.createElement("img");
+          img.src = member.avatarUrl;
+          img.alt = "";
+          img.setAttribute("data-bucket", "vacation");
+          return img;
+        }
+        const span = document.createElement("span");
+        span.className = cls;
+        span.setAttribute("data-bucket", "vacation");
+        const name = member?.name || member?.fullName || "?";
+        const parts = name.trim().split(/\s+/);
+        const initials =
+          (parts[0]?.[0] ?? "") + (parts.length > 1 ? parts[parts.length - 1][0] : "");
+        span.textContent = (initials || "?").toUpperCase();
+        return span;
+      }
+
+      function renderAbsencesToday(rows) {
+        const host = document.getElementById("absences-today");
+        host.innerHTML = "";
+        if (!rows.length) return;
+
+        const head = document.createElement("div");
+        head.className = "sn-absence-hero-head";
+        const count = document.createElement("div");
+        count.className = "sn-absence-hero-count";
+        count.textContent = String(rows.length);
+        const label = document.createElement("div");
+        label.className = "sn-absence-hero-label";
+        label.textContent =
+          rows.length === 1 ? "out today" : "out today";
+        const stacked = document.createElement("div");
+        stacked.appendChild(count);
+        stacked.appendChild(label);
+        head.appendChild(stacked);
+        host.appendChild(head);
+
+        for (const row of rows) {
+          const chip = document.createElement("div");
+          chip.className = "sn-absence-chip";
+          // Tooltip gets the (private) exact type so admins who know
+          // what to look for can surface it; public text stays generic.
+          chip.title = `${row.type ?? "PTO"} · ${formatShortDate(row.startDate)} – ${formatShortDate(row.endDate)}`;
+          chip.appendChild(
+            absenceAvatarEl(row.member, "sn-absence-chip-initials")
+          );
+          const txt = document.createElement("div");
+          const name = document.createElement("div");
+          name.className = "sn-absence-chip-name";
+          name.textContent = row.member?.name || row.member?.fullName || "—";
+          const dates = document.createElement("div");
+          dates.className = "sn-absence-chip-dates";
+          dates.textContent = `Back ${formatShortDate(dayAfter(row.endDate))}`;
+          txt.appendChild(name);
+          txt.appendChild(dates);
+          chip.appendChild(txt);
+          host.appendChild(chip);
+        }
+      }
+
+      function renderAbsencesUpcoming(rows) {
+        const host = document.getElementById("absences-upcoming");
+        host.innerHTML = "";
+        for (const row of rows) {
+          const card = document.createElement("div");
+          card.className = "sn-absence-card";
+          card.title = `${row.type ?? "PTO"} · ${row.note ?? ""}`.trim();
+
+          const head = document.createElement("div");
+          head.className = "sn-absence-card-head";
+          head.appendChild(
+            absenceAvatarEl(row.member, "sn-absence-card-initials")
+          );
+          const info = document.createElement("div");
+          const name = document.createElement("div");
+          name.className = "sn-absence-card-name";
+          name.textContent = row.member?.name || row.member?.fullName || "—";
+          const role = document.createElement("div");
+          role.className = "sn-absence-card-role";
+          role.textContent = row.member?.role || row.member?.team || "";
+          info.appendChild(name);
+          if (role.textContent) info.appendChild(role);
+          head.appendChild(info);
+
+          const reason = document.createElement("div");
+          reason.className = "sn-absence-card-reason";
+          reason.textContent = `${publicAbsenceLabel()} · ${formatShortDate(row.startDate)} – ${formatShortDate(row.endDate)}`;
+
+          const badge = document.createElement("div");
+          badge.className = "sn-absence-badge";
+          badge.textContent = `Back ${formatShortDate(dayAfter(row.endDate))}`;
+
+          card.appendChild(head);
+          card.appendChild(reason);
+          card.appendChild(badge);
+          host.appendChild(card);
+        }
+      }
+
       async function load() {
         try {
           const res = await fetch(apiUrl("/api/team"), { cache: "no-store" });
@@ -6369,16 +8009,20 @@
             return;
           }
           const data = await res.json();
+          dashState.team = data;
           renderHeader(data);
           applyPresenceModel(data);
           renderKpis(data.members);
           renderMembers(data.members, data);
           renderExceptions(data.members);
           renderRollcalls(data.rollcalls ?? []);
+          renderBriefing();
+          renderPresenceHealth();
         } catch (err) {
           document.getElementById("subhead").textContent =
             "Failed to load: " + (err?.message ?? err);
         }
+        loadAbsences();
         loadThroughput();
         loadBacklog();
         loadLifecycle();
@@ -6390,6 +8034,16 @@
         loadThroughputLeaderboard();
         loadKanban();
       }
+
+      // Bootstrap the active Jira project from localStorage BEFORE the
+      // first load() call so the very first round of widget fetches
+      // already carries ?project=. initProjectSwitcher() later
+      // validates against the server's project list and corrects it if
+      // the stored value is stale.
+      try {
+        const stored = localStorage.getItem("gen-pulse-project");
+        if (stored) window.__activeProject = stored;
+      } catch (_) { /* sandboxed storage; ignore */ }
 
       document.getElementById("refresh").addEventListener("click", load);
       load();
@@ -6525,6 +8179,125 @@
       // doesn't require four backends to feel real. A `team:changed`
       // CustomEvent is dispatched so other widgets (or a future
       // multi-tenant backend) can refetch their data.
+      /* ================================================================
+       * Project switcher (EMOPS · EMAILCO · Both)
+       *
+       * Lifecycle:
+       *   1. On page load we fetch /api/jira-projects.
+       *      - [] → single-project deployment, leave switcher hidden.
+       *      - [p1, p2, …] → render one pill per project.
+       *   2. Selected project comes from localStorage first (user's
+       *      last choice) or the server's `defaultProject` field.
+       *   3. window.__activeProject holds the current selection so
+       *      apiUrl() can append ?project= automatically to every
+       *      Jira widget fetch. No widget loader code needs changing.
+       *   4. On click, we update state + re-run load() so every
+       *      widget refetches with the new scope. The filter drawer
+       *      reflects the new env-var labels immediately.
+       *
+       * This matches initTeamSwitcher's style (localStorage key +
+       * attached to a single element) and the team switcher's a11y
+       * conventions (role=group, aria-pressed on pills).
+       * ================================================================ */
+      const PROJECT_LS_KEY = "gen-pulse-project";
+      (async function initProjectSwitcher() {
+        const root = document.getElementById("project-switcher");
+        const track = document.getElementById("project-switcher-track");
+        const hintEl = document.getElementById("project-switcher-hint");
+        if (!root || !track) return;
+
+        let payload;
+        try {
+          const res = await fetch(apiUrl("/api/jira-projects"), {
+            cache: "no-store",
+          });
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
+          payload = await res.json();
+        } catch (err) {
+          console.warn("[project-switcher] /api/jira-projects failed:", err);
+          return; // leave hidden
+        }
+
+        const projects = Array.isArray(payload?.projects) ? payload.projects : [];
+        if (projects.length === 0) {
+          // Single-project deployment — keep hidden, no-op.
+          return;
+        }
+
+        // Resolve initial selection: last user choice > server default
+        // > first project in the list.
+        let initial = null;
+        try {
+          initial = localStorage.getItem(PROJECT_LS_KEY);
+        } catch (_) {
+          /* sandboxed storage; ignore */
+        }
+        if (!initial || !projects.some((p) => p.key === initial)) {
+          initial =
+            payload.defaultProject ||
+            projects.find((p) => p.isDefault)?.key ||
+            projects[0].key;
+        }
+        window.__activeProject = initial;
+
+        // Render pills.
+        track.innerHTML = "";
+        for (const proj of projects) {
+          const btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "sn-project-switcher-pill";
+          btn.dataset.project = proj.key;
+          btn.setAttribute(
+            "aria-pressed",
+            proj.key === initial ? "true" : "false"
+          );
+          btn.setAttribute(
+            "aria-label",
+            `Switch to ${proj.label} — ${
+              proj.key === "all"
+                ? "combined view across all projects"
+                : `project ${proj.key}`
+            }`
+          );
+          btn.textContent = proj.label;
+          btn.addEventListener("click", () => setActiveProject(proj.key));
+          track.appendChild(btn);
+        }
+        if (hintEl) {
+          hintEl.textContent = "";
+        }
+        root.title =
+          "Switches JQL scope on every Jira widget. Remembered across sessions.";
+        root.dataset.ready = "true";
+
+        function setActiveProject(key) {
+          if (window.__activeProject === key) return;
+          window.__activeProject = key;
+          try {
+            localStorage.setItem(PROJECT_LS_KEY, key);
+          } catch (_) {
+            /* ignore */
+          }
+          // Update pill visual state.
+          track
+            .querySelectorAll(".sn-project-switcher-pill")
+            .forEach((el) => {
+              el.setAttribute(
+                "aria-pressed",
+                el.dataset.project === key ? "true" : "false"
+              );
+            });
+          // Invalidate any in-flight demo-signals so the banner and
+          // per-widget badges rerender from the new responses.
+          if (typeof load === "function") {
+            load();
+          }
+        }
+
+        // Expose for debugging / external triggers (tests, etc.)
+        window.__setActiveProject = setActiveProject;
+      })();
+
       (function initTeamSwitcher() {
         const KEY = "gen-pulse-team";
         const root = document.getElementById("team-switcher");
@@ -6845,6 +8618,8 @@
         >×</button>
       </header>
       <div class="sn-filter-drawer-body">
+        <div id="sn-filter-error-note" class="sn-filter-error-note" hidden></div>
+        <div id="sn-filter-stale-note" class="sn-filter-stale-note" hidden></div>
         <div id="sn-filter-fallback-note" class="sn-filter-fallback-note" hidden></div>
         <div>
           <div class="sn-filter-section-label">Source</div>
@@ -6870,6 +8645,15 @@
         <div class="sn-filter-meta" id="sn-filter-meta"></div>
       </div>
       <footer class="sn-filter-drawer-foot">
+        <button
+          type="button"
+          class="sn-filter-refresh-btn"
+          id="sn-filter-refresh-btn"
+          aria-label="Force refresh this widget"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true"><path d="M4 12a8 8 0 0 1 14-5.3M20 4v5h-5M20 12a8 8 0 0 1-14 5.3M4 20v-5h5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>
+          <span id="sn-filter-refresh-label">Refresh now</span>
+        </button>
         <a
           class="sn-filter-open-jira"
           id="sn-filter-open-jira"
@@ -6912,8 +8696,37 @@
           "throughput-leaderboard",
         ];
         const filterMetaByWidget = new Map();
+        // NEW: track the last URL each widget was fetched from so
+        // "Refresh now" knows what to re-invoke, and track errors
+        // separately from successful meta.
+        const widgetUrlById = new Map();
+        const widgetErrorById = new Map();
+        // NEW: track refreshSeconds per widget id for staleness
+        // detection (pulled from /api/widgets manifest on page load).
+        const widgetRefreshSecondsById = new Map();
         const drawer = document.getElementById("sn-filter-drawer");
         const backdrop = document.getElementById("sn-filter-backdrop");
+
+        // Pre-populate refresh cadences from the widget manifest so
+        // staleness detection works from the very first fetch. If
+        // /api/widgets is unavailable we fall back to the `meta`
+        // object the widget response carries.
+        fetch("/api/widgets", { cache: "no-store" })
+          .then((r) => (r.ok ? r.json() : null))
+          .then((list) => {
+            if (!Array.isArray(list)) return;
+            for (const w of list) {
+              if (w && w.id && Number.isFinite(w.refreshSeconds)) {
+                widgetRefreshSecondsById.set(w.id, w.refreshSeconds);
+              }
+            }
+            // Also kick a first staleness sweep once the cadences
+            // are known.
+            refreshStaleStatesFromMeta();
+          })
+          .catch(() => {
+            /* non-fatal — staleness just uses meta.refreshSeconds */
+          });
 
         function relTime(ts) {
           if (!ts) return "—";
@@ -6955,7 +8768,113 @@
               '<span class="sn-filter-chip-text">Filter</span>';
             btn.addEventListener("click", () => openFilterDrawer(id));
             header.appendChild(btn);
+
+            // NEW: inline refresh button right next to the filter
+            // chip so the operator can force a re-fetch without
+            // opening the drawer. Same endpoint + force=1 mechanic
+            // used by the drawer's "Refresh now" button.
+            const refreshBtn = document.createElement("button");
+            refreshBtn.type = "button";
+            refreshBtn.className = "sn-widget-refresh-btn";
+            refreshBtn.dataset.widgetId = id;
+            refreshBtn.title = "Force refresh this widget";
+            refreshBtn.setAttribute("aria-label", "Force refresh this widget");
+            refreshBtn.innerHTML =
+              '<svg viewBox="0 0 24 24" width="14" height="14" aria-hidden="true">' +
+              '<path d="M4 12a8 8 0 0 1 14-5.3M20 4v5h-5M20 12a8 8 0 0 1-14 5.3M4 20v-5h5" ' +
+              'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>' +
+              '</svg>';
+            refreshBtn.addEventListener("click", (e) => {
+              e.stopPropagation();
+              forceRefreshWidget(id, refreshBtn);
+            });
+            header.appendChild(refreshBtn);
           }
+        }
+
+        /* -- Staleness detection --------------------------------------- *
+         * A widget's data is considered stale when the last successful
+         * fetch is older than 2x its refresh cadence. We tag both the
+         * filter chip (data-status="stale") and the widget card
+         * (data-stale="true"). Re-evaluated on every successful fetch
+         * and on a 30s timer.                                           */
+        function refreshCadenceFor(widgetId, meta) {
+          const fromManifest = widgetRefreshSecondsById.get(widgetId);
+          if (Number.isFinite(fromManifest)) return fromManifest;
+          if (meta && Number.isFinite(meta.refreshSeconds)) return meta.refreshSeconds;
+          return 15 * 60; // sensible default
+        }
+
+        function isStale(meta, widgetId) {
+          if (!meta || !meta.generatedAt) return false;
+          const cadence = refreshCadenceFor(widgetId, meta);
+          const maxAgeMs = cadence * 2 * 1000;
+          return Date.now() - meta.generatedAt > maxAgeMs;
+        }
+
+        function applyChipState(widgetId) {
+          const chip = document.querySelector(
+            `.sn-filter-chip[data-widget-id="${widgetId}"]`
+          );
+          const widget = document.getElementById(`widget-${widgetId}`);
+          if (!chip) return;
+          const err = widgetErrorById.get(widgetId);
+          const meta = filterMetaByWidget.get(widgetId);
+
+          // Error trumps stale trumps clean.
+          if (err) {
+            chip.dataset.status = "error";
+            chip.hidden = false;
+            const textEl = chip.querySelector(".sn-filter-chip-text");
+            if (textEl) textEl.textContent = "Error";
+            if (widget) widget.dataset.stale = "true";
+            return;
+          }
+
+          delete chip.dataset.status;
+          if (meta) {
+            if (isStale(meta, widgetId)) {
+              chip.dataset.status = "stale";
+              if (widget) widget.dataset.stale = "true";
+            } else if (widget) {
+              delete widget.dataset.stale;
+            }
+          }
+        }
+
+        function refreshStaleStatesFromMeta() {
+          for (const id of filterMetaByWidget.keys()) applyChipState(id);
+        }
+        // Re-evaluate staleness every 30s so widgets flip amber the
+        // moment they cross the threshold, without waiting for the
+        // next fetch to land.
+        setInterval(refreshStaleStatesFromMeta, 30_000);
+
+        /* -- Force-refresh trigger ------------------------------------- *
+         * Re-fetches the widget's endpoint with ?force=1 (bypasses the
+         * server-side TTL cache in src/web.js). After the request
+         * resolves, reload the page so every widget's renderer picks up
+         * the fresh cache entry. Low-risk and easy to reason about.     */
+        async function forceRefreshWidget(widgetId, sourceBtn) {
+          const url = widgetUrlById.get(widgetId);
+          if (!url) {
+            // No URL captured yet — just reload the page.
+            location.reload();
+            return;
+          }
+          const btns = document.querySelectorAll(
+            `.sn-widget-refresh-btn[data-widget-id="${widgetId}"], #sn-filter-refresh-btn[data-widget-id="${widgetId}"]`
+          );
+          const allBtns = [sourceBtn, ...btns].filter(Boolean);
+          for (const b of allBtns) b.dataset.busy = "true";
+          try {
+            const sep = url.includes("?") ? "&" : "?";
+            await fetch(url + sep + "force=1", { cache: "no-store" });
+          } catch (_) {
+            /* ignore — reloading will surface any real error */
+          }
+          // Small delay so the user sees the spinner briefly.
+          setTimeout(() => location.reload(), 280);
         }
 
         /* -- Meta capture via fetch interception ------------------------ */
@@ -6964,6 +8883,10 @@
           const filter = data && data.filter;
           if (!filter) return;
           filterMetaByWidget.set(widgetId, filter);
+          // NEW: clear any previous error state the moment we see a
+          // successful response. Widget is healthy again.
+          widgetErrorById.delete(widgetId);
+
           const chip = document.querySelector(
             `.sn-filter-chip[data-widget-id="${widgetId}"]`
           );
@@ -6973,6 +8896,30 @@
           if (textEl) textEl.textContent = filter.chip || "Filter";
           if (filter.fallbackFrom) chip.dataset.fallback = "true";
           else delete chip.dataset.fallback;
+
+          // NEW: chip status (error/stale/clean) + staleness border
+          // on the widget card.
+          applyChipState(widgetId);
+        }
+
+        function captureFilterError(widgetId, url, status, bodyText) {
+          widgetErrorById.set(widgetId, {
+            status,
+            url,
+            bodyText: (bodyText || "").slice(0, 500), // cap to keep the drawer sane
+            at: Date.now(),
+          });
+          // Make sure the chip is visible even on the very first
+          // request (otherwise it's hidden until a success lands).
+          const chip = document.querySelector(
+            `.sn-filter-chip[data-widget-id="${widgetId}"]`
+          );
+          if (chip) {
+            chip.hidden = false;
+            const textEl = chip.querySelector(".sn-filter-chip-text");
+            if (textEl) textEl.textContent = "Error";
+          }
+          applyChipState(widgetId);
         }
 
         (function patchFetchForFilterMeta() {
@@ -6989,17 +8936,67 @@
                   ? input.url
                   : "";
               const m = url.match(/\/api\/widgets\/([^/?#]+)/);
+              if (m) {
+                const widgetId = m[1];
+                // NEW: track the base URL (without query string) so
+                // "Refresh now" can re-invoke it.
+                if (JIRA_WIDGET_IDS.includes(widgetId)) {
+                  widgetUrlById.set(widgetId, url.replace(/[?&]force=1\b/, ""));
+                }
+                // NEW: capture failures too — exact HTTP status +
+                // response body become visible in the drawer.
+                if (res && !res.ok && JIRA_WIDGET_IDS.includes(widgetId)) {
+                  res
+                    .clone()
+                    .text()
+                    .then((bodyText) => {
+                      captureFilterError(widgetId, url, res.status, bodyText);
+                    })
+                    .catch(() => {
+                      captureFilterError(widgetId, url, res.status, "");
+                    });
+                }
+              }
               if (m && res && res.ok) {
                 const widgetId = m[1];
                 if (JIRA_WIDGET_IDS.includes(widgetId)) {
                   res
                     .clone()
                     .json()
-                    .then((json) => captureFilterMeta(widgetId, json))
+                    .then((json) => {
+                      captureFilterMeta(widgetId, json);
+                      // Also feed the demo-signals tracker so the
+                      // banner + per-widget badge stay in sync with
+                      // actual server responses (not assumptions).
+                      if (window.__demoSignals) {
+                        window.__demoSignals.record(
+                          url.replace(/\?.*$/, ""),
+                          widgetId,
+                          json?.preview === true
+                        );
+                      }
+                    })
                     .catch(() => {
                       /* non-JSON or parse error; ignore */
                     });
                 }
+              }
+              // Track preview flag for non-Jira endpoints too
+              // (/api/team, /api/absences) so the banner covers the
+              // full surface area, not just Jira widgets.
+              const other = url.match(/\/api\/(team|absences)\b/);
+              if (other && res && res.ok && window.__demoSignals) {
+                res
+                  .clone()
+                  .json()
+                  .then((json) => {
+                    window.__demoSignals.record(
+                      url.replace(/\?.*$/, ""),
+                      other[1],
+                      json?.preview === true
+                    );
+                  })
+                  .catch(() => {});
               }
             } catch (_) {
               /* never let the interceptor break the caller */
@@ -7012,14 +9009,17 @@
 
         function openFilterDrawer(widgetId) {
           const meta = filterMetaByWidget.get(widgetId);
-          if (!meta) return;
-          renderDrawer(meta);
+          const err = widgetErrorById.get(widgetId);
+          // Allow the drawer to open in error-only mode (e.g. the very
+          // first widget fetch failed, so we have no meta yet). This
+          // is critical for debugging during go-live.
+          if (!meta && !err) return;
+          renderDrawer(meta ?? null, err ?? null, widgetId);
           drawer.dataset.open = "true";
           drawer.setAttribute("aria-hidden", "false");
           backdrop.dataset.open = "true";
           backdrop.setAttribute("aria-hidden", "false");
           document.body.dataset.filterDrawerOpen = "true";
-          // Focus the close button for keyboard users.
           const close = document.getElementById("sn-filter-drawer-close");
           if (close) close.focus();
         }
@@ -7032,13 +9032,70 @@
           delete document.body.dataset.filterDrawerOpen;
         }
 
-        function renderDrawer(meta) {
+        function humanReasonForStatus(status) {
+          switch (status) {
+            case 400: return "Bad request — JQL is likely invalid.";
+            case 401: return "Unauthorized — Jira token missing or expired.";
+            case 403: return "Forbidden — token lacks permission on this project.";
+            case 404: return "Not found — project key or endpoint is wrong.";
+            case 408:
+            case 504: return "Jira timed out — slow query or network issue.";
+            case 500:
+            case 502:
+            case 503: return "Jira unavailable — retry in a moment.";
+            default:  return null;
+          }
+        }
+
+        function renderDrawer(meta, err, widgetId) {
+          // Title falls back to the widget id when we're in error-only
+          // mode (no meta yet).
           document.getElementById("sn-filter-drawer-title").textContent =
-            meta.title || "Filter";
+            (meta && meta.title) || widgetId || "Filter";
           document.getElementById("sn-filter-source-env").textContent =
-            meta.source || "(no env var set)";
+            (meta && meta.source) || "(no env var set)";
+
+          /* -- Error banner --------------------------------------- */
+          const errorEl = document.getElementById("sn-filter-error-note");
+          if (err) {
+            const reason = humanReasonForStatus(err.status);
+            errorEl.innerHTML = "";
+            const strong = document.createElement("strong");
+            strong.textContent = `HTTP ${err.status} — widget fetch failed`;
+            errorEl.appendChild(strong);
+            if (reason) {
+              const p = document.createElement("div");
+              p.textContent = reason;
+              errorEl.appendChild(p);
+            }
+            if (err.bodyText) {
+              const code = document.createElement("code");
+              code.textContent = err.bodyText;
+              errorEl.appendChild(code);
+            }
+            errorEl.hidden = false;
+          } else {
+            errorEl.hidden = true;
+            errorEl.innerHTML = "";
+          }
+
+          /* -- Staleness banner ---------------------------------- */
+          const staleEl = document.getElementById("sn-filter-stale-note");
+          if (meta && isStale(meta, widgetId)) {
+            const cadence = refreshCadenceFor(widgetId, meta);
+            staleEl.textContent =
+              `This widget's last successful fetch was ${relTime(meta.generatedAt)}, ` +
+              `longer than 2× the ${fmtRefresh(cadence)} refresh cadence. ` +
+              `Click "Refresh now" to force a re-fetch, or check the server logs.`;
+            staleEl.hidden = false;
+          } else {
+            staleEl.hidden = true;
+            staleEl.textContent = "";
+          }
+
+          /* -- Fallback banner (unchanged) ----------------------- */
           const fallbackEl = document.getElementById("sn-filter-fallback-note");
-          if (meta.fallbackFrom) {
+          if (meta && meta.fallbackFrom) {
             fallbackEl.hidden = false;
             fallbackEl.textContent =
               `Note: ${meta.fallbackFrom} is not configured, so this widget is falling back to ${meta.source}. ` +
@@ -7047,51 +9104,62 @@
             fallbackEl.hidden = true;
             fallbackEl.textContent = "";
           }
+
+          /* -- Params / JQL / meta (unchanged, gated on meta) --- */
           const dl = document.getElementById("sn-filter-params");
           dl.innerHTML = "";
-          for (const p of meta.parameters || []) {
-            const dt = document.createElement("dt");
-            dt.textContent = p.label;
-            const dd = document.createElement("dd");
-            dd.textContent = p.value ?? "—";
-            if (p.hint) {
-              const hint = document.createElement("span");
-              hint.className = "sn-filter-param-hint";
-              hint.textContent = p.hint;
-              dd.appendChild(hint);
+          if (meta) {
+            for (const p of meta.parameters || []) {
+              const dt = document.createElement("dt");
+              dt.textContent = p.label;
+              const dd = document.createElement("dd");
+              dd.textContent = p.value ?? "—";
+              if (p.hint) {
+                const hint = document.createElement("span");
+                hint.className = "sn-filter-param-hint";
+                hint.textContent = p.hint;
+                dd.appendChild(hint);
+              }
+              dl.appendChild(dt);
+              dl.appendChild(dd);
             }
-            dl.appendChild(dt);
-            dl.appendChild(dd);
           }
           document.getElementById("sn-filter-jql-pre").textContent =
-            meta.jql || "(no JQL captured)";
+            (meta && meta.jql) || "(no JQL captured)";
           const meta1 = [];
-          if (meta.refreshSeconds != null) {
+          if (meta && meta.refreshSeconds != null) {
             meta1.push(
               `<span>Refresh cadence: <strong>every ${fmtRefresh(
                 meta.refreshSeconds
               )}</strong></span>`
             );
           }
-          if (meta.generatedAt) {
+          if (meta && meta.generatedAt) {
             meta1.push(
               `<span>Last refreshed: <strong>${relTime(
                 meta.generatedAt
               )}</strong></span>`
             );
           }
-          if (meta.project) {
+          if (meta && meta.project) {
             meta1.push(`<span>Project: <strong>${meta.project}</strong></span>`);
           }
           document.getElementById("sn-filter-meta").innerHTML = meta1.join("");
 
           const openBtn = document.getElementById("sn-filter-open-jira");
-          if (meta.boardUrl) {
+          if (meta && meta.boardUrl) {
             openBtn.href = meta.boardUrl;
             openBtn.removeAttribute("aria-disabled");
           } else {
             openBtn.href = "#";
             openBtn.setAttribute("aria-disabled", "true");
+          }
+
+          /* -- Wire the Refresh-now button ----------------------- */
+          const refreshBtn = document.getElementById("sn-filter-refresh-btn");
+          if (refreshBtn) {
+            refreshBtn.dataset.widgetId = widgetId || "";
+            refreshBtn.onclick = () => forceRefreshWidget(widgetId, refreshBtn);
           }
         }
 

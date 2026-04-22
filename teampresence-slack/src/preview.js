@@ -152,20 +152,88 @@ const DEMO_FILTER_INPUTS = {
 /**
  * Attach filter metadata to a demo widget payload so the filter drawer
  * has real-looking content in preview mode (matches the prod shape).
+ *
+ * The `project` arg (EMOPS / EMAILCO / all) tweaks the filter in two
+ * ways so the drawer reflects the switcher state:
+ *   1. The `source` env-var name is rescoped, e.g.
+ *      JIRA_BACKLOG_JQL → JIRA_EMOPS_BACKLOG_JQL
+ *      so the operator can see which line in .env is conceptually
+ *      driving this demo widget.
+ *   2. The `project` field on the filter object is set so the chip
+ *      summary reads "EMOPS · snapshot · open" rather than just
+ *      "snapshot · open".
+ *
+ * For `all`, a combined JQL is synthesised (if the original JQL
+ * mentioned a specific project) so the drawer JQL pre shows the
+ * realistic "project in (EMOPS, EMAILCO)" shape.
  */
-function withDemoFilter(id, payload) {
+function rescopeSource(src, project) {
+  if (!src || !src.startsWith("JIRA_")) return src;
+  if (!project) return src;
+  if (project === "all") return src.replace(/^JIRA_/, "JIRA_ALL_");
+  return src.replace(/^JIRA_/, `JIRA_${project.toUpperCase()}_`);
+}
+
+function rescopeJql(jql, project) {
+  if (!jql || !project) return jql;
+  if (project === "all") {
+    return jql.replace(
+      /project\s*=\s*"?[A-Z][A-Z0-9_-]*"?/i,
+      "project in (EMOPS, EMAILCO)"
+    );
+  }
+  return jql.replace(
+    /project\s*=\s*"?[A-Z][A-Z0-9_-]*"?/i,
+    `project = ${project.toUpperCase()}`
+  );
+}
+
+function withDemoFilter(id, payload, { project } = {}) {
   const builder = FILTER_BUILDERS[id];
   const input = DEMO_FILTER_INPUTS[id];
   if (!builder || !input) return payload;
   try {
+    const scopedJql = rescopeJql(input.jql, project);
     const filter = builder({
       ...input,
+      jql: scopedJql,
+      source: rescopeSource(input.source, project),
+      fallbackFrom: rescopeSource(input.fallbackFrom, project),
       generatedAt: payload?.generatedAt ?? Date.now(),
+      project,
     });
-    return { ...payload, filter };
+    return {
+      ...payload,
+      project: project ?? null,
+      jqlSource: filter?.source ?? null,
+      filter,
+    };
   } catch (err) {
     console.warn(`[preview] filter meta failed for ${id}:`, err?.message);
     return payload;
+  }
+}
+
+/**
+ * Parse ?project= from the raw URL, normalise, and validate against
+ * the demo project list. Unknown or missing → returns the default
+ * (EMOPS) so the demo always produces sensible output.
+ */
+const DEMO_PROJECTS = [
+  { key: "EMOPS", label: "EMOPS (current)", isDefault: true },
+  { key: "EMAILCO", label: "EMAILCO (legacy)", isDefault: false },
+  { key: "all", label: "Both", isDefault: false },
+];
+function parseProjectParam(reqUrl) {
+  try {
+    const url = new URL(reqUrl, "http://localhost");
+    const raw = (url.searchParams.get("project") ?? "").trim();
+    if (!raw) return "EMOPS";
+    const norm = raw.toLowerCase() === "all" ? "all" : raw.toUpperCase();
+    if (!DEMO_PROJECTS.some((p) => p.key === norm)) return "EMOPS";
+    return norm;
+  } catch {
+    return "EMOPS";
   }
 }
 
@@ -320,6 +388,83 @@ function buildDemoPayload() {
     models: { bot: false, slack: true, workday: true },
     members,
     rollcalls: [],
+    preview: true,
+  };
+}
+
+/**
+ * Demo /api/absences payload. Mirrors the production response shape
+ * exactly, so the UI strips ("Out today" + "Out next 7 days") render
+ * with the same code path in preview and prod.
+ *
+ * The dates below are keyed off the server's current date so the
+ * demo stays evergreen — we don't hardcode "2026-04-20" and have it
+ * go stale next week.
+ */
+function buildDemoAbsences({ days = 7 } = {}) {
+  const today = new Date();
+  const ymd = (offsetDays) => {
+    const d = new Date(today);
+    d.setDate(d.getDate() + offsetDays);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}`;
+  };
+
+  const rosterBySlug = new Map(TEAM.map((m) => [m.slug, m]));
+  const asRow = (slug, startOff, endOff, type, note) => {
+    const member = rosterBySlug.get(slug);
+    if (!member) return null;
+    return {
+      slackId: null,
+      email: null,
+      slug,
+      startDate: ymd(startOff),
+      endDate: ymd(endOff),
+      type,
+      note,
+      member: {
+        name: member.displayName || member.fullName,
+        fullName: member.fullName,
+        avatarUrl: member.avatarUrl,
+        role: member.role,
+        team: member.team,
+        slug: member.slug,
+      },
+    };
+  };
+
+  const all = [
+    // Out TODAY — drives the hero strip.
+    asRow("kristyna-simkova", -2, 3, "PTO", "Ibiza — back Monday"),
+    asRow("jan-bartoncik", 0, 0, "Sick", "Flu"),
+    // Out NEXT 7 DAYS — drives the carousel.
+    asRow("petr-studeny", 5, 6, "Personal", "Doctor appointment"),
+    asRow("yanina-scholz", 6, 10, "PTO", "Family wedding"),
+    // Further-out — included in the drawer list but not the carousel.
+    asRow("daniel-zabensky", 21, 25, "PTO", "Prague spring break"),
+    asRow("victor-shapochkin", 28, 32, "PTO", "Back-to-back conferences"),
+  ].filter(Boolean);
+
+  const todayYmd = ymd(0);
+  const cutoff = ymd(days);
+  const inTheNext = all.filter(
+    (a) => a.endDate >= todayYmd && a.startDate <= cutoff
+  );
+  const todays = inTheNext.filter(
+    (a) => todayYmd >= a.startDate && todayYmd <= a.endDate
+  );
+  const upcoming = inTheNext.filter((a) => a.startDate > todayYmd);
+
+  return {
+    generatedAt: Date.now(),
+    model: "slack+workday",
+    source: "csv",
+    windowDays: days,
+    today: todays,
+    upcoming,
+    totals: { today: todays.length, upcoming: upcoming.length },
     preview: true,
   };
 }
@@ -1086,23 +1231,54 @@ const server = http.createServer((req, res) => {
     return;
   }
 
+  if (pathname === "/api/absences") {
+    const url = new URL(req.url, "http://localhost");
+    const days = Math.max(
+      1,
+      Math.min(30, Number(url.searchParams.get("days") ?? 7) || 7)
+    );
+    sendJson(res, 200, buildDemoAbsences({ days }));
+    return;
+  }
+
+  // All widget routes take ?project=EMOPS|EMAILCO|all — demo data
+  // is the same but the filter drawer shows scoped env-var names so
+  // the switcher UX is testable without real Jira.
+  const project = parseProjectParam(req.url);
+
   if (pathname === "/api/widgets/weekly-throughput") {
-    sendJson(res, 200, withDemoFilter("weekly-throughput", buildDemoThroughput()));
+    sendJson(
+      res,
+      200,
+      withDemoFilter("weekly-throughput", buildDemoThroughput(), { project })
+    );
     return;
   }
 
   if (pathname === "/api/widgets/backlog-overview") {
-    sendJson(res, 200, withDemoFilter("backlog-overview", buildDemoBacklog()));
+    sendJson(
+      res,
+      200,
+      withDemoFilter("backlog-overview", buildDemoBacklog(), { project })
+    );
     return;
   }
 
   if (pathname === "/api/widgets/ticket-lifecycle") {
-    sendJson(res, 200, withDemoFilter("ticket-lifecycle", buildDemoLifecycle()));
+    sendJson(
+      res,
+      200,
+      withDemoFilter("ticket-lifecycle", buildDemoLifecycle(), { project })
+    );
     return;
   }
 
   if (pathname === "/api/widgets/kanban-board") {
-    sendJson(res, 200, withDemoFilter("kanban-board", buildDemoKanban()));
+    sendJson(
+      res,
+      200,
+      withDemoFilter("kanban-board", buildDemoKanban(), { project })
+    );
     return;
   }
 
@@ -1110,13 +1286,19 @@ const server = http.createServer((req, res) => {
     sendJson(
       res,
       200,
-      withDemoFilter("inflow-vs-resolved", buildDemoInflowVsResolved())
+      withDemoFilter("inflow-vs-resolved", buildDemoInflowVsResolved(), {
+        project,
+      })
     );
     return;
   }
 
   if (pathname === "/api/widgets/sla-aging-risk") {
-    sendJson(res, 200, withDemoFilter("sla-aging-risk", buildDemoSlaAgingRisk()));
+    sendJson(
+      res,
+      200,
+      withDemoFilter("sla-aging-risk", buildDemoSlaAgingRisk(), { project })
+    );
     return;
   }
 
@@ -1124,18 +1306,28 @@ const server = http.createServer((req, res) => {
     sendJson(
       res,
       200,
-      withDemoFilter("top-priority-tickets", buildDemoTopPriorityTickets())
+      withDemoFilter("top-priority-tickets", buildDemoTopPriorityTickets(), {
+        project,
+      })
     );
     return;
   }
 
   if (pathname === "/api/widgets/sprint-backlog") {
-    sendJson(res, 200, withDemoFilter("sprint-backlog", buildDemoSprintBacklog()));
+    sendJson(
+      res,
+      200,
+      withDemoFilter("sprint-backlog", buildDemoSprintBacklog(), { project })
+    );
     return;
   }
 
   if (pathname === "/api/widgets/reopen-rate") {
-    sendJson(res, 200, withDemoFilter("reopen-rate", buildDemoReopenRate()));
+    sendJson(
+      res,
+      200,
+      withDemoFilter("reopen-rate", buildDemoReopenRate(), { project })
+    );
     return;
   }
 
@@ -1143,8 +1335,21 @@ const server = http.createServer((req, res) => {
     sendJson(
       res,
       200,
-      withDemoFilter("throughput-leaderboard", buildDemoThroughputLeaderboard())
+      withDemoFilter(
+        "throughput-leaderboard",
+        buildDemoThroughputLeaderboard(),
+        { project }
+      )
     );
+    return;
+  }
+
+  if (pathname === "/api/jira-projects") {
+    sendJson(res, 200, {
+      projects: DEMO_PROJECTS,
+      defaultProject: "EMOPS",
+      allProjectKey: "all",
+    });
     return;
   }
 
