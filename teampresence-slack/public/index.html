@@ -726,10 +726,21 @@
       }
 
       /* --------------------------------------------------------------
-         Kanban snapshot — compact, horizontally-scrollable columns that
-         live on the feed canvas. Each column is a glassy tile; each
-         ticket is a small card with priority bar, key, summary, and
-         an assignee chip. Click a card to jump to Jira.
+         Kanban snapshot — category-tinted columns with clear typographic
+         hierarchy that are equally legible in light AND dark modes.
+         Each column declares its Jira status category via
+         data-cat="new|indeterminate|done"; that attribute drives 5
+         scoped custom properties (--kb-accent, --kb-border,
+         --kb-head-bg, --kb-head-ink, --kb-body-bg) which the header
+         band, left accent rail, count chip, dot, and border all
+         reference. One selector re-tints the whole column.
+
+         Cards stay white (navy in dark) and keep the priority left
+         rail, but now also carry an inline priority pill in the
+         head so HIGHEST / HIGH read at speed. Assignees get a
+         per-person HSL gradient so the pile feels like people, not
+         rows. A stale-age signal tints the "X ago" chip amber at
+         7-14d and red at 14d+ so cold tickets jump out of the pile.
          -------------------------------------------------------------- */
       .sn-kb-head {
         display: flex;
@@ -742,31 +753,37 @@
         font-size: 0.78rem;
         font-weight: 700;
         letter-spacing: 0.01em;
-        color: rgba(255, 255, 255, 0.85);
-        background: rgba(255, 255, 255, 0.08);
-        border: 1px solid rgba(255, 255, 255, 0.18);
+        color: var(--gen-blue);
+        background: var(--gen-blue-haze, #ececff);
+        border: 1px solid color-mix(in srgb, var(--gen-blue) 28%, var(--border));
         border-radius: 999px;
-        padding: 0.35rem 0.8rem;
+        padding: 0.35rem 0.85rem;
         text-decoration: none;
         white-space: nowrap;
-        transition: background 120ms ease, border-color 120ms ease, color 120ms ease;
+        transition: background 120ms ease, border-color 120ms ease,
+          color 120ms ease, transform 120ms ease;
       }
       .sn-kb-open:hover {
-        background: rgba(255, 255, 255, 0.16);
-        border-color: rgba(255, 255, 255, 0.32);
-        color: #ffffff;
+        background: color-mix(in srgb, var(--gen-blue) 14%, var(--gen-blue-haze));
+        border-color: color-mix(in srgb, var(--gen-blue) 50%, var(--border));
+        color: var(--gen-blue-deep, #0000a8);
+        transform: translateY(-1px);
       }
-      html.theme-light .sn-kb-open,
-      html:not(.theme-dark) .sn-kb-open {
-        /* On the blue canvas the chip stays white-on-glass either way,
-           so no override needed; keeping the rule here so future-us
-           knows the selector exists. */
+      html.theme-dark .sn-kb-open {
+        color: #a3a3ff;
+        background: rgba(99, 102, 241, 0.16);
+        border-color: rgba(99, 102, 241, 0.36);
+      }
+      html.theme-dark .sn-kb-open:hover {
+        background: rgba(99, 102, 241, 0.28);
+        border-color: rgba(163, 163, 255, 0.55);
+        color: #ffffff;
       }
 
       .sn-kb {
         display: grid;
         grid-auto-flow: column;
-        grid-auto-columns: minmax(260px, 1fr);
+        grid-auto-columns: minmax(280px, 1fr);
         gap: 0.9rem;
         overflow-x: auto;
         overflow-y: hidden;
@@ -779,60 +796,106 @@
         height: 8px;
       }
       .sn-kb::-webkit-scrollbar-track {
-        background: rgba(255, 255, 255, 0.04);
+        background: color-mix(in srgb, var(--muted-fg, #6b7280) 10%, transparent);
         border-radius: 8px;
       }
       .sn-kb::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.22);
+        background: color-mix(in srgb, var(--muted-fg, #6b7280) 42%, transparent);
         border-radius: 8px;
+      }
+      html.theme-dark .sn-kb::-webkit-scrollbar-track {
+        background: rgba(255, 255, 255, 0.05);
+      }
+      html.theme-dark .sn-kb::-webkit-scrollbar-thumb {
+        background: rgba(255, 255, 255, 0.24);
       }
       .sn-kb-loading {
         padding: 1.5rem;
         grid-column: 1 / -1;
-        color: rgba(255, 255, 255, 0.7);
+        color: var(--muted-fg);
       }
 
+      /* Column token defaults (slate — used when no data-cat is
+         supplied). The three data-cat selectors below swap these in
+         a single place so body/header/count/border/dot all retint. */
       .sn-kb-col {
+        --kb-accent: #64748b;
+        --kb-border: color-mix(in srgb, #64748b 24%, var(--border, #e4e3ee));
+        --kb-head-bg: color-mix(in srgb, #64748b 10%, var(--muted-bg, #f1f0f8));
+        --kb-head-ink: var(--text, #0f172a);
+        /* Body is a faint tint of the accent over muted-bg so the
+           white cards inside have somewhere to visually sit. Each
+           category nudges this with its own --kb-accent, so the
+           To Do / In Progress / Done piles each pick up a whisper
+           of their category hue without the column looking
+           heavily coloured. */
+        --kb-body-bg: color-mix(in srgb, var(--kb-accent) 4%, var(--muted-bg, #f1f0f8));
         scroll-snap-align: start;
-        background: rgba(255, 255, 255, 0.09);
-        border: 1px solid rgba(226, 232, 255, 0.4);
-        border-radius: 0.85rem;
-        padding: 0.75rem;
         display: flex;
         flex-direction: column;
-        gap: 0.55rem;
         min-width: 0;
-        backdrop-filter: blur(6px);
-        -webkit-backdrop-filter: blur(6px);
+        overflow: hidden;
+        border-radius: 0.85rem;
+        border: 1px solid var(--kb-border);
+        background: var(--kb-body-bg);
         box-shadow:
-          inset 0 1px 0 rgba(255, 255, 255, 0.22),
-          0 10px 28px -18px rgba(4, 0, 245, 0.55);
+          0 1px 0 rgba(15, 23, 42, 0.04),
+          0 10px 28px -22px rgba(15, 23, 42, 0.22);
+      }
+      .sn-kb-col[data-cat="new"] {
+        --kb-accent: #64748b;
+        --kb-border: color-mix(in srgb, #64748b 26%, var(--border, #e4e3ee));
+        --kb-head-bg: color-mix(in srgb, #64748b 10%, var(--muted-bg, #f1f0f8));
+      }
+      .sn-kb-col[data-cat="indeterminate"] {
+        --kb-accent: var(--gen-blue, #0400f5);
+        --kb-border: color-mix(in srgb, var(--gen-blue, #0400f5) 26%, var(--border, #e4e3ee));
+        --kb-head-bg: color-mix(in srgb, var(--gen-blue, #0400f5) 9%, var(--muted-bg, #f1f0f8));
+      }
+      .sn-kb-col[data-cat="done"] {
+        --kb-accent: var(--status-green, #1fb77a);
+        --kb-border: color-mix(in srgb, var(--status-green, #1fb77a) 30%, var(--border, #e4e3ee));
+        --kb-head-bg: color-mix(in srgb, var(--status-green, #1fb77a) 12%, var(--muted-bg, #f1f0f8));
       }
       .sn-kb-col-head {
+        position: relative;
         display: flex;
         align-items: center;
-        gap: 0.5rem;
-        padding: 0.05rem 0.15rem 0.5rem;
-        border-bottom: 1px solid rgba(226, 232, 255, 0.32);
+        gap: 0.55rem;
+        padding: 0.7rem 0.85rem 0.7rem 1rem;
+        background: var(--kb-head-bg);
+        border-bottom: 1px solid var(--kb-border);
+      }
+      .sn-kb-col-head::before {
+        content: "";
+        position: absolute;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 3px;
+        background: var(--kb-accent);
       }
       .sn-kb-col-dot {
         width: 0.55rem;
         height: 0.55rem;
         border-radius: 999px;
-        background: rgba(255, 255, 255, 0.6);
-        box-shadow: 0 0 0 3px rgba(255, 255, 255, 0.1);
+        background: var(--kb-accent);
+        box-shadow: 0 0 0 3px color-mix(in srgb, var(--kb-accent) 22%, transparent);
         flex: none;
       }
-      .sn-kb-col-dot--new { background: #94a3b8; box-shadow: 0 0 0 3px rgba(148, 163, 184, 0.22); }
-      .sn-kb-col-dot--indeterminate { background: #3838ff; box-shadow: 0 0 0 3px rgba(56, 56, 255, 0.28); }
-      .sn-kb-col-dot--done { background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.22); }
+      /* Legacy dot hooks — kept so payloads without data-cat still
+         tint correctly. The attribute-driven --kb-accent takes
+         precedence when both are set. */
+      .sn-kb-col-dot--new { background: #64748b; box-shadow: 0 0 0 3px rgba(100, 116, 139, 0.22); }
+      .sn-kb-col-dot--indeterminate { background: var(--gen-blue, #0400f5); box-shadow: 0 0 0 3px color-mix(in srgb, var(--gen-blue, #0400f5) 22%, transparent); }
+      .sn-kb-col-dot--done { background: var(--status-green, #1fb77a); box-shadow: 0 0 0 3px color-mix(in srgb, var(--status-green, #1fb77a) 22%, transparent); }
 
       .sn-kb-col-name {
         font-size: 0.72rem;
         font-weight: 800;
         letter-spacing: 0.08em;
         text-transform: uppercase;
-        color: rgba(255, 255, 255, 0.92);
+        color: var(--kb-head-ink);
         flex: 1;
         min-width: 0;
         white-space: nowrap;
@@ -840,65 +903,75 @@
         text-overflow: ellipsis;
       }
       .sn-kb-col-count {
-        font-size: 0.7rem;
+        font-size: 0.72rem;
         font-weight: 800;
-        color: rgba(255, 255, 255, 0.85);
-        background: rgba(255, 255, 255, 0.12);
-        border: 1px solid rgba(255, 255, 255, 0.18);
+        color: var(--kb-accent);
+        background: var(--surface, #ffffff);
+        border: 1px solid var(--kb-border);
         border-radius: 999px;
-        padding: 0.05rem 0.5rem;
-        min-width: 1.4rem;
+        padding: 0.12rem 0.6rem;
+        min-width: 1.6rem;
         text-align: center;
+        font-variant-numeric: tabular-nums;
       }
 
       .sn-kb-col-body {
         display: flex;
         flex-direction: column;
-        gap: 0.5rem;
+        gap: 0.55rem;
         max-height: 440px;
         overflow-y: auto;
-        padding-right: 0.15rem;
+        padding: 0.65rem;
       }
       .sn-kb-col-body::-webkit-scrollbar {
         width: 6px;
       }
       .sn-kb-col-body::-webkit-scrollbar-thumb {
-        background: rgba(255, 255, 255, 0.18);
+        background: color-mix(in srgb, var(--muted-fg, #6b7280) 32%, transparent);
         border-radius: 6px;
       }
       .sn-kb-col-empty {
         font-size: 0.78rem;
-        color: rgba(255, 255, 255, 0.55);
-        padding: 0.75rem 0.25rem;
+        color: var(--muted-fg);
+        padding: 0.85rem 0.25rem;
         text-align: center;
+        font-style: italic;
+        opacity: 0.85;
       }
 
       .sn-kb-card {
         position: relative;
         display: flex;
         flex-direction: column;
-        gap: 0.35rem;
-        padding: 0.6rem 0.7rem 0.6rem 0.85rem;
+        gap: 0.4rem;
+        padding: 0.65rem 0.75rem 0.65rem 1rem;
         background: #ffffff;
-        border: 1px solid rgba(15, 23, 42, 0.08);
+        border: 1px solid var(--border, #e4e3ee);
         border-radius: 0.55rem;
         text-decoration: none;
         color: inherit;
-        box-shadow: 0 1px 0 rgba(8, 16, 58, 0.08), 0 4px 12px -8px rgba(8, 16, 58, 0.4);
-        transition: transform 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+        box-shadow:
+          0 1px 0 rgba(8, 16, 58, 0.04),
+          0 4px 10px -8px rgba(8, 16, 58, 0.22);
+        transition: transform 120ms ease, box-shadow 120ms ease,
+          border-color 120ms ease;
       }
       .sn-kb-card::before {
         content: "";
         position: absolute;
-        left: 0; top: 0; bottom: 0;
-        width: 3px;
+        left: 0;
+        top: 0;
+        bottom: 0;
+        width: 4px;
         background: #94a3b8;
         border-radius: 0.55rem 0 0 0.55rem;
       }
       .sn-kb-card:hover {
-        transform: translateY(-1px);
-        box-shadow: 0 2px 0 rgba(8, 16, 58, 0.10), 0 10px 22px -10px rgba(8, 16, 58, 0.55);
-        border-color: rgba(15, 23, 42, 0.16);
+        transform: translateY(-2px);
+        box-shadow:
+          0 2px 0 rgba(8, 16, 58, 0.06),
+          0 14px 24px -10px rgba(8, 16, 58, 0.35);
+        border-color: color-mix(in srgb, var(--gen-blue) 28%, var(--border));
       }
       .sn-kb-card--critical::before,
       .sn-kb-card--highest::before { background: var(--status-red); }
@@ -910,15 +983,48 @@
       .sn-kb-card-head {
         display: flex;
         align-items: center;
-        justify-content: space-between;
-        gap: 0.5rem;
+        gap: 0.45rem;
+        flex-wrap: wrap;
       }
       .sn-kb-key {
-        font-size: 0.7rem;
+        font-size: 0.72rem;
         font-weight: 800;
         letter-spacing: 0.02em;
         color: var(--gen-blue);
         font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      /* Priority pill — textual badge complements the colored left
+         rail so triage-speed readers don't have to decode a stripe. */
+      .sn-kb-priority {
+        display: inline-flex;
+        align-items: center;
+        font-size: 0.58rem;
+        font-weight: 800;
+        letter-spacing: 0.08em;
+        text-transform: uppercase;
+        padding: 0.1rem 0.38rem;
+        border-radius: 4px;
+        line-height: 1.2;
+        color: #ffffff;
+        background: #94a3b8;
+        border: 1px solid transparent;
+      }
+      .sn-kb-priority--highest,
+      .sn-kb-priority--critical { background: var(--status-red); }
+      .sn-kb-priority--high {
+        background: var(--status-amber);
+        color: #3f2400;
+      }
+      .sn-kb-priority--medium { background: var(--gen-blue); }
+      .sn-kb-priority--low {
+        background: color-mix(in srgb, #94a3b8 24%, transparent);
+        color: #475569;
+        border-color: #cbd5e1;
+      }
+      .sn-kb-priority--lowest {
+        background: transparent;
+        color: var(--muted-fg);
+        border-color: var(--border);
       }
       .sn-kb-type {
         font-size: 0.62rem;
@@ -926,10 +1032,11 @@
         letter-spacing: 0.06em;
         text-transform: uppercase;
         color: var(--muted-fg);
+        margin-left: auto;
       }
       .sn-kb-card-sum {
-        font-size: 0.85rem;
-        line-height: 1.3;
+        font-size: 0.88rem;
+        line-height: 1.35;
         font-weight: 600;
         color: var(--text);
         display: -webkit-box;
@@ -947,26 +1054,33 @@
       .sn-kb-assignee {
         display: inline-flex;
         align-items: center;
-        gap: 0.4rem;
+        gap: 0.45rem;
         min-width: 0;
       }
       .sn-kb-ava {
-        width: 1.35rem;
-        height: 1.35rem;
+        width: 1.5rem;
+        height: 1.5rem;
         border-radius: 999px;
         display: inline-flex;
         align-items: center;
         justify-content: center;
-        font-size: 0.62rem;
+        font-size: 0.63rem;
         font-weight: 800;
         color: #ffffff;
-        background: linear-gradient(160deg, var(--gen-blue) 0%, var(--gen-blue-deep) 100%);
         letter-spacing: 0.02em;
         flex: none;
-        box-shadow: 0 1px 0 rgba(8, 16, 58, 0.25);
+        background: linear-gradient(160deg, var(--gen-blue) 0%, var(--gen-blue-deep) 100%);
+        box-shadow:
+          0 1px 0 rgba(8, 16, 58, 0.25),
+          0 0 0 2px rgba(255, 255, 255, 0.85);
+      }
+      .sn-kb-ava--unassigned {
+        background: var(--muted-bg, #f1f0f8);
+        color: var(--muted-fg);
+        box-shadow: 0 0 0 1px var(--border) inset;
       }
       .sn-kb-assignee-name {
-        font-size: 0.72rem;
+        font-size: 0.75rem;
         font-weight: 600;
         color: var(--text);
         white-space: nowrap;
@@ -974,37 +1088,128 @@
         text-overflow: ellipsis;
         min-width: 0;
       }
+      .sn-kb-assignee-name--unassigned {
+        color: var(--muted-fg);
+        font-style: italic;
+        font-weight: 500;
+      }
       .sn-kb-ago {
         font-size: 0.68rem;
         color: var(--muted-fg);
         white-space: nowrap;
       }
+      /* Stale-age cues — the renderer sets data-stale="warm" at
+         7-14 days, "cold" at 14+ days. Fresh cards stay muted. */
+      .sn-kb-ago[data-stale="warm"] {
+        color: var(--status-amber);
+        font-weight: 700;
+      }
+      .sn-kb-ago[data-stale="cold"] {
+        color: var(--status-red);
+        font-weight: 800;
+        padding: 0.06rem 0.4rem;
+        border-radius: 4px;
+        background: color-mix(in srgb, var(--status-red) 12%, transparent);
+        border: 1px solid color-mix(in srgb, var(--status-red) 32%, transparent);
+      }
+
       .sn-kb-more {
         font-size: 0.72rem;
         font-weight: 700;
         text-align: center;
-        padding: 0.4rem;
-        color: rgba(255, 255, 255, 0.88);
-        background: rgba(255, 255, 255, 0.06);
-        border: 1px dashed rgba(226, 232, 255, 0.38);
+        padding: 0.5rem;
+        color: var(--muted-fg);
+        background: var(--muted-bg, #f1f0f8);
+        border: 1px dashed var(--border);
         border-radius: 0.45rem;
+        transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+      }
+      .sn-kb-more:hover {
+        color: var(--gen-blue);
+        border-color: color-mix(in srgb, var(--gen-blue) 35%, var(--border));
+        background: var(--gen-blue-haze, #ececff);
       }
 
-      /* Dark-mode tweaks so cards still feel crisp on the navy body. */
+      /* Dark mode — navy tiles, deeper head tints, same accent hues.
+         Applies to both .theme-dark (explicit toggle) and
+         prefers-color-scheme when no explicit theme is chosen. */
+      html.theme-dark .sn-kb-col {
+        --kb-head-ink: rgba(255, 255, 255, 0.94);
+        --kb-body-bg: #161b35;
+        --kb-border: rgba(255, 255, 255, 0.12);
+      }
+      html.theme-dark .sn-kb-col[data-cat="new"] {
+        --kb-border: rgba(148, 163, 184, 0.34);
+        --kb-head-bg: color-mix(in srgb, #94a3b8 16%, #1a1f3c);
+      }
+      html.theme-dark .sn-kb-col[data-cat="indeterminate"] {
+        --kb-border: color-mix(in srgb, var(--gen-blue) 46%, rgba(255, 255, 255, 0.1));
+        --kb-head-bg: color-mix(in srgb, var(--gen-blue) 28%, #1a1f3c);
+      }
+      html.theme-dark .sn-kb-col[data-cat="done"] {
+        --kb-border: color-mix(in srgb, var(--status-green) 44%, rgba(255, 255, 255, 0.1));
+        --kb-head-bg: color-mix(in srgb, var(--status-green) 22%, #1a1f3c);
+      }
+      html.theme-dark .sn-kb-col-count {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.95);
+        border-color: var(--kb-border);
+      }
+      html.theme-dark .sn-kb-col-empty { color: rgba(255, 255, 255, 0.55); }
+      html.theme-dark .sn-kb-card {
+        background: #1e244a;
+        border-color: rgba(255, 255, 255, 0.12);
+        box-shadow:
+          0 1px 0 rgba(0, 0, 0, 0.35),
+          0 8px 18px -10px rgba(0, 0, 0, 0.55);
+      }
+      html.theme-dark .sn-kb-card:hover {
+        border-color: rgba(163, 163, 255, 0.55);
+      }
+      html.theme-dark .sn-kb-key { color: #a3a3ff; }
+      html.theme-dark .sn-kb-card-sum { color: rgba(255, 255, 255, 0.94); }
+      html.theme-dark .sn-kb-assignee-name { color: rgba(255, 255, 255, 0.88); }
+      html.theme-dark .sn-kb-ago { color: rgba(255, 255, 255, 0.64); }
+      html.theme-dark .sn-kb-priority--high { color: #2a1800; }
+      html.theme-dark .sn-kb-priority--low {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.82);
+        border-color: rgba(255, 255, 255, 0.18);
+      }
+      html.theme-dark .sn-kb-priority--lowest {
+        color: rgba(255, 255, 255, 0.65);
+        border-color: rgba(255, 255, 255, 0.18);
+      }
+      html.theme-dark .sn-kb-ava--unassigned {
+        background: rgba(255, 255, 255, 0.08);
+        color: rgba(255, 255, 255, 0.62);
+        box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.16) inset;
+      }
+      html.theme-dark .sn-kb-more {
+        color: rgba(255, 255, 255, 0.78);
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(255, 255, 255, 0.16);
+      }
+      html.theme-dark .sn-kb-more:hover {
+        color: #a3a3ff;
+        background: rgba(99, 102, 241, 0.18);
+        border-color: rgba(99, 102, 241, 0.45);
+      }
       @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) .sn-kb-col {
+          --kb-head-ink: rgba(255, 255, 255, 0.94);
+          --kb-body-bg: #161b35;
+          --kb-border: rgba(255, 255, 255, 0.12);
+        }
         html:not(.theme-light) .sn-kb-card {
-          background: #1a1f3c;
-          border-color: rgba(255, 255, 255, 0.1);
-          box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 8px 18px -10px rgba(0, 0, 0, 0.55);
+          background: #1e244a;
+          border-color: rgba(255, 255, 255, 0.12);
+          box-shadow:
+            0 1px 0 rgba(0, 0, 0, 0.35),
+            0 8px 18px -10px rgba(0, 0, 0, 0.55);
         }
         html:not(.theme-light) .sn-kb-key { color: #a3a3ff; }
       }
-      html.theme-dark .sn-kb-card {
-        background: #1a1f3c;
-        border-color: rgba(255, 255, 255, 0.1);
-        box-shadow: 0 1px 0 rgba(0, 0, 0, 0.35), 0 8px 18px -10px rgba(0, 0, 0, 0.55);
-      }
-      html.theme-dark .sn-kb-key { color: #a3a3ff; }
 
       /* --------------------------------------------------------------
          Team-member avatars — circular chip that sits next to each
@@ -1693,12 +1898,17 @@
         gap: 0.9rem;
         padding: 0.6rem 0.85rem;
         border-radius: 0.75rem;
+        /* Transparent border reserves the same 2px slot on every
+           row so the top-3 podium rows (which carry a metal border)
+           don't shift the grid relative to ranks 4+. */
+        border: 2px solid transparent;
         background: color-mix(
           in srgb,
           var(--text-muted, #6b7280) 6%,
           transparent
         );
-        transition: background 140ms ease, transform 140ms ease;
+        transition: background 140ms ease, transform 140ms ease,
+          border-color 140ms ease, box-shadow 140ms ease;
       }
       .sn-lb-row:hover {
         background: color-mix(
@@ -1742,15 +1952,71 @@
         color: #3b1e05;
         box-shadow: 0 0 0 2px rgba(185, 124, 59, 0.25);
       }
-      /* Soft card tint for the top 3 to match the medal. */
+      /* Podium rows — gold / silver / bronze. Each top-3 row gets
+         a matching metal border (the outline) plus a gentle
+         left-heavy gradient fill so the medal + name end glows its
+         metal without the fill shouting. No coloured drop shadow;
+         just a faint translucent-white top-highlight for a hint
+         of polish. Hover lifts each stop by ~4-5pp so the metal
+         feel survives the generic .sn-lb-row:hover wash. */
       .sn-lb-row.rank-1 {
-        background: color-mix(in srgb, #f2a202 10%, transparent);
+        border-color: #e4a100;
+        background: linear-gradient(
+          90deg,
+          color-mix(in srgb, #f2a202 14%, transparent) 0%,
+          color-mix(in srgb, #f2a202 5%, transparent) 55%,
+          color-mix(in srgb, #f2a202 2%, transparent) 100%
+        );
+        box-shadow: inset 0 1px 0 rgba(255, 223, 128, 0.32);
       }
+      .sn-lb-row.rank-1:hover {
+        background: linear-gradient(
+          90deg,
+          color-mix(in srgb, #f2a202 20%, transparent) 0%,
+          color-mix(in srgb, #f2a202 8%, transparent) 55%,
+          color-mix(in srgb, #f2a202 3%, transparent) 100%
+        );
+        box-shadow: inset 0 1px 0 rgba(255, 223, 128, 0.4);
+      }
+
       .sn-lb-row.rank-2 {
-        background: color-mix(in srgb, #c2cad5 14%, transparent);
+        border-color: #a6adbb;
+        background: linear-gradient(
+          90deg,
+          color-mix(in srgb, #9aa3b2 15%, transparent) 0%,
+          color-mix(in srgb, #9aa3b2 6%, transparent) 55%,
+          color-mix(in srgb, #9aa3b2 2%, transparent) 100%
+        );
+        box-shadow: inset 0 1px 0 rgba(231, 236, 243, 0.38);
       }
+      .sn-lb-row.rank-2:hover {
+        background: linear-gradient(
+          90deg,
+          color-mix(in srgb, #9aa3b2 22%, transparent) 0%,
+          color-mix(in srgb, #9aa3b2 10%, transparent) 55%,
+          color-mix(in srgb, #9aa3b2 3%, transparent) 100%
+        );
+        box-shadow: inset 0 1px 0 rgba(231, 236, 243, 0.48);
+      }
+
       .sn-lb-row.rank-3 {
-        background: color-mix(in srgb, #b97c3b 10%, transparent);
+        border-color: #a26a30;
+        background: linear-gradient(
+          90deg,
+          color-mix(in srgb, #b97c3b 14%, transparent) 0%,
+          color-mix(in srgb, #b97c3b 5%, transparent) 55%,
+          color-mix(in srgb, #b97c3b 2%, transparent) 100%
+        );
+        box-shadow: inset 0 1px 0 rgba(230, 176, 121, 0.32);
+      }
+      .sn-lb-row.rank-3:hover {
+        background: linear-gradient(
+          90deg,
+          color-mix(in srgb, #b97c3b 20%, transparent) 0%,
+          color-mix(in srgb, #b97c3b 8%, transparent) 55%,
+          color-mix(in srgb, #b97c3b 3%, transparent) 100%
+        );
+        box-shadow: inset 0 1px 0 rgba(230, 176, 121, 0.4);
       }
 
       .sn-lb-avatar {
@@ -1775,10 +2041,22 @@
         object-fit: cover;
       }
 
+      /* Name column: a flex ROW so we can push a trophy icon to the
+         right edge on ranks 1-3 without adding a conditional grid
+         column (which would leave a ghost gap on ranks 4+). The
+         inner .sn-lb-name-lines keeps the existing column stack of
+         name-above-subtitle. */
       .sn-lb-name-wrap {
+        display: flex;
+        align-items: center;
+        gap: 0.65rem;
+        min-width: 0;
+      }
+      .sn-lb-name-lines {
         display: flex;
         flex-direction: column;
         min-width: 0;
+        flex: 1 1 auto;
       }
       .sn-lb-name {
         font-weight: 700;
@@ -1787,6 +2065,36 @@
         white-space: nowrap;
         overflow: hidden;
         text-overflow: ellipsis;
+      }
+      /* Trophy slot — only rendered for ranks 1-3 so nothing shows
+         on rank 4+ and row alignment is identical to today.
+         Each rank gets its own size/shape variation via the SVG
+         (see lbTrophySvg()); the gradient colours here echo the
+         medal on the far-left `.sn-lb-rank` circle so each row
+         reads as a matched pair. */
+      .sn-lb-trophy {
+        flex: 0 0 auto;
+        margin-inline-start: auto;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        filter: drop-shadow(0 1px 2px rgba(15, 23, 42, 0.15));
+        transition: transform 160ms ease;
+      }
+      .sn-lb-row:hover .sn-lb-trophy {
+        transform: translateY(-1px) scale(1.04);
+      }
+      .sn-lb-row.rank-1 .sn-lb-trophy {
+        width: 1.9rem;
+        height: 1.9rem;
+      }
+      .sn-lb-row.rank-2 .sn-lb-trophy {
+        width: 1.75rem;
+        height: 1.75rem;
+      }
+      .sn-lb-row.rank-3 .sn-lb-trophy {
+        width: 1.55rem;
+        height: 1.55rem;
       }
       .sn-lb-sub {
         font-size: 0.72rem;
@@ -2142,6 +2450,47 @@
         font-weight: 600;
         font-variant-numeric: tabular-nums;
         white-space: nowrap;
+      }
+
+      /* =============================================================
+         Unified pill-edge accent, scoped to the Top Priority Tickets
+         widget only. Every pill in this widget (priority, status,
+         header breakdown) swaps its faint per-variant border for a
+         single theme-driven accent so the edges pop:
+            light mode -> Gen blue
+            dark  mode -> status-amber (same orange used on the
+                          Weekly Throughput sparkline + filter chips)
+         Fill + text colours per variant are left untouched so the
+         red=critical / amber=high / blue=medium / green=low colour
+         coding still survives — only the outline is re-themed.
+         Selectors are scoped by #widget-top-priority-tickets so they
+         out-specific the per-variant rules above without !important.
+         ============================================================= */
+      #widget-top-priority-tickets {
+        --tp-edge: var(--gen-blue, #0400f5);
+      }
+      html.theme-dark #widget-top-priority-tickets {
+        --tp-edge: var(--status-amber, #f59e0b);
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) #widget-top-priority-tickets {
+          --tp-edge: var(--status-amber, #f59e0b);
+        }
+      }
+      #widget-top-priority-tickets .sn-tp-prio,
+      #widget-top-priority-tickets .sn-tp-prio.prio-critical,
+      #widget-top-priority-tickets .sn-tp-prio.prio-high,
+      #widget-top-priority-tickets .sn-tp-prio.prio-medium,
+      #widget-top-priority-tickets .sn-tp-prio.prio-low,
+      #widget-top-priority-tickets .sn-tp-prio.prio-other,
+      #widget-top-priority-tickets .sn-tp-status,
+      #widget-top-priority-tickets .sn-tp-status.status-new,
+      #widget-top-priority-tickets .sn-tp-status.status-indeterminate,
+      #widget-top-priority-tickets .sn-tp-status.status-done,
+      #widget-top-priority-tickets .sn-pill-muted {
+        border-width: 2px;
+        border-style: solid;
+        border-color: var(--tp-edge);
       }
 
       /* Mobile: collapse the 3-col grid into a stacked card so leadership
@@ -7769,6 +8118,100 @@
           </svg>`;
       }
 
+      // Podium trophies for ranks 1-3. Each trophy is genuinely
+      // different (not a tint-swap): gold gets a star finial + two
+      // handles, silver drops the star but keeps the handles, bronze
+      // is a handle-less chalice with a squatter cup. The gradients
+      // match the `.sn-lb-rank` medal so each row bookends with the
+      // same metal on both ends. Returns "" for rank 4+.
+      function lbTrophySvg(rank) {
+        if (rank < 1 || rank > 3) return "";
+        const palette = {
+          1: {
+            id: "gold",
+            top: "#ffe27a",
+            bottom: "#e08a00",
+            stroke: "#8a5a00",
+            title: "Gold trophy — 1st place",
+          },
+          2: {
+            id: "silver",
+            top: "#f4f6fa",
+            bottom: "#9aa3b2",
+            stroke: "#5a6372",
+            title: "Silver trophy — 2nd place",
+          },
+          3: {
+            id: "bronze",
+            top: "#e6b079",
+            bottom: "#8a5220",
+            stroke: "#6a3e15",
+            title: "Bronze trophy — 3rd place",
+          },
+        };
+        const p = palette[rank];
+        const gradId = `lb-trophy-grad-${p.id}`;
+        const defs = `
+          <defs>
+            <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+              <stop offset="0%" stop-color="${p.top}" />
+              <stop offset="100%" stop-color="${p.bottom}" />
+            </linearGradient>
+          </defs>`;
+
+        // Gold — star finial + two flowing handles + tall tiered base.
+        if (rank === 1) {
+          return `
+            <span class="sn-lb-trophy" role="img" aria-label="${p.title}">
+              <svg viewBox="0 0 32 32" width="100%" height="100%" aria-hidden="true">
+                ${defs}
+                <path d="M16 1.6 L17.35 4.55 L20.55 5 L18.2 7.25 L18.75 10.4 L16 8.9 L13.25 10.4 L13.8 7.25 L11.45 5 L14.65 4.55 Z"
+                      fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.5" stroke-linejoin="round" />
+                <path d="M9 13 Q3.5 13 4.7 18.4 Q5.6 21.5 9.2 21" fill="none" stroke="url(#${gradId})" stroke-width="2.2" stroke-linecap="round" />
+                <path d="M23 13 Q28.5 13 27.3 18.4 Q26.4 21.5 22.8 21" fill="none" stroke="url(#${gradId})" stroke-width="2.2" stroke-linecap="round" />
+                <rect x="8.8" y="11" width="14.4" height="1.8" rx="0.3" fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.4" />
+                <path d="M9.2 12.8 L22.8 12.8 L21.8 20.8 Q21.8 23.6 16 23.6 Q10.2 23.6 10.2 20.8 Z"
+                      fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.5" stroke-linejoin="round" />
+                <rect x="14.4" y="23.6" width="3.2" height="2" fill="url(#${gradId})" />
+                <rect x="10.6" y="25.6" width="10.8" height="2.2" rx="0.5" fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.4" />
+                <rect x="8.6" y="27.8" width="14.8" height="2.2" rx="0.6" fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.4" />
+              </svg>
+            </span>`;
+        }
+
+        // Silver — no star, tighter handles, single-tier base.
+        if (rank === 2) {
+          return `
+            <span class="sn-lb-trophy" role="img" aria-label="${p.title}">
+              <svg viewBox="0 0 32 32" width="100%" height="100%" aria-hidden="true">
+                ${defs}
+                <rect x="9" y="9.5" width="14" height="2" rx="0.3" fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.4" />
+                <path d="M10 11.5 L22 11.5 L21 20 Q21 22.5 16 22.5 Q11 22.5 11 20 Z"
+                      fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.5" stroke-linejoin="round" />
+                <path d="M10 13 Q5.8 13.5 6.6 17.4 Q7.2 19.8 10.4 19.8" fill="none" stroke="url(#${gradId})" stroke-width="1.9" stroke-linecap="round" />
+                <path d="M22 13 Q26.2 13.5 25.4 17.4 Q24.8 19.8 21.6 19.8" fill="none" stroke="url(#${gradId})" stroke-width="1.9" stroke-linecap="round" />
+                <rect x="14.9" y="22.5" width="2.2" height="2.2" fill="url(#${gradId})" />
+                <rect x="10.8" y="24.7" width="10.4" height="2" rx="0.5" fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.4" />
+                <rect x="9.4" y="26.7" width="13.2" height="1.9" rx="0.6" fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.4" />
+              </svg>
+            </span>`;
+        }
+
+        // Bronze — no handles, wider/shorter chalice, squat base.
+        return `
+          <span class="sn-lb-trophy" role="img" aria-label="${p.title}">
+            <svg viewBox="0 0 32 32" width="100%" height="100%" aria-hidden="true">
+              ${defs}
+              <rect x="8.5" y="11" width="15" height="1.8" rx="0.3" fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.4" />
+              <path d="M9.5 12.8 L22.5 12.8 L21.2 18.6 Q21.2 21 16 21 Q10.8 21 10.8 18.6 Z"
+                    fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.5" stroke-linejoin="round" />
+              <rect x="14.4" y="21" width="3.2" height="2" fill="url(#${gradId})" />
+              <rect x="10.2" y="23" width="11.6" height="2.3" rx="0.5" fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.4" />
+              <rect x="8.6" y="25.3" width="14.8" height="1.9" rx="0.6" fill="url(#${gradId})" stroke="${p.stroke}" stroke-width="0.4" />
+            </svg>
+          </span>`;
+      }
+
       function renderThroughputLeaderboard(data) {
         const list = document.getElementById("lb-list");
         const note = document.getElementById("lb-note");
@@ -7830,11 +8273,14 @@
                 <span class="sn-lb-rank" aria-label="Rank ${rank}">${rank}</span>
                 <span class="sn-lb-avatar">${avatar}</span>
                 <span class="sn-lb-name-wrap">
-                  <span class="sn-lb-name">${esc(r.name)}</span>
-                  <span class="sn-lb-sub">
-                    <span class="sn-lb-delta ${deltaCls}">${deltaIcon} ${esc(deltaText)}</span>
-                    <span style="margin-left:0.4rem;">· ${esc(totalLine)}</span>
+                  <span class="sn-lb-name-lines">
+                    <span class="sn-lb-name">${esc(r.name)}</span>
+                    <span class="sn-lb-sub">
+                      <span class="sn-lb-delta ${deltaCls}">${deltaIcon} ${esc(deltaText)}</span>
+                      <span style="margin-left:0.4rem;">· ${esc(totalLine)}</span>
+                    </span>
                   </span>
+                  ${lbTrophySvg(rank)}
                 </span>
                 ${lbSparklineSvg(r.weekly ?? [])}
                 <span class="sn-lb-count">
@@ -7918,6 +8364,45 @@
         Lowest: "sn-kb-card--lowest",
       };
 
+      // Priority pill that sits inline with the Jira key in the card
+      // head. Textual badge complements the 4px colored left rail so
+      // triage-speed readers don't have to decode a stripe.
+      const PRIORITY_PILL_KB = {
+        Highest: { cls: "sn-kb-priority--highest", label: "HIGHEST" },
+        Critical: { cls: "sn-kb-priority--critical", label: "CRITICAL" },
+        High: { cls: "sn-kb-priority--high", label: "HIGH" },
+        Medium: { cls: "sn-kb-priority--medium", label: "MED" },
+        Low: { cls: "sn-kb-priority--low", label: "LOW" },
+        Lowest: { cls: "sn-kb-priority--lowest", label: "LOWEST" },
+      };
+
+      // Per-assignee avatar hue — stable HSL derived from the name
+      // so the same person always gets the same chip colour across
+      // reloads and widgets. Matches the leaderboard's approach so
+      // "Andy" reads the same here and there.
+      function kbAvatarHue(name) {
+        if (!name) return 220;
+        let h = 0;
+        for (let i = 0; i < name.length; i++) {
+          h = (h * 31 + name.charCodeAt(i)) % 360;
+        }
+        return h;
+      }
+
+      // Stale-age bucket for the "X ago" chip on each card.
+      // Fresh (< 7d) -> "" (default muted text)
+      // 7-14d        -> "warm" (amber bold)
+      // 14d+         -> "cold" (red pill with outline)
+      function kbStaleLevel(iso) {
+        if (!iso) return "";
+        const ms = Date.now() - Date.parse(iso);
+        if (!Number.isFinite(ms) || ms < 0) return "";
+        const days = ms / 86400000;
+        if (days >= 14) return "cold";
+        if (days >= 7) return "warm";
+        return "";
+      }
+
       function kbInitials(name) {
         if (!name) return "·";
         const parts = String(name).trim().split(/\s+/).filter(Boolean);
@@ -7969,46 +8454,69 @@
         board.innerHTML = cols
           .map((col) => {
             const cat = (col.statusCategory || "").toLowerCase();
-            const dotCls = ["new", "indeterminate", "done"].includes(cat)
-              ? `sn-kb-col-dot--${cat}`
-              : "";
+            const knownCat = ["new", "indeterminate", "done"].includes(cat);
+            const dotCls = knownCat ? `sn-kb-col-dot--${cat}` : "";
+            // data-cat drives the column-scoped custom properties
+            // (--kb-accent, --kb-border, --kb-head-bg) that theme
+            // the whole column in one selector swap.
+            const catAttr = knownCat ? ` data-cat="${cat}"` : "";
             const cards = (col.tickets ?? [])
               .map((t) => {
                 const prioCls = PRIORITY_CLASS_KB[t.priority] ?? "";
+                const prioPill = PRIORITY_PILL_KB[t.priority];
+                const prioBadge = prioPill
+                  ? `<span class="sn-kb-priority ${prioPill.cls}">${prioPill.label}</span>`
+                  : "";
                 const initials = kbInitials(t.assignee);
                 const assignee = t.assignee || "Unassigned";
+                const isUnassigned = !t.assignee;
                 const ago = kbRelativeTime(t.updatedAt);
+                const stale = kbStaleLevel(t.updatedAt);
                 const href = `${JIRA_BROWSE_BASE}${encodeURIComponent(t.key)}`;
                 const type = t.issueType ? esc(t.issueType) : "";
+                // Per-person HSL gradient so assignees become
+                // visually distinct — stable across refreshes
+                // because the hue is derived from the name.
+                const hue = kbAvatarHue(t.assignee);
+                const avaStyle = isUnassigned
+                  ? ""
+                  : ` style="background: linear-gradient(160deg, hsl(${hue} 68% 52%) 0%, hsl(${(hue + 40) % 360} 68% 40%) 100%);"`;
+                const avaCls = isUnassigned
+                  ? "sn-kb-ava sn-kb-ava--unassigned"
+                  : "sn-kb-ava";
+                const nameCls = isUnassigned
+                  ? "sn-kb-assignee-name sn-kb-assignee-name--unassigned"
+                  : "sn-kb-assignee-name";
                 return `
                   <a href="${href}" target="_blank" rel="noopener"
                      class="sn-kb-card ${prioCls}"
                      title="${esc(t.key)} · ${esc(t.summary)}">
                     <div class="sn-kb-card-head">
                       <span class="sn-kb-key">${esc(t.key)}</span>
+                      ${prioBadge}
                       ${type ? `<span class="sn-kb-type">${type}</span>` : ""}
                     </div>
                     <div class="sn-kb-card-sum">${esc(t.summary)}</div>
                     <div class="sn-kb-card-foot">
                       <span class="sn-kb-assignee">
-                        <span class="sn-kb-ava" aria-hidden="true">${esc(initials)}</span>
-                        <span class="sn-kb-assignee-name">${esc(assignee)}</span>
+                        <span class="${avaCls}"${avaStyle} aria-hidden="true">${esc(initials)}</span>
+                        <span class="${nameCls}">${esc(assignee)}</span>
                       </span>
-                      ${ago ? `<span class="sn-kb-ago">${esc(ago)}</span>` : ""}
+                      ${ago ? `<span class="sn-kb-ago"${stale ? ` data-stale="${stale}"` : ""}>${esc(ago)}</span>` : ""}
                     </div>
                   </a>`;
               })
               .join("");
 
             const emptyOrCards =
-              cards || `<div class="sn-kb-col-empty">No tickets</div>`;
+              cards || `<div class="sn-kb-col-empty">No tickets in this column</div>`;
             const truncated = Number(col.truncated ?? 0);
             const moreNode = truncated > 0
               ? `<div class="sn-kb-more">+${truncated} more in Jira</div>`
               : "";
 
             return `
-              <div class="sn-kb-col" role="group" aria-label="${esc(col.name)} — ${col.total} tickets">
+              <div class="sn-kb-col" role="group"${catAttr} aria-label="${esc(col.name)} — ${col.total} tickets">
                 <div class="sn-kb-col-head">
                   <span class="sn-kb-col-dot ${dotCls}" aria-hidden="true"></span>
                   <span class="sn-kb-col-name">${esc(col.name)}</span>
