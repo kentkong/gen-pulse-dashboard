@@ -246,6 +246,26 @@
         color: var(--text);
         border-color: var(--border);
       }
+      /* Hero Refresh button — icon + label layout. Icon spins while
+         the click handler runs, so even a sub-second refresh gives
+         the user a clear "something is happening" signal. Uses the
+         same @keyframes sn-spin as the per-widget refresh buttons so
+         the two rotation speeds (global + widget) stay in sync. */
+      #refresh {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+      }
+      #refresh .sn-refresh-icon {
+        flex: none;
+      }
+      #refresh[data-busy="true"] .sn-refresh-icon {
+        animation: sn-spin 0.9s linear infinite;
+      }
+      #refresh:disabled {
+        cursor: progress;
+        opacity: 0.85;
+      }
       .sn-btn-ghost:hover {
         background: var(--muted-bg);
         border-color: var(--muted-fg);
@@ -325,6 +345,93 @@
           transparent 100%
         );
         border-top: 1px solid rgba(99, 102, 241, 0.3);
+      }
+
+      /* ---------------------------------------------------------------
+         Vertical page rails
+         ---------------------------------------------------------------
+         Two thin lines that sit at the OUTER edges of the hero
+         banner (specifically, aligned with where the hero's
+         halo pseudo-element fades out — `.sn-hero::before` has
+         `inset: 0 -48px 0`, so the banner visibly extends 48px
+         past the content column on each side). The rails run
+         from directly below the sticky .sn-topnav all the way
+         down to the viewport bottom, regardless of scroll
+         position, so they act as a persistent page frame.
+
+         Positioning maths:
+           • `<main>` is `mx-auto max-w-6xl px-6`:
+               max-w-6xl  = 72rem = 1152px outer width (incl. pad)
+               px-6       = 24px horizontal padding
+             -> main's CONTENT box is 1104px wide, centered.
+           • `.sn-hero::before` halo extends 48px past that
+             content box on each side.
+             -> Halo outer edges sit at viewport-centre ± 600px
+                (552px half-content + 48px halo bleed).
+           • `max(0px, calc(50% - 600px))` clamps the rails to
+             the viewport edge on narrow screens — below 1200px
+             the rails would otherwise sit off-screen, so we
+             just park them at the viewport edge instead.
+
+         Implementation choice:
+           Fixed-position pseudos on <body> (not absolute on
+           <main>) so the rails:
+             1. Don't scroll with content — they stay glued to
+                the viewport like a page frame, which matches
+                the "define a line of the page" intent.
+             2. Can extend below <main>'s bottom padding all
+                the way to the viewport edge, even if the
+                widget stack is short.
+             3. Don't need <main> to be position: relative,
+                avoiding a cascade risk for absolutely-
+                positioned children inside widgets.
+
+         Colour by theme:
+           • Light → var(--border), the same soft grey used by
+             the topnav's bottom border (so top rule + both
+             rails share one palette = one frame).
+           • Dark  → rgba(99, 102, 241, 0.3), the same soft
+             indigo-purple already used by .sn-hero::after's
+             border-top in dark mode, so all four edges of the
+             hero + the rails below read as one set.
+         --------------------------------------------------------------- */
+      body::before,
+      body::after {
+        content: "";
+        position: fixed;
+        /* Starts below the .sn-topnav sticky bar. Topnav height
+           is padding (0.6rem top + 0.6rem bottom = ~19px) +
+           content (user-chip ~32px) + 1px border ≈ 52px. Using
+           52px leaves a clean joint between the topnav's
+           bottom border and the rail tops. */
+        top: 52px;
+        bottom: 0;
+        width: 1px;
+        background: var(--border);
+        pointer-events: none;
+        z-index: 1;
+      }
+      body::before { left: max(0px, calc(50% - 600px)); }
+      body::after  { right: max(0px, calc(50% - 600px)); }
+
+      html.theme-dark body::before,
+      html.theme-dark body::after {
+        background: rgba(99, 102, 241, 0.3);
+      }
+      @media (prefers-color-scheme: dark) {
+        html:not(.theme-light) body::before,
+        html:not(.theme-light) body::after {
+          background: rgba(99, 102, 241, 0.3);
+        }
+      }
+
+      /* On phones the hero fills most of the viewport width and
+         the topnav height changes (padding shrinks to 0.5rem).
+         Hide the rails so the layout doesn't feel cramped and
+         we don't paint a 1px line right on the viewport edge. */
+      @media (max-width: 720px) {
+        body::before,
+        body::after { display: none; }
       }
 
       /* Right-side of the hero — stacks the quick-links row above
@@ -1080,15 +1187,35 @@
         border-radius: 0.06em;
         z-index: -1;
       }
-      .sn-hero-tag {
+      /* Hero positioning line — "The daily command center for CSM
+         teams". Sits between the Gen Pulse wordmark and the
+         descriptive tagline so the header reads as a 3-tier
+         hierarchy: brand → positioning → description.
+
+         Scale note:
+         Clamp caps around 1.55rem (25px) on desktop — big enough
+         to carry weight as a secondary headline, but visibly
+         smaller than the Pulse wordmark so there's a clear
+         pecking order. Letter-spacing is tightened slightly to
+         echo the wordmark's -0.025em. */
+      .sn-hero-headline {
         color: var(--text);
-        font-size: 0.95rem;
-        font-weight: 600;
+        font: 700 clamp(1.1rem, 2.4vw, 1.55rem) / 1.25
+          "Inter", system-ui, sans-serif;
+        letter-spacing: -0.015em;
+        margin: 1.5rem 0 0;
+        max-width: 52ch;
+      }
+      .sn-hero-tag {
+        color: var(--muted-fg);
+        font-size: 0.9rem;
+        font-weight: 500;
         letter-spacing: -0.005em;
-        /* Extra breathing room between the Gen Pulse wordmark and
-           the tagline so the hero feels less dense now that the
-           team switcher has moved up to the nav. */
-        margin: 2.25rem 0 0;
+        /* Sits directly under the positioning headline now, so
+           only a small gap is needed — nothing like the old
+           2.25rem drop that used to separate it from the
+           wordmark. */
+        margin: 0.55rem 0 0;
         max-width: 62ch;
         opacity: 0.92;
       }
@@ -2463,12 +2590,34 @@
         html:not(.theme-light) .sn-briefing .sn-briefing-value {
           color: #ffffff;
         }
-        html:not(.theme-light) .sn-briefing-stat + .sn-briefing-stat {
-          border-left-color: rgba(255, 255, 255, 0.18);
-        }
-        html:not(.theme-light) .sn-briefing-stat:hover,
-        html:not(.theme-light) .sn-briefing-stat:focus-visible {
-          background: rgba(255, 255, 255, 0.10);
+        /* Dark-mode: retune the per-card stroke/fill tokens from
+           gen-blue to status-amber so each of the four stats
+           reads as a crisp orange-outlined tile on the gen-blue
+           briefing surface. The border rules themselves live on
+           .sn-briefing-stat — this block only redefines the
+           palette tokens, so adjustments here never have to
+           keep the border/hover CSS in sync. */
+        html:not(.theme-light) .sn-briefing-stat {
+          --briefing-stroke: color-mix(
+            in srgb,
+            var(--status-amber, #f59e0b) 60%,
+            transparent
+          );
+          --briefing-stroke-hot: color-mix(
+            in srgb,
+            var(--status-amber, #f59e0b) 85%,
+            transparent
+          );
+          --briefing-fill: color-mix(
+            in srgb,
+            var(--status-amber, #f59e0b) 7%,
+            transparent
+          );
+          --briefing-fill-hot: color-mix(
+            in srgb,
+            var(--status-amber, #f59e0b) 16%,
+            transparent
+          );
         }
         /* Brighten the warn tone so amber still pops against blue
            instead of fading into the background. */
@@ -2491,36 +2640,97 @@
       html.theme-dark .sn-briefing .sn-briefing-value {
         color: #ffffff;
       }
-      html.theme-dark .sn-briefing-stat + .sn-briefing-stat {
-        border-left-color: rgba(255, 255, 255, 0.18);
-      }
-      html.theme-dark .sn-briefing-stat:hover,
-      html.theme-dark .sn-briefing-stat:focus-visible {
-        background: rgba(255, 255, 255, 0.10);
+      /* Explicit dark-mode (toggle-forced) version of the token
+         retune above — keeps the two dark triggers (OS prefers
+         dark, user toggled dark) in lockstep. */
+      html.theme-dark .sn-briefing-stat {
+        --briefing-stroke: color-mix(
+          in srgb,
+          var(--status-amber, #f59e0b) 60%,
+          transparent
+        );
+        --briefing-stroke-hot: color-mix(
+          in srgb,
+          var(--status-amber, #f59e0b) 85%,
+          transparent
+        );
+        --briefing-fill: color-mix(
+          in srgb,
+          var(--status-amber, #f59e0b) 7%,
+          transparent
+        );
+        --briefing-fill-hot: color-mix(
+          in srgb,
+          var(--status-amber, #f59e0b) 16%,
+          transparent
+        );
       }
       html.theme-dark .sn-briefing-tone-warn { color: var(--gen-yellow); }
+      /* Each stat is now a proper rectangular card with its own
+         thin outline — the previous borderless + hairline-divider
+         treatment made the four stats read as one blurry row.
+         Colours cascade from per-card custom properties so the
+         dark-mode override below only has to retune the tokens
+         (no need to duplicate the border / hover rules).
+
+         Palette:
+           • Light → Gen blue (#0400f5 family) — matches the hero
+             and the section-heading dots.
+           • Dark  → Status amber (#f59e0b) — matches the Weekly
+             Throughput sparkline and the filter chips. Orange
+             was chosen over deep purple for dark mode because
+             the container itself is already a deep gen-blue
+             gradient; a purple outline would blend in, amber
+             contrasts cleanly. */
       .sn-briefing-stat {
+        --briefing-stroke: color-mix(
+          in srgb,
+          var(--gen-blue, #0400f5) 55%,
+          transparent
+        );
+        --briefing-stroke-hot: color-mix(
+          in srgb,
+          var(--gen-blue, #0400f5) 80%,
+          transparent
+        );
+        --briefing-fill: color-mix(
+          in srgb,
+          var(--gen-blue, #0400f5) 3%,
+          transparent
+        );
+        --briefing-fill-hot: color-mix(
+          in srgb,
+          var(--gen-blue, #0400f5) 10%,
+          transparent
+        );
+
         display: flex;
         flex-direction: column;
         justify-content: center;
         gap: 0.15rem;
-        padding: 0.4rem 0.75rem;
-        border: 0;
-        border-radius: 0.65rem;
-        background: transparent;
+        padding: 0.5rem 0.85rem;
+        border: 1px solid var(--briefing-stroke);
+        border-radius: 0.55rem;
+        background: var(--briefing-fill);
         color: inherit;
         text-align: left;
         cursor: pointer;
         font: inherit;
-        transition: background 0.15s ease, transform 0.1s ease;
+        transition: background 0.15s ease, border-color 0.15s ease,
+          transform 0.1s ease;
         min-width: 0;
       }
+      /* Each card now carries its own full outline, so the old
+         left-edge divider would render as a double rule between
+         neighbours. Force the left border to match the card's
+         own stroke so it stays a single crisp 1px line. */
       .sn-briefing-stat + .sn-briefing-stat {
-        border-left: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
+        border-left: 1px solid var(--briefing-stroke);
       }
       .sn-briefing-stat:hover,
       .sn-briefing-stat:focus-visible {
-        background: color-mix(in srgb, var(--bg) 55%, transparent);
+        background: var(--briefing-fill-hot);
+        border-color: var(--briefing-stroke-hot);
         outline: none;
         transform: translateY(-1px);
       }
@@ -2558,22 +2768,17 @@
       @media (max-width: 720px) {
         .sn-briefing {
           grid-template-columns: repeat(2, 1fr);
+          /* Slightly bigger gap on phones so the four outlined
+             tiles read as distinct objects rather than a grid
+             that shares edges. */
+          gap: 0.55rem;
         }
-        .sn-briefing-stat + .sn-briefing-stat {
-          border-left: none;
-        }
-        .sn-briefing-stat:nth-child(2n),
-        .sn-briefing-stat:nth-child(2n + 1) {
-          border-left: none;
-        }
-        .sn-briefing-stat:nth-child(even) {
-          border-left: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-        }
-        .sn-briefing-stat:nth-child(n + 3) {
-          border-top: 1px solid color-mix(in srgb, var(--border) 55%, transparent);
-          margin-top: 0.35rem;
-          padding-top: 0.55rem;
-        }
+        /* On phones every card keeps its own 4-sided outline
+           (set on .sn-briefing-stat). The old 2x2 divider logic
+           (border-left / border-top on specific :nth-child rows)
+           is now counter-productive — it would render as a
+           second rule on top of each card's own border. No
+           mobile-specific border overrides are needed. */
         .sn-briefing-value { font-size: 1.3rem; }
       }
 
@@ -3405,9 +3610,18 @@
           font-size: clamp(1.75rem, 8.5vw, 2.4rem);
           margin-top: 0.25rem;
         }
+        /* Phone-sized positioning headline. Shrink a notch from
+           the desktop clamp so it sits comfortably under the
+           Pulse wordmark without pushing the first widget off
+           the initial viewport. */
+        .sn-hero-headline {
+          font-size: 1.05rem;
+          margin-top: 1rem;
+          max-width: 360px;
+        }
         .sn-hero-tag {
-          font-size: 0.88rem;
-          margin-top: 0.7rem;
+          font-size: 0.82rem;
+          margin-top: 0.45rem;
           /* Use a hard px max-width instead of calc(100vw - ...). On
              headless Chrome under --force-device-scale-factor, 100vw
              sometimes evaluates larger than the actual viewport,
@@ -4037,6 +4251,125 @@
       }
 
       /* -----------------------------------------------------------------
+         "Coming soon" overlay for non-EMAIL-NORTON teams.
+
+         Scope guarantee: this entire block is gated on
+         `body[data-team]:not([data-team="email-norton"])`, so the
+         EMAIL-NORTON path (default + selected) is visually byte-
+         identical to before. No JS touches any widget / data path.
+
+         When a non-live team is selected, every direct child of
+         <main> is hidden EXCEPT `.sn-team-coming-soon`, which
+         renders a centered, brand-coloured empty state telling the
+         viewer the pipeline is onboarding. Prevents live Norton
+         data ever leaking under another team's label during demos.
+         ----------------------------------------------------------------- */
+      .sn-team-coming-soon {
+        display: none;
+      }
+      body[data-team]:not([data-team="email-norton"]) main > *:not(.sn-team-coming-soon) {
+        display: none !important;
+      }
+      body[data-team]:not([data-team="email-norton"]) .sn-team-coming-soon {
+        display: flex;
+        min-height: 60vh;
+        align-items: center;
+        justify-content: center;
+        padding: 3rem 1.5rem;
+      }
+      .sn-team-coming-soon-card {
+        max-width: 540px;
+        width: 100%;
+        text-align: center;
+        padding: 2.5rem 2rem 2.25rem;
+        border-radius: 18px;
+        background: var(--card-bg, rgba(255, 255, 255, 0.92));
+        border: 1px solid var(--card-border, rgba(15, 23, 42, 0.1));
+        box-shadow: 0 24px 48px -30px rgba(15, 23, 42, 0.35);
+      }
+      html.theme-dark .sn-team-coming-soon-card {
+        background: rgba(30, 41, 59, 0.85);
+        border-color: rgba(148, 163, 184, 0.22);
+      }
+      .sn-team-coming-soon-icon {
+        width: 64px;
+        height: 64px;
+        margin: 0 auto 1rem;
+        display: block;
+        color: var(--sn-team-accent, #2b4fff);
+        opacity: 0.9;
+      }
+      .sn-team-coming-soon-kicker {
+        font: 600 0.72rem/1 "Inter", system-ui, sans-serif;
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--sn-team-accent, #2b4fff);
+        margin-bottom: 0.5rem;
+      }
+      .sn-team-coming-soon-title {
+        font: 700 1.65rem/1.2 "Inter", system-ui, sans-serif;
+        color: var(--ink-strong, #0f172a);
+        margin: 0 0 0.35rem;
+      }
+      html.theme-dark .sn-team-coming-soon-title {
+        color: #f1f5f9;
+      }
+      .sn-team-coming-soon-team {
+        font: 600 1rem/1.3 "Inter", system-ui, sans-serif;
+        color: var(--sn-team-accent, #2b4fff);
+        margin: 0 0 1rem;
+      }
+      .sn-team-coming-soon-body {
+        font: 400 0.95rem/1.55 "Inter", system-ui, sans-serif;
+        color: var(--ink-muted, #475569);
+        margin: 0 0 1.75rem;
+      }
+      html.theme-dark .sn-team-coming-soon-body {
+        color: #cbd5e1;
+      }
+      .sn-team-coming-soon-body strong {
+        color: var(--ink-strong, #0f172a);
+        font-weight: 600;
+      }
+      html.theme-dark .sn-team-coming-soon-body strong {
+        color: #f8fafc;
+      }
+      .sn-team-coming-soon-btn {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 0.5rem;
+        padding: 0.7rem 1.3rem;
+        border-radius: 999px;
+        border: 1px solid var(--gen-blue, #0400f5);
+        background: var(--gen-blue, #0400f5);
+        color: #fff;
+        font: 600 0.9rem/1 "Inter", system-ui, sans-serif;
+        cursor: pointer;
+        transition: transform 120ms ease, box-shadow 120ms ease, background 120ms ease;
+      }
+      .sn-team-coming-soon-btn:hover {
+        transform: translateY(-1px);
+        box-shadow: 0 10px 22px -14px rgba(4, 0, 245, 0.6);
+      }
+      .sn-team-coming-soon-btn:focus-visible {
+        outline: 2px solid var(--gen-blue, #0400f5);
+        outline-offset: 3px;
+      }
+      .sn-team-coming-soon-meta {
+        margin: 1.5rem 0 0;
+        font: 500 0.72rem/1.4 "Inter", system-ui, sans-serif;
+        letter-spacing: 0.04em;
+        color: var(--ink-muted, #64748b);
+      }
+      @media (max-width: 640px) {
+        .sn-team-coming-soon-card {
+          padding: 2rem 1.25rem 1.75rem;
+        }
+        .sn-team-coming-soon-title { font-size: 1.4rem; }
+      }
+
+      /* -----------------------------------------------------------------
          Hero spacing — give the new pitch-ready tagline room to
          breathe before the date/timezone meta line and the controls
          trio. The goal is at least two blank lines between the
@@ -4497,6 +4830,107 @@
         color: #fde68a;
       }
 
+      /* Provisional-filters treatment — every Jira widget's chip and
+         drawer gets a subtle indigo tint until JIRA_FILTERS_APPROVED=1
+         is set (i.e. scrum master has signed off on the JQL). The data
+         itself is live; only the filters are pre-approval. */
+      .sn-filter-chip[data-provisional="true"] {
+        border-style: dashed;
+        border-color: color-mix(in srgb, var(--gen-blue, #0400f5) 45%, transparent);
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 8%, transparent);
+      }
+      .sn-filter-chip[data-provisional="true"] .sn-filter-chip-text::before {
+        content: "◐ ";
+        opacity: 0.75;
+        margin-right: 0.1rem;
+      }
+
+      /* Dark-mode legibility fix for the widget filter chips
+         (EMOPS, EMAILCO · last 30 d  …and friends).
+
+         Why this exists:
+         In light mode the chips read fine — dark ink on a faint
+         indigo wash sitting on a white card. In dark mode the
+         same wash becomes near-transparent indigo on the deep
+         #0b1229-ish dashboard surface, and every chip effectively
+         disappears (flagged during the Alan demo prep — the
+         chips are "barely eligible"). Provisional chips are the
+         worst offender because their accent is the indigo brand
+         blue, which is the same family as the dashboard backdrop.
+
+         What we do:
+         Re-skin every non-status chip (incl. provisional) in dark
+         mode using --status-amber, the same #f59e0b orange that
+         powers the Weekly Throughput sparkline. That ties the
+         chips into an existing accent so the dashboard still
+         reads as one system, instead of introducing a new colour.
+
+         Scope:
+         - :not([data-status="stale"]) and :not([data-status="error"])
+           so the amber/red STATUS signals aren't overwritten. A
+           stale chip must still look stale; an error chip must
+           still shout red.
+         - Only inside html.theme-dark — light mode is untouched. */
+      html.theme-dark
+        .sn-filter-chip:not([data-status="stale"]):not(
+          [data-status="error"]
+        ) {
+        border-color: color-mix(
+          in srgb,
+          var(--status-amber, #f59e0b) 55%,
+          transparent
+        );
+        background: color-mix(
+          in srgb,
+          var(--status-amber, #f59e0b) 18%,
+          transparent
+        );
+        color: #fde68a;
+      }
+      html.theme-dark
+        .sn-filter-chip:not([data-status="stale"]):not(
+          [data-status="error"]
+        ):hover {
+        background: color-mix(
+          in srgb,
+          var(--status-amber, #f59e0b) 28%,
+          transparent
+        );
+        border-color: color-mix(
+          in srgb,
+          var(--status-amber, #f59e0b) 78%,
+          transparent
+        );
+      }
+      /* Provisional chips keep their dashed outline (so the "not
+         yet scrum-master-approved" signal survives), but the
+         dashed border + the fill both switch from indigo to
+         amber so the chip is actually readable in dark mode. */
+      html.theme-dark .sn-filter-chip[data-provisional="true"] {
+        border-color: color-mix(
+          in srgb,
+          var(--status-amber, #f59e0b) 62%,
+          transparent
+        );
+        background: color-mix(
+          in srgb,
+          var(--status-amber, #f59e0b) 16%,
+          transparent
+        );
+      }
+
+      .sn-filter-provisional-note {
+        font: 500 0.75rem/1.4 "Inter", system-ui, sans-serif;
+        color: color-mix(in srgb, var(--gen-blue, #0400f5) 85%, var(--ink-strong, #0f172a));
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 8%, transparent);
+        border: 1px solid color-mix(in srgb, var(--gen-blue, #0400f5) 35%, transparent);
+        border-radius: 8px;
+        padding: 0.55rem 0.75rem;
+      }
+      html.theme-dark .sn-filter-provisional-note {
+        color: #c7d2fe;
+      }
+
       /* NEW: "Refresh now" button in the drawer footer. Sits next to
          the "Open in Jira" link. */
       .sn-filter-refresh-btn {
@@ -4817,6 +5251,77 @@
     </nav>
     <main class="mx-auto max-w-6xl px-6 py-10">
       <!--
+        "Coming soon" empty state — shown ONLY when the team switcher
+        is pointed at a team other than EMAIL-NORTON. Hidden by default
+        (CSS-gated on body[data-team]:not([data-team="email-norton"])),
+        so Norton's live rendering is completely unaffected.
+
+        The card swaps team name + accent color from the clicked
+        switcher option. The "Back to Norton EMAIL" button
+        programmatically clicks the EMAIL-NORTON option in the
+        switcher, so we reuse all the existing select() logic
+        (localStorage, brand rewrite, custom event) rather than
+        duplicating state.
+      -->
+      <div
+        id="sn-team-coming-soon"
+        class="sn-team-coming-soon"
+        role="region"
+        aria-live="polite"
+      >
+        <div class="sn-team-coming-soon-card">
+          <svg
+            class="sn-team-coming-soon-icon"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            stroke-width="1.6"
+            stroke-linecap="round"
+            stroke-linejoin="round"
+            aria-hidden="true"
+          >
+            <circle cx="12" cy="12" r="9"></circle>
+            <path d="M12 7v5l3 2"></path>
+          </svg>
+          <div class="sn-team-coming-soon-kicker">Pilot in progress</div>
+          <h2 class="sn-team-coming-soon-title">Dashboard coming soon</h2>
+          <p class="sn-team-coming-soon-team" id="sn-team-coming-soon-team">
+            Norton EMAIL
+          </p>
+          <p class="sn-team-coming-soon-body">
+            This team's data pipeline onboards after the
+            <strong>Norton EMAIL</strong> pilot completes. Until then,
+            Norton EMAIL is the only team with live production data on
+            Gen Pulse &mdash; everything you see there is real Jira,
+            Slack, and Workday.
+          </p>
+          <button
+            type="button"
+            class="sn-team-coming-soon-btn"
+            id="sn-team-coming-soon-back"
+          >
+            <svg
+              viewBox="0 0 24 24"
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              stroke-width="2.2"
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M15 18l-6-6 6-6"></path>
+            </svg>
+            Back to Norton EMAIL
+          </button>
+          <p class="sn-team-coming-soon-meta">
+            Rollout sequence: Norton EMAIL &rarr; IPM &rarr; Mobile &rarr; Avast
+          </p>
+        </div>
+      </div>
+
+      <!--
         Quick-links nav — centered destination bar that sits between
         the top-nav utility strip and the hero. Mirrors Gen Central's
         two-tier nav pattern: icons up top, named destinations below.
@@ -5062,8 +5567,24 @@
             persist to localStorage / brand rewrite across widgets) is
             wired in the main <script> below against the same IDs.
           -->
+          <!--
+            Hero copy is split across two lines on purpose:
+              1. .sn-hero-headline — the positioning statement.
+                 This is what executives (e.g. Alan) should read
+                 first after the wordmark: "what is this thing?".
+              2. .sn-hero-tag      — the descriptive subline.
+                 Sets the context (mobile-first, companion to Gen
+                 Central, what data lives here) without crowding
+                 the top of the dashboard.
+            Keep both elements — do NOT merge them back into a
+            single paragraph. The visual hierarchy is what makes
+            the hero read at a glance on both phone and desktop.
+          -->
+          <p class="sn-hero-headline">
+            The daily command center for CSM teams
+          </p>
           <p class="sn-hero-tag">
-            The daily command center for CSM teams — a mobile-first companion to Gen Central with real-time performance, workflow, and Team Presence.
+            — a mobile-first companion to Gen Central with real-time performance, workflow, and Team Presence.
           </p>
           <p id="subhead" class="sn-hero-subhead sn-muted text-sm">Loading…</p>
         </div>
@@ -5086,7 +5607,30 @@
               <span id="theme-toggle-icon" aria-hidden="true">◐</span>
               <span id="theme-toggle-label">Dark mode</span>
             </button>
-            <button id="refresh" class="sn-btn" type="button">Refresh</button>
+            <button
+              id="refresh"
+              class="sn-btn"
+              type="button"
+              aria-label="Refresh all widgets now"
+            >
+              <svg
+                class="sn-refresh-icon"
+                viewBox="0 0 24 24"
+                width="14"
+                height="14"
+                aria-hidden="true"
+              >
+                <path
+                  d="M4 12a8 8 0 0 1 14-5.3M20 4v5h-5M20 12a8 8 0 0 1-14 5.3M4 20v-5h5"
+                  fill="none"
+                  stroke="currentColor"
+                  stroke-width="2"
+                  stroke-linecap="round"
+                  stroke-linejoin="round"
+                />
+              </svg>
+              <span id="refresh-label">Refresh</span>
+            </button>
           </div>
         </div>
       </header>
@@ -5720,6 +6264,26 @@
           base = `${base}${base.includes("?") ? "&" : "?"}project=${encodeURIComponent(
             window.__activeProject
           )}`;
+        }
+        // When the user clicks the hero "Refresh" button, the handler
+        // sets __forceNextFetch=true for the duration of that load()
+        // pass. apiUrl() is the single choke-point every widget URL
+        // is built through, so appending &force=1 here propagates the
+        // cache-bust to every endpoint without touching each of the
+        // ~12 individual load* functions.
+        //
+        // Without this, hitting "Refresh" only re-invokes the widget
+        // builders against the server's cached payload — so the UI
+        // re-paints the SAME numbers it was already showing, which
+        // reads to the user as "the refresh button is broken".
+        // web.js:registerWidgetRoute() honours `?force=1` by passing
+        // { force: true } into makeCachedBuilder's getter, which
+        // short-circuits the TTL check and re-runs the Jira query.
+        if (
+          window.__forceNextFetch === true &&
+          base.startsWith("/api/")
+        ) {
+          base = `${base}${base.includes("?") ? "&" : "?"}force=1`;
         }
         return API_KEY
           ? `${base}${base.includes("?") ? "&" : "?"}key=${encodeURIComponent(API_KEY)}`
@@ -8065,7 +8629,53 @@
         if (stored) window.__activeProject = stored;
       } catch (_) { /* sandboxed storage; ignore */ }
 
-      document.getElementById("refresh").addEventListener("click", load);
+      /* ------------------------------------------------------------------
+       * Global Refresh button — the one in the hero next to the theme
+       * toggle. Refresh does two things beyond re-calling load():
+       *
+       *   1. Sets __forceNextFetch=true for the duration of the load
+       *      pass, so apiUrl() appends &force=1 to every /api/* URL
+       *      and the server-side caches (Jira widget TTLs, team
+       *      aggregator) are actually busted. Without this the click
+       *      returns the SAME cached payload and the button appears
+       *      to do nothing.
+       *
+       *   2. Shows visible feedback: the refresh icon spins and the
+       *      label swaps to "Refreshing…" while the fetches are in
+       *      flight, and the button is disabled so rapid-clicking
+       *      doesn't stack duplicate forces.
+       *
+       * Note on timing: load() awaits /api/team but kicks off the
+       * per-widget loaders without awaiting them. Calling an async
+       * function synchronously runs its body up to the first `await`
+       * — which in every widget loader is the fetch() itself — so by
+       * the time load() returns, every widget URL has already been
+       * built (and the force query baked in). The extra `await next-
+       * tick` below is a belt-and-braces guarantee before we clear
+       * the flag.
+       * ------------------------------------------------------------------ */
+      (function initGlobalRefresh() {
+        const btn = document.getElementById("refresh");
+        if (!btn) return;
+        const label = document.getElementById("refresh-label");
+        btn.addEventListener("click", async () => {
+          if (btn.disabled) return;
+          btn.disabled = true;
+          btn.dataset.busy = "true";
+          const prevLabel = label ? label.textContent : "";
+          if (label) label.textContent = "Refreshing…";
+          window.__forceNextFetch = true;
+          try {
+            await load();
+            await new Promise((r) => setTimeout(r, 0));
+          } finally {
+            window.__forceNextFetch = false;
+            btn.disabled = false;
+            delete btn.dataset.busy;
+            if (label) label.textContent = prevLabel || "Refresh";
+          }
+        });
+      })();
       load();
       setInterval(load, 30000);
 
@@ -8558,8 +9168,12 @@
         });
 
         // Marketing / deep-link helpers.
-        //   ?team=<slug>              - preselects that team on load
-        //                               (e.g. `?team=avast` or `?team=ipm`)
+        //   ?team=<slug>              - preselects that team on load.
+        //                               Gated to EMAIL-NORTON only — any
+        //                               other slug (ipm/mobile/avast) is
+        //                               ignored so a shared URL can never
+        //                               open the dashboard on a non-live
+        //                               team's "coming soon" page.
         //   ?open-team-switcher=1     - pops the dropdown on load so we
         //                               can screenshot the open state.
         try {
@@ -8568,12 +9182,14 @@
           );
           if (teamMatch) {
             const wanted = teamMatch[1].toLowerCase();
-            const opt = opts.find(
-              (o) =>
-                o.dataset.team === wanted ||
-                (o.dataset.slug || "").toLowerCase() === wanted
-            );
-            if (opt) select(opt);
+            if (wanted === "email-norton") {
+              const opt = opts.find(
+                (o) =>
+                  o.dataset.team === wanted ||
+                  (o.dataset.slug || "").toLowerCase() === wanted
+              );
+              if (opt) select(opt);
+            }
           }
           if (/[?&]open-team-switcher=1\b/.test(window.location.search || "")) {
             const openAfterLoad = () => setTimeout(() => open(), 300);
@@ -8582,40 +9198,81 @@
           }
         } catch (e) {}
 
-        // Restore saved team on load.
+        // Landing always anchors on EMAIL-NORTON.
+        //
+        // The `select()` helper writes localStorage unconditionally so
+        // the switcher still "remembers" the last click within a
+        // session (useful during the live demo when we click IPM,
+        // show the coming-soon card, then come back). But the LANDING
+        // page must never boot into a non-live team — so on every
+        // fresh page load we clear any saved non-EMAIL-NORTON value
+        // and don't call `select()` here at all. EMAIL-NORTON is the
+        // default `is-selected` option in the HTML, so zero extra
+        // work is needed to land there.
         try {
           const saved = localStorage.getItem(KEY);
-          if (saved) {
-            const opt = opts.find((o) => o.dataset.team === saved);
-            if (opt) {
-              // Apply without closing/focusing (we're on first paint).
-              opts.forEach((o) => {
-                o.classList.toggle("is-selected", o === opt);
-                o.setAttribute(
-                  "aria-selected",
-                  o === opt ? "true" : "false"
-                );
-                o.setAttribute("tabindex", o === opt ? "0" : "-1");
-              });
-              const slug = opt.dataset.slug || opt.dataset.team;
-              const brand = opt.dataset.brand || slug;
-              const accent = opt.dataset.accent || "#2b4fff";
-              currentLabel.textContent = slug;
-              if (currentDot) {
-                currentDot.style.background = accent;
-                currentDot.style.boxShadow =
-                  "0 0 0 3px color-mix(in srgb, " +
-                  accent +
-                  " 18%, transparent)";
-              }
-              document.body.dataset.team = opt.dataset.team;
-              // Brand rewrite needs the widget titles in the DOM;
-              // they exist at parse time (not lazy-rendered), so we
-              // can do it synchronously.
-              rewriteBrand(brand, slug);
-            }
+          if (saved && saved !== "email-norton") {
+            localStorage.removeItem(KEY);
           }
         } catch (e) {}
+      })();
+
+      /* -----------------------------------------------------------------
+         "Coming soon" overlay controller.
+
+         Keeps the overlay in sync with the team switcher without
+         touching any widget / data code. Two responsibilities:
+
+           1. When `team:changed` fires, update the overlay's
+              displayed team name + accent color. The visibility
+              itself is pure CSS (see `.sn-team-coming-soon` rules).
+           2. Wire the "Back to Norton EMAIL" button to
+              programmatically click the EMAIL-NORTON option in the
+              switcher — so we reuse all the existing select() logic
+              (localStorage, brand rewrite, event dispatch) rather
+              than duplicating state machinery.
+         ----------------------------------------------------------------- */
+      (function initTeamComingSoon() {
+        const card = document.getElementById("sn-team-coming-soon");
+        if (!card) return;
+        const teamLabel = document.getElementById("sn-team-coming-soon-team");
+        const backBtn = document.getElementById("sn-team-coming-soon-back");
+
+        function syncFromBody() {
+          const team = document.body.dataset.team || "email-norton";
+          if (team === "email-norton") return; // Norton path untouched.
+          const opt = document.querySelector(
+            `.sn-team-switcher-opt[data-team="${team}"]`
+          );
+          if (!opt) return;
+          const brand = opt.dataset.brand || opt.dataset.slug || team;
+          const accent = opt.dataset.accent || "#2b4fff";
+          if (teamLabel) teamLabel.textContent = brand;
+          card.style.setProperty("--sn-team-accent", accent);
+        }
+
+        // Initial paint: covers the localStorage-restore case where
+        // a returning user lands on IPM/Mobile/Avast.
+        syncFromBody();
+
+        document.addEventListener("team:changed", (e) => {
+          const team = (e && e.detail && e.detail.team) || "email-norton";
+          if (team === "email-norton") return;
+          if (teamLabel) teamLabel.textContent = e.detail.brand || team;
+          card.style.setProperty(
+            "--sn-team-accent",
+            e.detail.accent || "#2b4fff"
+          );
+        });
+
+        if (backBtn) {
+          backBtn.addEventListener("click", () => {
+            const norton = document.querySelector(
+              '.sn-team-switcher-opt[data-team="email-norton"]'
+            );
+            if (norton) norton.click();
+          });
+        }
       })();
 
       // Marketing screenshot helper — allow the page to be deep-linked
@@ -8722,6 +9379,7 @@
       <div class="sn-filter-drawer-body">
         <div id="sn-filter-error-note" class="sn-filter-error-note" hidden></div>
         <div id="sn-filter-stale-note" class="sn-filter-stale-note" hidden></div>
+        <div id="sn-filter-provisional-note" class="sn-filter-provisional-note" hidden></div>
         <div id="sn-filter-fallback-note" class="sn-filter-fallback-note" hidden></div>
         <div>
           <div class="sn-filter-section-label">Source</div>
@@ -8999,6 +9657,9 @@
           if (filter.fallbackFrom) chip.dataset.fallback = "true";
           else delete chip.dataset.fallback;
 
+          if (filter.provisional) chip.dataset.provisional = "true";
+          else delete chip.dataset.provisional;
+
           // NEW: chip status (error/stale/clean) + staleness border
           // on the widget card.
           applyChipState(widgetId);
@@ -9193,6 +9854,25 @@
           } else {
             staleEl.hidden = true;
             staleEl.textContent = "";
+          }
+
+          /* -- Provisional-filters banner -------------------------
+           * Shown when JIRA_FILTERS_APPROVED is unset. Data is live
+           * against Jira; the filters themselves are awaiting scrum-
+           * master sign-off per JQL-WORKBOOK.md. Flipped off by
+           * setting JIRA_FILTERS_APPROVED=1 in .env.              */
+          const provisionalEl = document.getElementById(
+            "sn-filter-provisional-note"
+          );
+          if (meta && meta.provisional) {
+            provisionalEl.hidden = false;
+            provisionalEl.textContent =
+              "Provisional — the JQL below is running against live Jira " +
+              "but has not yet been signed off by the scrum master. See " +
+              "JQL-WORKBOOK.md for the current approval matrix.";
+          } else {
+            provisionalEl.hidden = true;
+            provisionalEl.textContent = "";
           }
 
           /* -- Fallback banner (unchanged) ----------------------- */

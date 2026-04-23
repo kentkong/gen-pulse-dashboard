@@ -4,6 +4,22 @@ Gen Pulse shows the EMAIL NORTON team who's on vacation / sick / leave today and
 
 ---
 
+## ✅ Interim scope agreed with HR (April 2026)
+
+After the call with [HR contact] + Andy, the agreed first delivery for Alan Rogoyski's demo is **a one-off Workday report**, not an API. Specifically:
+
+| Item | Agreed for first demo |
+| ---- | --------------------- |
+| Delivery format | One-off CSV / Excel report (not a live API) |
+| Scope of people | The EMAIL NORTON team (8 people — see roster below) |
+| Fields requested | Person + Start date + End date + Duration (day / half-day) |
+| Fields intentionally dropped | **PTO type** (Sick / Holiday / Personal) — HR asked to leave this off for the first cut. The dashboard will show "Time off" instead of the specific sub-type. |
+| Future API path | Satish Yalamandi's integrations BA team + Andy + Ivra. Post-demo. |
+
+**What this means for the code:** the CSV parser (`src/presence/workday.js`) accepts the simplified report out of the box — Workday's native column names (`Worker Name`, `Start Date`, `End Date`, `Duration`, with or without a `Comment` column) all resolve automatically. Half-day entries are tagged `½ day` in the note. Rows with no `type` column default to the generic label `Time off` in the manager drill-down view, and "Vacation" on the public dashboard. No format reshaping step is required between HR sending the file and the dashboard reading it.
+
+---
+
 ## 📬 Email template — forward to HR / People Ops
 
 **Subject:** 10-minute ask — keep a tiny CSV of EMAIL NORTON PTO for internal dashboard
@@ -51,15 +67,17 @@ petr-studeny,,,2026-06-20,2026-07-04,PTO,Summer holiday
 
 **Column rules:**
 
-| Column | Required? | Notes |
-| ------ | --------- | ----- |
-| `slug` | Yes (one of slug / email / slackId) | The engineer-facing identifier we've pre-filled in the template. HR doesn't need to generate these — they live in `src/team.js`. |
-| `email` | Optional | If HR has corp email only (no Slack IDs, no slug knowledge), email alone is fine — we match on it. |
-| `slackId` | Optional | Only used when Slack is connected. `U…` format. |
-| `startDate` | Yes if adding a row | `YYYY-MM-DD`, inclusive. |
-| `endDate` | Yes if adding a row | `YYYY-MM-DD`, inclusive. Same as start for single-day absences. |
-| `type` | Optional (default `PTO`) | One of `PTO`, `Sick`, `Holiday`, `Personal`, `Leave`. Only visible to managers. |
-| `note` | Optional | Short free-form. Only visible to managers. |
+
+| Column      | Required?                           | Notes                                                                                                                            |
+| ----------- | ----------------------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
+| `slug`      | Yes (one of slug / email / slackId) | The engineer-facing identifier we've pre-filled in the template. HR doesn't need to generate these — they live in `src/team.js`. |
+| `email`     | Optional                            | If HR has corp email only (no Slack IDs, no slug knowledge), email alone is fine — we match on it.                               |
+| `slackId`   | Optional                            | Only used when Slack is connected. `U…` format.                                                                                  |
+| `startDate` | Yes if adding a row                 | `YYYY-MM-DD`, inclusive.                                                                                                         |
+| `endDate`   | Yes if adding a row                 | `YYYY-MM-DD`, inclusive. Same as start for single-day absences.                                                                  |
+| `type`      | Optional (default `PTO`)            | One of `PTO`, `Sick`, `Holiday`, `Personal`, `Leave`. Only visible to managers.                                                  |
+| `note`      | Optional                            | Short free-form. Only visible to managers.                                                                                       |
+
 
 Template file in the repo (pre-populated with the 8 roster slugs and detailed instructions): `data/workday-absences.template.csv`. Share the template as an attachment if HR wants a ready-to-fill starting point.
 
@@ -68,15 +86,13 @@ Template file in the repo (pre-populated with the 8 roster slugs and detailed in
 ## ⚡ When the CSV arrives — 3-step apply
 
 1. Save the file HR sent to `teampresence-slack/data/workday-absences.csv`
-   (NOT `.template.csv` — leave that pristine for future HR handoffs).
-
+  (NOT `.template.csv` — leave that pristine for future HR handoffs).
 2. Verify the dashboard picks it up (within 5 min, no restart required):
-   ```bash
+  ```bash
    KEY=$(awk -F= '/^DASHBOARD_KEY=/{print $2}' teampresence-slack/.env)
    curl -s "http://localhost:3000/api/absences?key=$KEY" | python3 -m json.tool
-   ```
+  ```
    Expect: an `absences` array reflecting exactly what HR put in the CSV.
-
 3. Open the dashboard and check Team Presence + "Out next 7 days" — they should match.
 
 If anyone is missing or showing the wrong day range, it's either a slug mismatch (check `src/team.js`) or a date format issue (it MUST be `YYYY-MM-DD` — not `DD/MM/YYYY` or `2026-5-1`).
@@ -88,21 +104,19 @@ If anyone is missing or showing the wrong day range, it's either a slug mismatch
 If HR came back with an iCal subscription URL:
 
 1. Store the URL securely (it's essentially a read-only credential for your team's PTO):
-   ```bash
+  ```bash
    cd teampresence-slack
    # Edit .env manually with the URL (or add it via your preferred secret store):
    # WORKDAY_PROVIDER=ical
    # WORKDAY_ICAL_URL=https://workday.gendigital.com/ical/feed/...<token>
-   ```
-
+  ```
 2. Restart:
-   ```bash
+  ```bash
    pkill -9 -f 'node src/index.js'
    PORT=3000 node src/index.js &
    sleep 3
    curl -s "http://localhost:3000/api/absences?key=$KEY" | python3 -m json.tool
-   ```
-
+  ```
 3. No more manual CSV updates needed. Dashboard pulls the feed every 5 minutes.
 
 ---

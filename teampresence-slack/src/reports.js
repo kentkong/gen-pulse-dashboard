@@ -5,7 +5,18 @@
  * so "last week" means the full Mon..Sun that ended before this week.
  */
 
-const WEEKS_OF_TREND = 8;
+// How many completed weeks of history to render on the throughput /
+// inflow-vs-resolved / leaderboard trend charts.
+//
+// Default 12 — matches the Norton EMAIL Reports Jira dashboard the team
+// is already used to reading. Override per-deploy with
+// JIRA_WIDGET_WEEKS_OF_TREND in .env (e.g. set to 8 to go back to the
+// previous default, or 26 for a ~6-month view).
+const WEEKS_OF_TREND = (() => {
+  const raw = (process.env.JIRA_WIDGET_WEEKS_OF_TREND ?? "").trim();
+  const parsed = raw ? parseInt(raw, 10) : NaN;
+  return Number.isFinite(parsed) && parsed > 0 && parsed <= 52 ? parsed : 12;
+})();
 
 /** ISO week label like "2026-W15" for a given UTC ms timestamp. */
 function isoWeekLabel(ms) {
@@ -176,19 +187,45 @@ function round1(n) {
 export async function buildBacklogOverview({
   jira,
   jql,
-  priorities = ["Highest", "Critical", "High", "Medium", "Low", "Lowest"],
+  // Default priorities match Gen's EMOPS / EMAILCO schemes (P0–P4).
+  // Legacy Jira's Highest/Critical/High are still included so the
+  // widget degrades gracefully on instances that haven't migrated.
+  priorities = ["P0", "P1", "P2", "P3", "P4", "Highest", "Critical", "High", "Medium", "Low", "Lowest"],
   timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
 }) {
   if (!jira) throw new Error("buildBacklogOverview: jira client required");
   if (!jql) throw new Error("buildBacklogOverview: jql required");
 
+  // `newThisWeek` needs to count EVERY ticket that arrived in the
+  // last 7 days, even tickets that were opened *and* closed within
+  // the same week (otherwise the widget silently drops same-week
+  // churn and the displayed "new" number is just `total - previous`
+  // again, which is redundant).
+  //
+  // The base JQL filters to `statusCategory != Done` so it only
+  // enumerates still-open work; we strip that clause (and the
+  // preceding AND so the query stays syntactically valid) before
+  // layering the `created >= -7d` window on top. If the base JQL
+  // doesn't contain the clause the replace is a no-op — which is
+  // fine because nothing was excluded in the first place.
+  //
+  // `resolvedThisWeek` goes the other way: flip the clause to
+  // `statusCategory = Done` so we count only tickets that reached
+  // done during the window.
+  const inflowJql = `(${jql.replace(
+    /\s+AND\s+statusCategory\s*!=\s*Done/i,
+    ""
+  )}) AND created >= -7d`;
+  const resolvedWeekJql = `(${jql.replace(
+    /statusCategory\s*!=\s*Done/i,
+    "statusCategory = Done"
+  )}) AND resolved >= -7d`;
+
   const [total, previous, newThisWeek, resolvedThisWeek] = await Promise.all([
     jira.searchCount(`(${jql})`),
     jira.searchCount(`(${jql}) AND created <= -7d`),
-    jira.searchCount(`(${jql.replace(/statusCategory\s*!=\s*Done/i, "statusCategory != Done")}) AND created >= -7d`),
-    jira.searchCount(
-      `(${jql.replace(/statusCategory\s*!=\s*Done/i, "statusCategory = Done")}) AND resolved >= -7d`
-    ),
+    jira.searchCount(inflowJql),
+    jira.searchCount(resolvedWeekJql),
   ]);
 
   const byPriorityCounts = await Promise.all(
@@ -509,7 +546,16 @@ export async function buildInflowVsResolved({
  * These are intentionally conservative — tune via JIRA_SLA_THRESHOLDS
  * (e.g. `Critical:1,High:3,Medium:7,Low:14`).
  */
+// Conservative defaults covering both Gen's P0–P4 scheme (current) and
+// legacy Highest/Critical/…/Lowest Jira names, so SLA risk is meaningful
+// without any config on day one. Override per-deploy via JIRA_SLA_THRESHOLDS,
+// e.g. `P0:1,P1:3,P2:7,P3:30,P4:60`.
 export const DEFAULT_SLA_THRESHOLDS_DAYS = {
+  P0: 1,
+  P1: 3,
+  P2: 7,
+  P3: 30,
+  P4: 60,
   Highest: 1,
   Critical: 1,
   High: 3,

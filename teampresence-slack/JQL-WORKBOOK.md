@@ -10,24 +10,33 @@ Everything below is **already working** against real Jira — the scrum master's
 
 | Widget | EMOPS JQL (live today) | EMAILCO JQL (live today) |
 | ------ | ---------------------- | ------------------------ |
-| Weekly throughput | `project = EMOPS AND statusCategory = Done AND resolved >= -7d` | `project = EMAILCO AND statusCategory = Done AND resolved >= -7d` |
+| Weekly throughput | `project = EMOPS AND statusCategory = Done AND issuetype in ("Bug", "Investigation", "Request") AND (labels is EMPTY OR labels not in (DTC, IJ, EB))` | `project = EMAILCO AND statusCategory = Done AND issuetype in ("Bug", "Investigation", "Request") AND (labels is EMPTY OR labels not in (DTC, IJ, EB))` |
 | Backlog overview  | `project = EMOPS AND statusCategory != Done` | `project = EMAILCO AND statusCategory != Done` |
 | Top priority      | `project = EMOPS AND statusCategory != Done` + `priority in (P0, P1, P2)` | same, with EMAILCO |
-| Inflow vs resolved | `project = EMOPS AND created >= -14d` | same, EMAILCO |
+| Inflow vs resolved | `project = EMOPS` (scope only — widget layers its own 12-week window) | `project = EMAILCO` |
 | Ticket lifecycle  | `project = EMOPS AND statusCategory = Done AND resolved >= -30d` | same, EMAILCO |
 | Kanban board      | `project = EMOPS AND statusCategory != Done` | same, EMAILCO |
-| SLA / aging risk  | (uses `backlog` JQL + SLA thresholds env) | same |
+| SLA / aging risk  | (uses `backlog` JQL + SLA thresholds env — see below) | same |
 | Sprint backlog    | (uses `backlog` JQL + optional sprint-name filter) | same |
 | Reopen rate       | (uses `lifecycle` JQL) | same |
 | Throughput leaderboard | (uses `throughput` JQL + assignee field) | same |
 
-**What's intentionally conservative:**
+**Default project on page load:** `Both` (EMOPS + EMAILCO combined). Shows the full migration story from EMAILCO → EMOPS over the last 12 weeks and gives Alan the single richest view. Override via `JIRA_DEFAULT_PROJECT` in `.env` (values: `EMOPS`, `EMAILCO`, or `all`).
+
+**What's intentionally conservative / provisional — the scrum master's to-tune list:**
 
 - Priority allow-list is `P0, P1, P2` (we discovered live that EMOPS uses P0-P4, not Highest/Critical/High)
 - Status filter on "Top priority" is `<empty>` — a P0 ticket is a priority whatever column it's in, so we don't narrow by status
-- No issue-type filter on anything yet (you may want `issueType in (Task, Story, Bug)` on throughput to exclude Epics/Sub-tasks)
-- No sprint-name filter (you may want `sprint in openSprints()` on backlog)
-- No label filter (you may want to exclude `duplicate, noise, spam`)
+- **Throughput** now matches the "Norton EMAIL Reports" Jira dashboard the team already uses: `issuetype in (Bug, Investigation, Request)` and labels excluded `DTC, IJ, EB`. Trend window bumped from 8 → 12 completed weeks via `JIRA_WIDGET_WEEKS_OF_TREND`.
+- **Still outstanding on throughput parity with the Norton EMAIL Reports dashboard:**
+  - Team filter — the Jira dashboard filters by Team = `"Email - Campaign Operation", "Email Operations"`. This is a Jira custom field we don't yet have the field id for; ask the scrum master or open the Jira filter chip → Edit to read the `cf[10xxx]` id and paste it here.
+  - "Picked up" series (ticket transitioned into in-progress that week) — requires a changelog-style query; not a simple count.
+  - "SP Delivered" series (sum of story points resolved that week) — requires reading the story-points field, not just counting.
+- **SLA / aging risk thresholds** are provisional industry defaults: `P0:1, P1:3, P2:7, P3:30, P4:60` (days). With these, the current backlog shows **76% at-risk** — uncomfortable but arithmetically correct given how old P3s have stacked up. The scrum master should override via `JIRA_SLA_THRESHOLDS` in `.env` to match the real team commitments (e.g. the CSM handbook or ops SLA policy).
+- **Backlog / SLA byPriority buckets** now include P0–P4 (previously only legacy `Highest/Critical/High/Medium/Low/Lowest`, which was producing empty charts).
+- **Inflow widget** scope JQL no longer has `AND created >= -14d` baked in — the widget layers its own 12-week window. Same reason throughput was returning zeros for weeks older than 7 days.
+- No sprint-name filter on backlog yet (you may want `sprint in openSprints()`)
+- Other widgets (backlog, top-priority, inflow, lifecycle, kanban) have **no issue-type filter** yet. If scrum master wants the same filter applied to them too, copy the `issuetype in (...)` + `labels` clause.
 
 **Where you override these:** edit `teampresence-slack/.env` and restart the server. Every widget has a `JIRA_EMOPS_<WIDGET>_JQL` + `JIRA_EMAILCO_<WIDGET>_JQL` + `JIRA_ALL_<WIDGET>_JQL` variable. See the fenced `.env` block at the end of this doc for the full list.
 
@@ -113,9 +122,21 @@ Everything below is **already working** against real Jira — the scrum master's
 
 The widget internally uses the one JQL as the **scope** and then layers `created >= -14d` / `resolved >= -14d` filters on top. So the JQL here should define "what counts as a CSM ticket" for this team.
 
+> **Invariant:** the Inflow JQL scope must match the Throughput JQL scope
+> (same issuetypes, same label exclusions). Otherwise the "resolved last
+> week" number shown by this widget will silently disagree with the
+> "resolved last week" number shown by Weekly Throughput, because the
+> two widgets will be counting different ticket populations. Today's
+> deploy enforces this by setting `*_INFLOW_JQL` to the same Norton
+> EMAIL Reports scope as `*_THROUGHPUT_JQL` (Bug / Investigation /
+> Request, excluding the DTC / IJ / EB labels). If the scrum master
+> wants inflow to be broader than throughput we'll need to split the
+> two series (`created` on the broader scope, `resolved` on the
+> throughput scope) — flag that in sign-off.
+
 | Field | Example | EMOPS | EMAILCO |
 | ----- | ------- | ----- | ------- |
-| Scope JQL | `project = EMOPS` | _fill in_ | _fill in_ |
+| Scope JQL | `project = EMOPS AND issuetype in ("Bug", "Investigation", "Request") AND (labels is EMPTY OR labels not in (DTC, IJ, EB))` | _fill in_ | _fill in_ |
 
 **Questions:** Include bugs? Include sub-tasks? Include internal housekeeping tickets?
 

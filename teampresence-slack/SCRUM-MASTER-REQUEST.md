@@ -15,15 +15,17 @@ Gen Pulse's 10 Jira widgets are live against the real EMOPS and EMAILCO projects
 > **Ask:** 20 minutes of your time to review the JQL in `JQL-WORKBOOK.md` and either (a) approve it as-is, or (b) tell me what to change. For most widgets I've written a one-line "questions" block at the bottom (e.g. "should we exclude Epics from throughput?" / "is `sprint in openSprints()` the right sprint definition?") — those are the main decisions.
 >
 > **Where to find it:**
->   - Repo doc: `teampresence-slack/JQL-WORKBOOK.md` (has the live defaults at the top + fill-in table per widget)
->   - Live dashboard: http://localhost:3000/?key=<ask Kevin for the key> — click the **filter chip** on any widget to see what JQL it's actually running
->   - Wider-audience demo URL: [Kevin will share the Cloudflare tunnel URL if you want to poke around from a phone]
+>
+> - Repo doc: `teampresence-slack/JQL-WORKBOOK.md` (has the live defaults at the top + fill-in table per widget)
+> - Live dashboard (works from your laptop + phone): I'll DM you the URL + access key directly — it's a Cloudflare tunnel pointed at my laptop, so I don't want to paste it in email. Once you're on, click the **filter chip** on any widget to see what JQL it's actually running.
+> - (Note: the tunnel URL changes if I restart the server, so if the link stops working, just ping me for a fresh one.)
 >
 > **Context you might need:**
->   - Priority allow-list is `P0, P1, P2` right now (we verified live that EMOPS uses P0-P4, not Highest/Critical/High). If you want to include P3 for the "Top priority" widget, just tell me.
->   - EMOPS has 15+ bespoke workflow statuses (`Ready to Start`, `DEVELOPMENT In Progress`, `TARGETING In Progress`, `QA In Progress`, ...). Most widgets filter by `statusCategory = Done` or `!= Done`, which Jira handles for us. Tell me if any widget needs to pin a specific workflow status instead.
->   - Nothing filters by label yet. If the team uses tags like `duplicate, spam, noise` to hide tickets, we should add an exclude filter globally.
->   - The **"Both" view** (EMOPS + EMAILCO combined) uses `project in (EMOPS, EMAILCO)` and mirrors whatever decisions we make per-project.
+>
+> - Priority allow-list is `P0, P1, P2` right now (we verified live that EMOPS uses P0-P4, not Highest/Critical/High). If you want to include P3 for the "Top priority" widget, just tell me.
+> - EMOPS has 15+ bespoke workflow statuses (`Ready to Start`, `DEVELOPMENT In Progress`, `TARGETING In Progress`, `QA In Progress`, ...). Most widgets filter by `statusCategory = Done` or `!= Done`, which Jira handles for us. Tell me if any widget needs to pin a specific workflow status instead.
+> - Nothing filters by label yet. If the team uses tags like `duplicate, spam, noise` to hide tickets, we should add an exclude filter globally.
+> - The **"Both" view** (EMOPS + EMAILCO combined) uses `project in (EMOPS, EMAILCO)` and mirrors whatever decisions we make per-project.
 >
 > **How changes go in:** I edit one line per widget in `teampresence-slack/.env` and restart the server. Zero-downtime in practice — the data refetches on the next 30s tick. If you prefer to drive this via PR, I can open tickets per widget and you comment with the final JQL.
 >
@@ -40,9 +42,9 @@ For each widget they've signed off on:
 
 1. Open `teampresence-slack/.env`.
 2. Find the line like:
-   ```ini
+  ```ini
    JIRA_EMOPS_THROUGHPUT_JQL=project = EMOPS AND statusCategory = Done AND resolved >= -7d
-   ```
+  ```
 3. Replace the value after `=` with the scrum master's JQL (no quotes needed).
 4. If they gave you DIFFERENT JQL for EMAILCO, update the `JIRA_EMAILCO_THROUGHPUT_JQL` line the same way.
 5. If they gave you a "Both" aggregation that isn't just `project in (EMOPS, EMAILCO) AND <rest>`, update `JIRA_ALL_THROUGHPUT_JQL` too.
@@ -76,6 +78,7 @@ Any `ERR:` line → that widget's JQL has a syntax error. Fix in `.env`, restart
 None of these are defaults in Gen Pulse — they're just the patterns most CSM teams land on after one review cycle. Pick whichever make sense for EMAIL NORTON.
 
 **Exclude noise from throughput:**
+
 ```jql
 project = EMOPS AND statusCategory = Done AND resolved >= -7d
 AND issueType in (Task, Story, Bug)
@@ -83,23 +86,28 @@ AND NOT (labels in (duplicate, spam, noise))
 ```
 
 **Current sprint only, for backlog widgets:**
+
 ```jql
 project = EMOPS AND statusCategory != Done AND sprint in openSprints()
 ```
 
 **Only tickets your team owns, when the project is shared:**
+
 ```jql
 project = EMOPS AND "Team" = "EMAIL NORTON CSM" AND statusCategory != Done
 ```
 
 **Priority that respects your workflow:**
+
 ```jql
 project = EMOPS AND resolution = Unresolved AND priority in (P0, P1, P2)
 ORDER BY priority DESC, created ASC
 ```
+
 (Gen Pulse adds the `ORDER BY` itself — don't include it in the JQL you paste into `.env`; it'll cause a parse error.)
 
 **Exclude bot/service-account assignees from leaderboards:**
+
 ```jql
 project = EMOPS AND statusCategory = Done AND resolved >= -7d
 AND assignee not in (jira-bot, ci-user, automation-user)

@@ -572,6 +572,14 @@ export function registerWebRoutes({
         return;
       }
       const rendered = html.replaceAll("{{BRAND_NAME}}", brandName);
+      // Disable caching on the dashboard HTML so UI changes
+      // (new widgets, new overlays, copy tweaks) land on refresh
+      // instead of silently persisting as stale desktop cache.
+      // The HTML is tiny (~KB) and server-rendered per request
+      // anyway — caching buys us nothing and costs demo reliability.
+      res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+      res.set("Pragma", "no-cache");
+      res.set("Expires", "0");
       res.type("text/html").send(rendered);
     });
   });
@@ -1250,6 +1258,22 @@ export function registerWebRoutes({
    * refresh cadence). Filter meta is computed at response time so it
    * reflects any fallback that actually fired.
    */
+  // Provisional filter marker — flipped to true by the scrum master
+  // once they've signed off on JQL per widget. Until then, every Jira
+  // widget's filter chip carries a subtle "Provisional" badge so
+  // viewers (especially execs) know the numbers are live data but
+  // the filters themselves are pre-approval.
+  const jiraFiltersApproved =
+    (process.env.JIRA_FILTERS_APPROVED ?? "")
+      .toString()
+      .trim()
+      .toLowerCase();
+  const filtersAreProvisional =
+    !jiraFiltersApproved ||
+    jiraFiltersApproved === "0" ||
+    jiraFiltersApproved === "false" ||
+    jiraFiltersApproved === "no";
+
   function registerWidgetRoute(id, getter, buildFilterMeta) {
     router.get(`/api/widgets/${id}`, async (req, res) => {
       if (!authorized(req, dashboardKey)) {
@@ -1275,6 +1299,9 @@ export function registerWebRoutes({
         if (buildFilterMeta && !payload?.unavailable) {
           try {
             filter = buildFilterMeta(payload, project);
+            if (filter && filtersAreProvisional) {
+              filter = { ...filter, provisional: true };
+            }
           } catch (err) {
             console.warn(`[web] filter meta failed for ${id}:`, err?.message);
           }

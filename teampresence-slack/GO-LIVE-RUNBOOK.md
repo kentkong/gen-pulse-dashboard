@@ -122,6 +122,15 @@ Covered in `WORKDAY.md`.
 
 Forward `SLACK-ADMIN-REQUEST.md` to your Slack workspace admin. Expected turnaround: 1–5 business days.
 
+**In flight (as of 2026-04-20):**
+
+| Item | Status | Reference |
+| --- | --- | --- |
+| ServiceNow Slack-app workspace-install ticket | **Filed, awaiting Slack admin** | **RITM0213806** |
+| `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` in `.env` | Blocked on above | `./scripts/set-slack-tokens.sh` |
+| Roster `slackIds: []` populated in `src/team.js` | Blocked on above | `users.list` curl below |
+| `PRESENCE_MODEL=slack+workday` flipped | Blocked on above | Step 3d |
+
 ### 3b. Once approved [it → you]
 
 They will give you three values — `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, and optionally `SLACK_APP_TOKEN`. Put them into `.env`.
@@ -167,7 +176,19 @@ PUBLIC_URL=https://gen-pulse.corp.gendigital.net
 
 ### 4c. Stand up SSO [it + you]
 
-Swap the current `DASHBOARD_KEY` gate for Azure AD SSO. See `USER-ACCOUNT-PLAN.md` for the concrete design.
+Swap the current `DASHBOARD_KEY` gate for Azure AD SSO. See `USER-ACCOUNT-PLAN.md` for the concrete design and `AZURE-AD-ADMIN-REQUEST.md` for the app-registration spec that was sent to the identity team.
+
+**In flight (as of 2026-04-20):**
+
+| Item | Status | Reference |
+| --- | --- | --- |
+| MyApps / ServiceNow app-registration ticket | **Filed, awaiting identity team** | **RITM0213874** |
+| Senior manager + director sign-off to proceed | Pending — identity team asked to hold execution until Kevin emails the go-ahead | — |
+| OIDC_* credentials populated in `.env` | Blocked on above | `./scripts/set-oidc-credentials.sh` |
+| Four security-group Object IDs for role mapping | Blocked on above | `OIDC_ROLE_MAP_*` env vars |
+| First successful `/auth/login` round-trip | Blocked on above | `curl -s $PUBLIC_URL/auth/status` |
+
+When **RITM0213874** resolves, follow the 3-step activation path documented in `AZURE-AD-ADMIN-REQUEST.md` → "When the credentials arrive — 3-step activation". Do not paste credentials anywhere except through `./scripts/set-oidc-credentials.sh`.
 
 ---
 

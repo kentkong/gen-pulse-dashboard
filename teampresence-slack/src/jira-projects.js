@@ -103,7 +103,14 @@ export function listProjects(env = process.env) {
   const keys = parseCsv(env.JIRA_PROJECT_KEYS).map(upperProject);
   if (keys.length === 0) return [];
   const labels = parseCsv(env.JIRA_PROJECT_LABELS);
-  const defaultKey = (env.JIRA_DEFAULT_PROJECT ?? keys[0]).trim().toUpperCase();
+  // Preserve the reserved ALL_PROJECT_KEY casing ("all" is lowercase by
+  // convention); upper-case everything else so EMOPS / emops / Emops all
+  // resolve to the same entry.
+  const defaultKeyRaw = (env.JIRA_DEFAULT_PROJECT ?? keys[0]).trim();
+  const defaultKey =
+    defaultKeyRaw.toLowerCase() === ALL_PROJECT_KEY
+      ? ALL_PROJECT_KEY
+      : defaultKeyRaw.toUpperCase();
   const allowCombined =
     env.JIRA_PROJECT_ALLOW_COMBINED == null
       ? keys.length >= 2

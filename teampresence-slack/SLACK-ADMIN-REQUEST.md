@@ -1,5 +1,12 @@
 # Slack workspace admin — app approval request
 
+> **Status (2026-04-20):** filed in ServiceNow as **RITM0213806** (Slack
+> workspace admin → install Gen Pulse app). Awaiting Slack admin approval
+> and the three tokens (`SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`,
+> optionally `SLACK_APP_TOKEN`). When the ticket resolves, follow the
+> 3-step checklist below. Tracked against the Slack integration milestone
+> in `GO-LIVE-RUNBOOK.md` Step 3a.
+
 This doc is a ready-to-forward template for the Slack workspace admin at Gen Digital. Copy the email body below, fill in the **[bracketed]** fields, send.
 
 ---
@@ -8,14 +15,14 @@ This doc is a ready-to-forward template for the Slack workspace admin at Gen Dig
 
 Use this once the workspace admin has approved the app and given you the tokens. Expected time: 10 minutes end-to-end.
 
-### Step 1 — create the Slack app at https://api.slack.com/apps
+### Step 1 — create the Slack app at [https://api.slack.com/apps](https://api.slack.com/apps)
 
 1. Click **Create New App** → **From scratch**.
 2. App Name: `Gen Pulse`. Workspace: `Gen Digital`.
 3. Under **OAuth & Permissions → Bot Token Scopes**, add exactly three:
-   - `users:read`
-   - `users.profile:read`
-   - `users:read.presence`
+  - `users:read`
+  - `users.profile:read`
+  - `users:read.presence`
 4. Click **Install to Workspace** → this is the point where workspace admin approval is required (see email template below).
 5. Once approved, copy the **Bot User OAuth Token** — starts with `xoxb-`.
 6. From **Basic Information → App Credentials**, copy the **Signing Secret**.
@@ -31,6 +38,7 @@ cd teampresence-slack
 *(If that script doesn't exist yet, create it by copying `scripts/set-jira-token.sh` and renaming the env var — or just edit `.env` manually with an editor that doesn't sync to iCloud/OneDrive.)*
 
 Then flip the presence model from Workday-only to combined:
+
 ```ini
 PRESENCE_MODEL=slack+workday
 ```
@@ -71,6 +79,7 @@ If fewer than 8 resolve, fill in the missing `slackIds: [...]` in `src/team.js` 
 > Gen Pulse reads user **profile** and **presence** data for roster members so the "Team Presence" widget can show live status (in office / WFH / in a meeting / away / on vacation) based on each person's own Slack status. No messages are read or sent in this mode. There are no slash commands, no bots in channels, and no DMs.
 >
 > **Required bot scopes** (exact Slack scope names):
+>
 > - `users:read` — list roster members + fetch display name, photo
 > - `users.profile:read` — read status text + status emoji + custom fields set by each user
 > - `users:read.presence` — read auto-presence (active / away)
@@ -84,6 +93,7 @@ If fewer than 8 resolve, fill in the missing `slackIds: [...]` in `src/team.js` 
 > `[Azure / AWS / on-prem — TBD with IT]`. The app reads from Slack, Jira, and Workday; writes to nothing. Access is gated by `[Azure AD SSO once stood up / pre-shared dashboard key in the interim]`.
 >
 > **Data handling**
+>
 > - No message content is read or stored.
 > - Profile fields (name, photo, status text, auto-presence) are held in-memory only, TTL 5 minutes, never written to disk.
 > - The dashboard is only accessible on the corporate network (and/or via SSO-gated proxy, once stood up).
@@ -135,7 +145,8 @@ Put these into `.env`, restart the server, and flip `PRESENCE_MODEL=slack` or `P
 ## Useful links to include in the email
 
 - Slack scope documentation:
-  - `users:read` → https://api.slack.com/scopes/users:read
-  - `users.profile:read` → https://api.slack.com/scopes/users.profile:read
-  - `users:read.presence` → https://api.slack.com/scopes/users:read.presence
+  - `users:read` → [https://api.slack.com/scopes/users:read](https://api.slack.com/scopes/users:read)
+  - `users.profile:read` → [https://api.slack.com/scopes/users.profile:read](https://api.slack.com/scopes/users.profile:read)
+  - `users:read.presence` → [https://api.slack.com/scopes/users:read.presence](https://api.slack.com/scopes/users:read.presence)
 - The presence-mapping code that owns status parsing: `src/presence/slack-status.js`, `src/presence/mapping.js`
+

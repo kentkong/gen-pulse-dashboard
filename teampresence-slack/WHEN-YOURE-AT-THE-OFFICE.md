@@ -18,9 +18,16 @@ If that prints `ok — dashboard is up`, skip to step 1. If not:
 ```bash
 cd ~/Documents/test/teampresence-slack
 pkill -9 -f 'node src/index.js' 2>/dev/null
-PORT=3000 node src/index.js &
+sleep 1
+PORT=3000 node src/index.js > /tmp/gen-pulse.log 2>&1 &
 sleep 3
-tail -n 20 /tmp/gen-pulse.log 2>/dev/null || echo "(no log file — running inline)"
+tail -n 20 /tmp/gen-pulse.log
+```
+
+Then verify:
+
+```bash
+curl -s http://localhost:3000/healthz && echo ' up'
 ```
 
 Expected log lines:
@@ -59,12 +66,14 @@ Copy the new `https://*.trycloudflare.com/?key=<your DASHBOARD_KEY>` URL. Text i
 
 Three nearly-identical "forward this email" asks, one per integration that needs a human at Gen to do something. **Each of these is pre-drafted — you only fill in the recipient name + send.**
 
-| Email | Recipient | Doc | What they send you back |
-| ----- | --------- | --- | ----------------------- |
-| **Slack admin** | Your Slack workspace admin | `SLACK-ADMIN-REQUEST.md` | Bot token, signing secret |
-| **Azure AD / identity admin** | Whoever owns Entra ID app registrations at Gen | `AZURE-AD-ADMIN-REQUEST.md` | Tenant ID, client ID, client secret, 4 group GUIDs |
-| **Scrum master / email eng lead** | Your team's scrum master | `SCRUM-MASTER-REQUEST.md` | Signed-off JQL per widget |
-| **HR / People Ops** | Whoever owns Workday at Gen | `HR-WORKDAY-REQUEST.md` | CSV or iCal feed of team PTO |
+
+| Email                             | Recipient                                      | Doc                         | What they send you back                            |
+| --------------------------------- | ---------------------------------------------- | --------------------------- | -------------------------------------------------- |
+| **Slack admin**                   | Your Slack workspace admin                     | `SLACK-ADMIN-REQUEST.md`    | Bot token, signing secret                          |
+| **Azure AD / identity admin**     | Whoever owns Entra ID app registrations at Gen | `AZURE-AD-ADMIN-REQUEST.md` | Tenant ID, client ID, client secret, 4 group GUIDs |
+| **Scrum master / email eng lead** | Your team's scrum master                       | `SCRUM-MASTER-REQUEST.md`   | Signed-off JQL per widget                          |
+| **HR / People Ops**               | Whoever owns Workday at Gen                    | `HR-WORKDAY-REQUEST.md`     | CSV or iCal feed of team PTO                       |
+
 
 For each: open the doc, copy the email-template block (they all start with "**Email template — forward to ...**"), paste into your email client, fill in the bracketed fields (`[name]`, `[distro]`, etc.), send.
 
@@ -93,7 +102,7 @@ sleep 3
 curl -s http://localhost:3000/auth/status | python3 -m json.tool
 ```
 
-Expect `"strategy": "oidc", "enabled": true`. Open http://localhost:3000/ → you'll see a "Sign in with Microsoft" pill top-right. Click it, sign in with your Gen Digital account, land back on the dashboard with your real name + role.
+Expect `"strategy": "oidc", "enabled": true`. Open [http://localhost:3000/](http://localhost:3000/) → you'll see a "Sign in with Microsoft" pill top-right. Click it, sign in with your Gen Digital account, land back on the dashboard with your real name + role.
 
 **Path B — show the UI without the flow working.** You can preview what the sign-in button looks like without any Azure config by setting `AUTH_STRATEGY=oidc` with garbage values:
 
@@ -196,13 +205,15 @@ Any `ERR:` → check the server log, usually an `.env` typo.
 
 ## When each external response arrives
 
-| Response | Apply script / doc |
-| -------- | ------------------ |
-| Slack tokens from workspace admin | `./scripts/set-slack-tokens.sh`, then restart |
-| Azure AD credentials from identity team | `./scripts/set-oidc-credentials.sh`, add `OIDC_ROLE_MAP_*`, restart |
-| Scrum master's signed-off JQL | Edit `.env` widget-by-widget, restart, verify via step 5 above |
-| HR's PTO CSV | Save as `data/workday-absences.csv`, dashboard picks it up in ≤5 min |
-| HR's iCal URL | Add `WORKDAY_PROVIDER=ical` + `WORKDAY_ICAL_URL=...` to `.env`, restart |
+
+| Response                                | Apply script / doc                                                      |
+| --------------------------------------- | ----------------------------------------------------------------------- |
+| Slack tokens from workspace admin       | `./scripts/set-slack-tokens.sh`, then restart                           |
+| Azure AD credentials from identity team | `./scripts/set-oidc-credentials.sh`, add `OIDC_ROLE_MAP_*`, restart     |
+| Scrum master's signed-off JQL           | Edit `.env` widget-by-widget, restart, verify via step 5 above          |
+| HR's PTO CSV                            | Save as `data/workday-absences.csv`, dashboard picks it up in ≤5 min    |
+| HR's iCal URL                           | Add `WORKDAY_PROVIDER=ical` + `WORKDAY_ICAL_URL=...` to `.env`, restart |
+
 
 Each of those has a "when reply arrives" playbook in its own doc. You never need to hold all of this in your head.
 

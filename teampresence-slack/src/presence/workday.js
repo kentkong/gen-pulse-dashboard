@@ -42,6 +42,7 @@
 import fs from "node:fs";
 import path from "node:path";
 import { BUCKETS } from "./mapping.js";
+import { findByName } from "../team.js";
 
 /* ------------------------------------------------------------------ *
  * Utilities shared by every provider.
@@ -245,7 +246,15 @@ export function createCsvWorkdayProvider({
     }
     const signature = `${stat.size}:${stat.mtimeMs}`;
     const text = fs.readFileSync(csvPath, "utf8");
-    const absences = parseCsv(text);
+    const { absences, unmatched } = parseCsvWithDiagnostics(text);
+    if (unmatched.length > 0) {
+      logger.warn?.(
+        `[presence:workday-csv] ${unmatched.length} absence row(s) couldn't be matched ` +
+          `to the roster (no slug/email/slackId and the name didn't resolve). ` +
+          `Check spelling or add an email column. Unmatched: ` +
+          unmatched.map((u) => JSON.stringify(u)).join(", ")
+      );
+    }
     return { absences, signature };
   }
 
@@ -257,32 +266,157 @@ export function createCsvWorkdayProvider({
   });
 }
 
-function parseCsv(text) {
+/**
+ * Canonical field → accepted header spellings (all compared after
+ * stripping spaces/underscores/hyphens and lower-casing). This is
+ * deliberately generous so the CSV parser accepts files exported
+ * straight from Workday, Excel, or Google Sheets without the team
+ * having to rename columns first.
+ */
+const HEADER_ALIASES = {
+  slug:      ["slug", "handle", "userid", "id"],
+  email:     ["email", "emailaddress", "employeeemail", "workemail", "workemailaddress"],
+  slackId:   ["slackid", "slack", "slackuserid"],
+  name:      ["name", "fullname", "employeename", "employee", "worker", "workername"],
+  startDate: ["startdate", "start", "from", "fromdate", "begindate", "begin", "leavestart", "pto start", "ptostart", "startingon"],
+  endDate:   ["enddate", "end", "to", "todate", "throughdate", "through", "returndate", "return", "leaveend", "pto end", "ptoend"],
+  duration:  ["duration", "days", "hours", "length", "amount"],
+  type:      ["type", "absencetype", "leavetype", "timeofftype", "timeoffreason", "category", "reason"],
+  note:      ["note", "notes", "comment", "comments", "description", "detail"],
+};
+
+const HEADER_LOOKUP = (() => {
+  const m = new Map();
+  for (const [canonical, aliases] of Object.entries(HEADER_ALIASES)) {
+    for (const alias of aliases) {
+      m.set(normaliseHeaderKey(alias), canonical);
+    }
+  }
+  return m;
+})();
+
+function normaliseHeaderKey(h) {
+  return String(h ?? "")
+    .toLowerCase()
+    .replace(/[\s_\-]+/g, "")
+    .replace(/"/g, "")
+    .trim();
+}
+
+/**
+ * Split one CSV line, handling quoted cells (Workday + Excel exports
+ * routinely quote values with commas in them like "Žabenský, Daniel").
+ */
+function splitCsvLine(line) {
+  const out = [];
+  let cur = "";
+  let inQuotes = false;
+  for (let i = 0; i < line.length; i++) {
+    const c = line[i];
+    if (inQuotes) {
+      if (c === '"' && line[i + 1] === '"') { cur += '"'; i++; }
+      else if (c === '"') inQuotes = false;
+      else cur += c;
+    } else if (c === '"') inQuotes = true;
+    else if (c === ",") { out.push(cur); cur = ""; }
+    else cur += c;
+  }
+  out.push(cur);
+  return out.map((s) => s.trim());
+}
+
+/**
+ * Map "half day" / "0.5" / "4 hours" → true. A half-day absence is
+ * still recorded start==end but flagged via the note so the UI can
+ * say "½ day" when it wants to.
+ */
+function isHalfDayDuration(raw) {
+  if (!raw) return false;
+  const s = String(raw).trim().toLowerCase();
+  if (/half|½|\bhd\b/.test(s)) return true;
+  const n = parseFloat(s);
+  if (!Number.isFinite(n)) return false;
+  if (/hour/.test(s) || /\bh\b/.test(s)) return n > 0 && n <= 5;
+  return n > 0 && n < 1;
+}
+
+/**
+ * Thin wrapper that also surfaces *which* rows failed to resolve to a
+ * roster member. Helpful the first time a new Workday/HR export
+ * format lands — the log immediately names the problem rows so the
+ * maintainer can fix a typo or add an `email` column.
+ */
+export function parseCsvWithDiagnostics(text) {
+  const unmatched = [];
+  const absences = parseCsv(text, (row) => unmatched.push(row));
+  return { absences, unmatched };
+}
+
+function parseCsv(text, onUnmatched = null) {
   const lines = text.split(/\r?\n/);
   let headers = null;
   const rows = [];
   for (const raw of lines) {
     const line = raw.trim();
     if (!line || line.startsWith("#")) continue;
-    const cells = raw.split(",").map((c) => c.trim());
+    const cells = splitCsvLine(raw);
     if (!headers) {
-      headers = cells.map((h) => h.toLowerCase());
+      headers = cells.map((h) => HEADER_LOOKUP.get(normaliseHeaderKey(h)) ?? null);
       continue;
     }
     const row = {};
-    headers.forEach((h, i) => {
-      row[h] = cells[i] ?? "";
+    headers.forEach((canonical, i) => {
+      if (canonical) row[canonical] = cells[i] ?? "";
     });
-    if (!row.startdate || !row.enddate) continue;
+    if (!row.startDate || !row.endDate) continue;
+
+    // Resolve the person:
+    //   1. Explicit slug / email / slackId win (existing CSV shape).
+    //   2. Otherwise try to match `name` against the roster —
+    //      necessary for Workday exports which ship "Last, First" or
+    //      "First Last" and no slug column.
+    let slug = row.slug || null;
+    let email = row.email || null;
+    const slackId = row.slackId || null;
+    if (!slug && !email && !slackId && row.name) {
+      const match = findByName(row.name);
+      if (match) {
+        slug = match.slug;
+      } else if (onUnmatched) {
+        onUnmatched({
+          name: row.name,
+          startDate: row.startDate,
+          endDate: row.endDate,
+        });
+      }
+    } else if (!slug && !email && !slackId && onUnmatched) {
+      onUnmatched({
+        startDate: row.startDate,
+        endDate: row.endDate,
+        reason: "no identifier columns (slug/email/slackId/name)",
+      });
+    }
+
+    // Half-day support: if duration < 1 (or "half day"), append a
+    // marker to the note so the UI can badge it. Start/end remain
+    // honest dates.
+    let note = row.note || "";
+    if (isHalfDayDuration(row.duration)) {
+      note = note ? `${note} (½ day)` : "½ day";
+    }
+
     rows.push(
       absenceRecord({
-        slackId: row.slackid,
-        email: row.email,
-        slug: row.slug,
-        startDate: row.startdate,
-        endDate: row.enddate,
-        type: row.type,
-        note: row.note,
+        slackId,
+        email,
+        slug,
+        startDate: row.startDate,
+        endDate: row.endDate,
+        // Interim HR report omits `type` — fall through to the
+        // generic "Time off" default so the UI still renders a
+        // Workday chip without claiming a PTO sub-type we don't know.
+        type: row.type || "Time off",
+        note,
       })
     );
   }

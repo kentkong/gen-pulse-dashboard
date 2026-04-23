@@ -1,5 +1,10 @@
 # Azure AD / Identity team — app registration request
 
+> **Status (2026-04-20):** filed in ServiceNow as **RITM0213874** (MyApps →
+> Add new application → Gen Pulse). Identity team asked to hold execution
+> until Kevin emails the go-ahead from senior manager + director. This doc
+> was attached to the ticket as the full spec.
+
 Gen Pulse is being rolled out to the EMAIL NORTON CSM team and (soon) the wider CSM org. Senior management gated the roll-out on **Azure AD SSO** replacing the current shared-key demo auth. This doc is a ready-to-forward packet for whoever owns Entra ID / Azure AD app registrations at Gen Digital.
 
 ---
@@ -11,8 +16,8 @@ If you're the Azure AD admin, skip the email below and do this:
 1. In the Microsoft Entra admin centre → **App registrations** → **New registration**.
 2. Use the table of settings in the **"App registration settings"** section below.
 3. After creating the app, on the **Overview** tab, copy:
-   - `Application (client) ID`
-   - `Directory (tenant) ID`
+  - `Application (client) ID`
+  - `Directory (tenant) ID`
 4. Under **Certificates & secrets** → **New client secret**, 24-month expiry. Copy the **Value** (NOT the ID).
 5. Under **API permissions** → ensure `openid`, `profile`, `email` are present under Microsoft Graph (delegated). Grant admin consent.
 6. Under **Token configuration** → **Add groups claim** → `Security groups` → ID. (We use the group GUIDs for role mapping.)
@@ -34,47 +39,53 @@ That's it. Kevin handles the rest — populates `.env`, restarts the server, tes
 >
 > **App registration settings:**
 >
-> | Setting | Value |
-> | ------- | ----- |
-> | **Name** | `Gen Pulse (EMAIL NORTON pilot)` |
-> | **Supported account types** | `Single tenant — Gen Digital only` |
-> | **Redirect URI (platform: Web)** | `https://<host>/auth/callback` — see "Host URL" note below |
-> | **Front-channel logout URL** | `https://<host>/` |
-> | **API permissions (Microsoft Graph, Delegated)** | `openid`, `profile`, `email` — grant admin consent |
-> | **Client authentication** | Confidential client; client secret (24-month expiry) |
-> | **Token configuration → ID token claims** | Add `groups` (Security groups, GroupID format) |
-> | **Implicit flow** | ❌ disabled |
-> | **ID token enabled** | ✅ |
-> | **Access token enabled** | ❌ (we don't call Graph at runtime) |
+>
+> | Setting                                          | Value                                                      |
+> | ------------------------------------------------ | ---------------------------------------------------------- |
+> | **Name**                                         | `Gen Pulse (EMAIL NORTON pilot)`                           |
+> | **Supported account types**                      | `Single tenant — Gen Digital only`                         |
+> | **Redirect URI (platform: Web)**                 | `https://<host>/auth/callback` — see "Host URL" note below |
+> | **Front-channel logout URL**                     | `https://<host>/`                                          |
+> | **API permissions (Microsoft Graph, Delegated)** | `openid`, `profile`, `email` — grant admin consent         |
+> | **Client authentication**                        | Confidential client; client secret (24-month expiry)       |
+> | **Token configuration → ID token claims**        | Add `groups` (Security groups, GroupID format)             |
+> | **Implicit flow**                                | ❌ disabled                                                 |
+> | **ID token enabled**                             | ✅                                                          |
+> | **Access token enabled**                         | ❌ (we don't call Graph at runtime)                         |
+>
 >
 > **Host URL note:** We'll initially use Gen Pulse on `http://localhost:3000/auth/callback` for dev, plus whatever corporate hostname we get assigned for staging/production. If the easiest path for you is to register all three redirect URIs up front, they are:
->   - `http://localhost:3000/auth/callback` (engineer laptops)
->   - `https://gen-pulse.[whatever corp-internal subdomain you assign].gendigital.net/auth/callback` (staging/prod)
->   - Optional: a Cloudflare tunnel URL for mobile demos (we can supply this on request)
+>
+> - `http://localhost:3000/auth/callback` (engineer laptops)
+> - `https://gen-pulse.[whatever corp-internal subdomain you assign].gendigital.net/auth/callback` (staging/prod)
+> - Optional: a Cloudflare tunnel URL for mobile demos (we can supply this on request)
 >
 > **Role mapping (what we need from you beyond the app registration):** We map Gen Pulse roles from Azure AD security-group membership. We'll need the **Object IDs** of:
->   - the CSM team security group (EMAIL NORTON members) → `member` role
->   - the CSM managers group → `manager` role
->   - the CSM directors group → `director` role
->   - whichever group Gen Pulse admins will live in → `admin` role
+>
+> - the CSM team security group (EMAIL NORTON members) → `member` role
+> - the CSM managers group → `manager` role
+> - the CSM directors group → `director` role
+> - whichever group Gen Pulse admins will live in → `admin` role
 >
 > If these groups don't exist yet, can you let me know who to ask — I can open a separate ticket for group creation if needed.
 >
 > **What you'll send back:**
->   1. Tenant ID (GUID)
->   2. Application (client) ID (GUID)
->   3. Client secret Value (NOT the ID)
->   4. The four group Object IDs above
+>
+> 1. Tenant ID (GUID)
+> 2. Application (client) ID (GUID)
+> 3. Client secret Value (NOT the ID)
+> 4. The four group Object IDs above
 >
 > Please use your preferred secure-transfer mechanism (KeyVault, 1Password, Bitwarden) — I will **NOT** accept these values over email, Slack DM, or Teams chat.
 >
 > **Why minimal permissions:** We only need the user's identity (OID, email, display name, groups claim). We never call Microsoft Graph APIs from Gen Pulse, so no `User.Read.All` / `Directory.Read` / similar; the least-privilege footprint is tiny.
 >
 > **Security posture:**
->   - OIDC Authorization Code flow with PKCE (no implicit flow, no token in URL fragments)
->   - Client secret stored in `.env` with `chmod 600` on the server; rotation supported via re-running `./scripts/set-oidc-secret.sh`
->   - Session cookies are `HttpOnly; Secure; SameSite=Lax` and signed with HS256 over an independent random secret
->   - ID tokens verified via JWKS on every callback; no long-lived tokens stored server-side
+>
+> - OIDC Authorization Code flow with PKCE (no implicit flow, no token in URL fragments)
+> - Client secret stored in `.env` with `chmod 600` on the server; rotation supported via re-running `./scripts/set-oidc-secret.sh`
+> - Session cookies are `HttpOnly; Secure; SameSite=Lax` and signed with HS256 over an independent random secret
+> - ID tokens verified via JWKS on every callback; no long-lived tokens stored server-side
 >
 > Happy to jump on a call if anything needs clarifying. The whole config is pinned in `teampresence-slack/USER-ACCOUNT-PLAN.md` in our repo and the runtime contract is in `src/oidc.js`.
 >
@@ -159,3 +170,4 @@ This makes `?key=<DASHBOARD_KEY>` continue to authenticate non-browser callers. 
 - Multi-tenant configuration (Gen Pulse is single-tenant only by design)
 - External IdP federation (Google Workspace, etc.)
 - API scopes / custom app roles in the app manifest — we do role mapping from `groups` claim, not from `roles` claim. Keeps the app manifest tiny.
+

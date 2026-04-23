@@ -142,8 +142,48 @@ function bySlackId() {
   return map;
 }
 
+/**
+ * Normalise a person's name for fuzzy lookup against the roster.
+ * Strips diacritics, punctuation and whitespace, lower-cases.
+ *
+ *   "Kristýna Šimková"   → "kristynasimkova"
+ *   "Simkova, Kristyna"  → "simkovakristyna"
+ *   "Kristyna Simkova "  → "kristynasimkova"
+ *
+ * Workday / Excel exports are notoriously inconsistent about
+ * diacritics and "Last, First" vs "First Last" — this is a
+ * single normalisation funnel so the CSV and iCal loaders can
+ * match them the same way.
+ */
+export function normaliseName(name) {
+  if (!name) return "";
+  return String(name)
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "") // strip combining marks
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "");
+}
+
+function byName() {
+  const map = new Map();
+  for (const m of TEAM) {
+    const full = normaliseName(m.fullName);
+    const disp = normaliseName(m.displayName);
+    if (full) map.set(full, m);
+    if (disp) map.set(disp, m);
+    // Also accept "Last First" (Workday's common format)
+    const parts = String(m.fullName).trim().split(/\s+/).filter(Boolean);
+    if (parts.length >= 2) {
+      const reversed = normaliseName([parts[parts.length - 1], parts[0]].join(" "));
+      if (reversed) map.set(reversed, m);
+    }
+  }
+  return map;
+}
+
 const SLUG_INDEX = bySlug();
 const SLACK_INDEX = bySlackId();
+const NAME_INDEX = byName();
 
 export function findBySlug(slug) {
   return SLUG_INDEX.get(slug) ?? null;
@@ -151,6 +191,17 @@ export function findBySlug(slug) {
 
 export function findBySlackId(userId) {
   return SLACK_INDEX.get(userId) ?? null;
+}
+
+/**
+ * Best-effort match of a free-form person name (as emitted by
+ * Workday / HR reports) against the roster. Returns the TEAM entry
+ * or null. See `normaliseName` for the matching rules.
+ */
+export function findByName(name) {
+  const key = normaliseName(name);
+  if (!key) return null;
+  return NAME_INDEX.get(key) ?? null;
 }
 
 /**
