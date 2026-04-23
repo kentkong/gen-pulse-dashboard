@@ -3100,6 +3100,26 @@
         object-fit: cover;
         border-radius: inherit;
       }
+      /*
+        Azure AD sign-in state — the avatar holds the Microsoft logo
+        SVG instead of initials, so flip the gradient background to a
+        neutral chip colour and let the four coloured squares carry
+        the visual load.
+      */
+      .sn-avatar.sn-avatar-sso {
+        background: #ffffff;
+        border: 1px solid var(--border);
+      }
+      .sn-avatar.sn-avatar-sso svg {
+        width: 16px;
+        height: 16px;
+        display: block;
+      }
+      .sn-user-chip[data-sign-in-mode="true"] {
+        /* A touch of MS-blue energy so the sign-in chip pops without
+           clashing with the Gen Digital palette. */
+        border-color: color-mix(in srgb, #0078d4 40%, var(--border));
+      }
       .sn-user-meta {
         display: inline-flex;
         flex-direction: column;
@@ -8078,7 +8098,67 @@
           }
         }
 
+        // Added for Azure AD SSO: when OIDC is configured on the server
+        // but the current request has no valid session cookie, the
+        // server returns `{ signedIn:false, loginUrl:"/auth/login" }`.
+        // In that case we swap the chip to a "Sign in with Microsoft"
+        // call-to-action that deep-links to the SSO flow, and we short-
+        // circuit the dropdown menu entirely (there's nothing to show
+        // in it until the user has identity claims).
+        function applySsoSignInState(loginUrl) {
+          chip.dataset.signInMode = "true";
+          chip.setAttribute("aria-haspopup", "false");
+          chip.removeAttribute("aria-expanded");
+          chip.removeAttribute("aria-controls");
+          avatarEl.textContent = "";
+          avatarEl.removeAttribute("style");
+          avatarEl.classList.add("sn-avatar-sso");
+          avatarEl.innerHTML =
+            // Microsoft Windows 4-square logo — minimal, no external deps
+            '<svg viewBox="0 0 16 16" aria-hidden="true" width="14" height="14">' +
+              '<rect x="1" y="1" width="6.5" height="6.5" fill="#F25022"/>' +
+              '<rect x="8.5" y="1" width="6.5" height="6.5" fill="#7FBA00"/>' +
+              '<rect x="1" y="8.5" width="6.5" height="6.5" fill="#00A4EF"/>' +
+              '<rect x="8.5" y="8.5" width="6.5" height="6.5" fill="#FFB900"/>' +
+            "</svg>";
+          nameEl.textContent = "Sign in";
+          roleEl.textContent = "with Microsoft";
+          // Chevron points toward the action instead of downward.
+          const chev = chip.querySelector(".sn-chevron");
+          if (chev) chev.textContent = "→";
+          // Make the whole chip navigate instead of opening the menu.
+          chip.onclick = (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            const back = window.location.pathname + window.location.search;
+            window.location.href =
+              loginUrl +
+              "?return_to=" +
+              encodeURIComponent(back);
+          };
+        }
+        function clearSsoSignInState() {
+          if (chip.dataset.signInMode !== "true") return;
+          delete chip.dataset.signInMode;
+          chip.setAttribute("aria-haspopup", "menu");
+          chip.setAttribute("aria-expanded", "false");
+          chip.setAttribute("aria-controls", "user-menu");
+          avatarEl.classList.remove("sn-avatar-sso");
+          avatarEl.innerHTML = "";
+          const chev = chip.querySelector(".sn-chevron");
+          if (chev) chev.textContent = "▾";
+          chip.onclick = null; // handler below re-registers
+        }
+
         function renderMe(me) {
+          // OIDC server says "SSO is on, you're not signed in" — render
+          // the Sign-in pill and stop.
+          if (me && me.signedIn === false && typeof me.loginUrl === "string") {
+            applySsoSignInState(me.loginUrl);
+            return;
+          }
+          clearSsoSignInState();
+
           if (!me || me.error) {
             nameEl.textContent = "Not signed in";
             roleEl.textContent = "";
@@ -8109,6 +8189,23 @@
             menuProfile.setAttribute("href", "#");
           }
           menuCustomize.disabled = !me.canCustomize;
+
+          // Point the "Sign out" link at the real logout route — OIDC
+          // uses /auth/logout (which in turn 302s to Azure end-session
+          // then back to /). For shared-key there's nothing to sign
+          // out from, so we hide the item to avoid misleading users.
+          const signOutLink = menu.querySelector('a[href="/logout"], a[data-role="sign-out"]');
+          if (signOutLink) {
+            if (me.logoutUrl) {
+              signOutLink.setAttribute("href", me.logoutUrl);
+              signOutLink.dataset.role = "sign-out";
+              signOutLink.style.removeProperty("display");
+            } else {
+              // No SSO session ⇒ nothing to sign out from.
+              signOutLink.style.display = "none";
+              signOutLink.dataset.role = "sign-out";
+            }
+          }
         }
 
         async function loadMe() {
@@ -8128,7 +8225,12 @@
           menu.hidden = !open;
           chip.setAttribute("aria-expanded", open ? "true" : "false");
         }
-        chip.addEventListener("click", () => setOpen(menu.hidden));
+        chip.addEventListener("click", () => {
+          // In SSO sign-in mode the chip is a button that navigates to
+          // /auth/login — don't also try to pop the (empty) user menu.
+          if (chip.dataset.signInMode === "true") return;
+          setOpen(menu.hidden);
+        });
         document.addEventListener("click", (e) => {
           if (!menu.hidden && !chip.contains(e.target) && !menu.contains(e.target)) {
             setOpen(false);

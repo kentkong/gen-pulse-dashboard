@@ -53,6 +53,12 @@ import {
   BUCKETS,
 } from "./presence/index.js";
 import { createAuthenticator } from "./auth.js";
+import {
+  initOidcFromEnv,
+  startLoginRedirect,
+  finishLoginCallback,
+  performLogout,
+} from "./oidc.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
@@ -105,12 +111,67 @@ export function registerWebRoutes({
   }
 
   const dashboardKey = (process.env.DASHBOARD_KEY ?? "").trim();
-  // Central authenticator. Today: shared-key. Tomorrow: OIDC/Azure AD
-  // without touching route handlers (see USER-ACCOUNT-PLAN.md).
+  /* ---------------------------------------------------------------- *
+   * Central authenticator.
+   *
+   * We start as shared-key (the safe always-works default). If
+   * AUTH_STRATEGY=oidc is set in the env, we kick off Azure AD
+   * discovery in the background and hot-swap the authenticator the
+   * moment discovery resolves (usually <1s). This means:
+   *
+   *   - boot never blocks on Azure being reachable
+   *   - a typo in OIDC_TENANT_ID can't take the dashboard down —
+   *     it logs loudly and stays on shared-key
+   *   - the /auth/login route is always registered; if discovery
+   *     hasn't finished (first ~1s of server life) it returns 503
+   *     with a human-readable hint
+   *
+   * See USER-ACCOUNT-PLAN.md for the rollout design.
+   * ---------------------------------------------------------------- */
   currentAuthenticator = createAuthenticator({
-    strategy: process.env.AUTH_STRATEGY ?? "shared-key",
+    strategy: "shared-key",
     sharedKey: dashboardKey,
   });
+
+  // Populated when OIDC discovery resolves. Used by /auth/* routes
+  // AND by /api/me to return real identity data.
+  let oidcConfig = null;
+
+  const authStrategyEnv = (process.env.AUTH_STRATEGY ?? "").trim().toLowerCase();
+  if (authStrategyEnv === "oidc") {
+    initOidcFromEnv(process.env)
+      .then((oidc) => {
+        if (!oidc.ready) {
+          console.warn(`[auth] OIDC not activated: ${oidc.reason}`);
+          console.warn(
+            `[auth] continuing with shared-key auth (DASHBOARD_KEY ${dashboardKey ? "set" : "UNSET — open door"})`
+          );
+          return;
+        }
+        oidcConfig = oidc;
+        currentAuthenticator = createAuthenticator({
+          strategy: "oidc",
+          sharedKey: dashboardKey,
+          oidc,
+          allowSharedKeyFallback: oidc.allowSharedKeyFallback,
+        });
+        const fallback = oidc.allowSharedKeyFallback
+          ? "shared-key ALSO accepted (OIDC_ALLOW_SHARED_KEY_FALLBACK=true)"
+          : "SSO only";
+        console.log(
+          `[auth] OIDC enabled — issuer=${oidc.issuerUrl} redirect=${oidc.redirectUri} fallback=${fallback}`
+        );
+      })
+      .catch((err) => {
+        console.warn(
+          `[auth] initOidcFromEnv threw: ${err?.message ?? err}. Staying on shared-key.`
+        );
+      });
+  } else if (authStrategyEnv && authStrategyEnv !== "shared-key") {
+    console.warn(
+      `[auth] unknown AUTH_STRATEGY=${authStrategyEnv}; valid values: shared-key, oidc. Staying on shared-key.`
+    );
+  }
   const seedMemberIds = parseCsv(process.env.TEAM_MEMBER_IDS);
   const rolesByTeam = loadRolesFromEnv();
 
@@ -517,6 +578,72 @@ export function registerWebRoutes({
 
   router.get("/healthz", (req, res) => {
     res.type("text/plain").send("ok");
+  });
+
+  /* ---------------------------------------------------------------- *
+   * Azure AD SSO routes.
+   *
+   * These are always registered so the URLs are stable for Azure app
+   * registration metadata, but they only DO anything when OIDC
+   * discovery has resolved successfully. Before that (boot race, or
+   * AUTH_STRATEGY !== oidc) they return 503 with a clear reason.
+   * ---------------------------------------------------------------- */
+  function oidcOrFail(res) {
+    if (oidcConfig) return true;
+    res.statusCode = 503;
+    res.type("text/plain").send(
+      authStrategyEnv === "oidc"
+        ? "SSO is warming up or misconfigured — check server logs for an [auth] line."
+        : "SSO is not enabled on this instance. Set AUTH_STRATEGY=oidc + OIDC_* env vars to enable."
+    );
+    return false;
+  }
+
+  router.get("/auth/login", async (req, res, next) => {
+    if (!oidcOrFail(res)) return;
+    try {
+      await startLoginRedirect(oidcConfig, req, res);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  router.get("/auth/callback", async (req, res, next) => {
+    if (!oidcOrFail(res)) return;
+    try {
+      await finishLoginCallback(oidcConfig, req, res);
+    } catch (err) {
+      next(err);
+    }
+  });
+
+  // Accept both GET (convenience — clickable link) and POST
+  // (belt-and-braces CSRF protection for the button in the UI).
+  router.get("/auth/logout", (req, res) => {
+    if (!oidcConfig) {
+      res.redirect("/");
+      return;
+    }
+    performLogout(oidcConfig, req, res);
+  });
+  router.post("/auth/logout", (req, res) => {
+    if (!oidcConfig) {
+      res.redirect("/");
+      return;
+    }
+    performLogout(oidcConfig, req, res);
+  });
+
+  // Lightweight status probe for the dashboard UI. Unauthenticated on
+  // purpose — it only reveals whether OIDC is ON, never anything
+  // user-specific. The real "who am I" answer lives at /api/me.
+  router.get("/auth/status", (_req, res) => {
+    res.json({
+      strategy: oidcConfig ? "oidc" : authStrategyEnv === "oidc" ? "oidc-pending" : "shared-key",
+      loginUrl: "/auth/login",
+      logoutUrl: "/auth/logout",
+      enabled: Boolean(oidcConfig),
+    });
   });
 
   router.get("/team/:file", (req, res) => {
@@ -1032,14 +1159,63 @@ export function registerWebRoutes({
   }
 
   router.get("/api/me", async (req, res) => {
-    if (!authorized(req, dashboardKey)) {
-      res.status(401).json({ error: "unauthorized" });
+    const authResult = currentAuthenticator.authenticate(req);
+    if (!authResult.ok) {
+      // For /api/me specifically, prefer a 200 with `signedIn=false`
+      // over a 401. The dashboard polls this to decide "show Sign In
+      // button vs. show user pill" — 401 would noisy-up the console
+      // and force conditional-catch boilerplate in the client.
+      res.json({
+        signedIn: false,
+        auth: oidcConfig ? "oidc" : authStrategyEnv === "oidc" ? "oidc-pending" : "shared-key",
+        loginUrl: oidcConfig ? "/auth/login" : null,
+      });
       return;
     }
+    const user = authResult.user;
+    // If OIDC gave us real claims, prefer them verbatim — that's the
+    // whole point of SSO. Otherwise fall back to Slack-profile
+    // lookup via team roster (the existing shared-key path).
+    if (user.sub?.startsWith("oidc:")) {
+      const name = user.displayName ?? user.email ?? "Signed in";
+      const firstName = (name.split(/\s+/)[0] ?? name).trim();
+      const parts = name
+        .split(/\s+/)
+        .filter(Boolean)
+        .slice(0, 2)
+        .map((p) => p[0]?.toUpperCase() ?? "")
+        .join("");
+      res.json({
+        signedIn: true,
+        auth: "oidc",
+        userId: user.sub,
+        roles: user.roles ?? [],
+        displayName: user.displayName ?? null,
+        firstName,
+        title: (user.roles ?? []).includes("manager")
+          ? "Manager"
+          : (user.roles ?? []).includes("director")
+          ? "Director"
+          : null,
+        email: user.email ?? null,
+        avatarUrl: null, // Azure doesn't return a URL in the ID token; Graph call if we ever need one
+        initials: parts || null,
+        profileUrl: null,
+        canCustomize:
+          (user.roles ?? []).includes("manager") ||
+          (user.roles ?? []).includes("admin"),
+        logoutUrl: "/auth/logout",
+      });
+      return;
+    }
+    // Shared-key (anonymous) path — keep the legacy Slack-derived
+    // identity shape so the existing UI keeps working.
     const userId = callerUserId(req);
     const roles = Array.from(callerRoles(req));
     const identity = await loadIdentity(userId);
     res.json({
+      signedIn: false, // not SSO-signed-in; still dashboard-authorised
+      auth: "shared-key",
       userId,
       roles,
       displayName: identity?.displayName ?? null,
@@ -1052,6 +1228,7 @@ export function registerWebRoutes({
         ? `slack://user?team=&id=${encodeURIComponent(userId)}`
         : null,
       canCustomize: roles.includes("manager") || roles.includes("any"),
+      loginUrl: authStrategyEnv === "oidc" ? "/auth/login" : null,
     });
   });
 

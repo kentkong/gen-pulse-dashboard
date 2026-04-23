@@ -2,6 +2,39 @@
 
 **Purpose:** Pin down the exact JQL for every Jira-powered widget, for both the current (`EMOPS`) and legacy (`EMAILCO`) projects, so the dashboard shows what the CSM / dev teams actually expect.
 
+---
+
+## 🚦 Current live defaults (as of latest deploy)
+
+Everything below is **already working** against real Jira — the scrum master's job is to tune these so they match how the team thinks about the metric, not to build from zero.
+
+| Widget | EMOPS JQL (live today) | EMAILCO JQL (live today) |
+| ------ | ---------------------- | ------------------------ |
+| Weekly throughput | `project = EMOPS AND statusCategory = Done AND resolved >= -7d` | `project = EMAILCO AND statusCategory = Done AND resolved >= -7d` |
+| Backlog overview  | `project = EMOPS AND statusCategory != Done` | `project = EMAILCO AND statusCategory != Done` |
+| Top priority      | `project = EMOPS AND statusCategory != Done` + `priority in (P0, P1, P2)` | same, with EMAILCO |
+| Inflow vs resolved | `project = EMOPS AND created >= -14d` | same, EMAILCO |
+| Ticket lifecycle  | `project = EMOPS AND statusCategory = Done AND resolved >= -30d` | same, EMAILCO |
+| Kanban board      | `project = EMOPS AND statusCategory != Done` | same, EMAILCO |
+| SLA / aging risk  | (uses `backlog` JQL + SLA thresholds env) | same |
+| Sprint backlog    | (uses `backlog` JQL + optional sprint-name filter) | same |
+| Reopen rate       | (uses `lifecycle` JQL) | same |
+| Throughput leaderboard | (uses `throughput` JQL + assignee field) | same |
+
+**What's intentionally conservative:**
+
+- Priority allow-list is `P0, P1, P2` (we discovered live that EMOPS uses P0-P4, not Highest/Critical/High)
+- Status filter on "Top priority" is `<empty>` — a P0 ticket is a priority whatever column it's in, so we don't narrow by status
+- No issue-type filter on anything yet (you may want `issueType in (Task, Story, Bug)` on throughput to exclude Epics/Sub-tasks)
+- No sprint-name filter (you may want `sprint in openSprints()` on backlog)
+- No label filter (you may want to exclude `duplicate, noise, spam`)
+
+**Where you override these:** edit `teampresence-slack/.env` and restart the server. Every widget has a `JIRA_EMOPS_<WIDGET>_JQL` + `JIRA_EMAILCO_<WIDGET>_JQL` + `JIRA_ALL_<WIDGET>_JQL` variable. See the fenced `.env` block at the end of this doc for the full list.
+
+**How to see what the widget is actually running:** on the dashboard, click the **filter chip** on any Jira widget — it shows the resolved JQL, source env var, and fallback chain. No guessing.
+
+---
+
 **How to use this doc:**
 
 1. Read the widget's **Intent** — that's what the CSM team will see.

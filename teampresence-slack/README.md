@@ -65,18 +65,35 @@ admin approval → production hosting → SSO), follow
 
 ## Documentation index
 
-Seven docs cover every corner of the project. Read them in this
-order to take Pulse from demo to production:
+The docs are split into **"what to do right now"** (if you own the rollout) and **"what to send to someone else"** (pre-drafted email packets for each integration owner at Gen).
 
-| # | Doc | For | What it covers |
-|---|-----|-----|----------------|
-| 1 | [`GO-LIVE-RUNBOOK.md`](./GO-LIVE-RUNBOOK.md) | You + lead dev | Step-by-step: demo → production. Every step has a "Who", "Prereq", commands, and an explicit "Success test". Start here. |
-| 2 | [`REAL-DATA-CHECKLIST.md`](./REAL-DATA-CHECKLIST.md) | Ops / data owners | One-page checklist of exactly which env vars / files flip each widget from demo to real data. |
-| 3 | [`JQL-WORKBOOK.md`](./JQL-WORKBOOK.md) | Scrum master / CSM lead | Each of the 10 Jira widgets × 2 projects (EMOPS, EMAILCO): intent, example JQL, blank for prod JQL, reviewer sign-off. This file **is** the source of truth for what the widgets query. |
-| 4 | [`SLACK-ADMIN-REQUEST.md`](./SLACK-ADMIN-REQUEST.md) | Slack workspace admin | Copy-paste email template: scopes, justification, hosting, data handling, admin FAQ. |
-| 5 | [`WORKDAY.md`](./WORKDAY.md) | HR / IT + ops | How the Workday provider chain works (CSV → iCal → REST), including the roster-match rules and the template file for HR. |
-| 6 | [`USER-ACCOUNT-PLAN.md`](./USER-ACCOUNT-PLAN.md) | IT / security | Design doc for the top-right sign-in: Azure AD OIDC + PKCE, claims → roles mapping, rollout plan, security considerations. |
-| 7 | [`data/workday-absences.template.csv`](./data/workday-absences.template.csv) | HR (practitioner) | Pre-populated template for entering real PTO data. Copy to `data/workday-absences.csv` and fill. |
+### 🚦 If you're the Gen Pulse owner, start here
+
+| Doc | What it gives you |
+|-----|--------|
+| [`WHEN-YOURE-AT-THE-OFFICE.md`](./WHEN-YOURE-AT-THE-OFFICE.md) | Single-page master checklist: exactly what to do, in what order, when you sit down at your desk. Start here every morning. |
+| [`GO-LIVE-RUNBOOK.md`](./GO-LIVE-RUNBOOK.md) | The deeper sequenced playbook: demo → production, with "Who / Prereq / Commands / Success test" per step. |
+| [`REAL-DATA-CHECKLIST.md`](./REAL-DATA-CHECKLIST.md) | One-pager of which env vars / files flip each widget from demo to real data. Good for an at-a-glance audit. |
+
+### 📮 Forward-ready email packets (one per integration)
+
+Each of these has a **copy-paste email template** at the top plus the post-reply apply steps. You send the email; when the reply lands, you execute the script / paste the values / restart. You don't need to hold any of this in your head.
+
+| Packet | Send to | They send back | Apply via |
+|--------|---------|----------------|-----------|
+| [`SLACK-ADMIN-REQUEST.md`](./SLACK-ADMIN-REQUEST.md) | Slack workspace admin | Bot token + signing secret | `./scripts/set-slack-tokens.sh` |
+| [`AZURE-AD-ADMIN-REQUEST.md`](./AZURE-AD-ADMIN-REQUEST.md) | Identity / Entra admin | Tenant id, client id, client secret, 4 group GUIDs | `./scripts/set-oidc-credentials.sh` + `OIDC_ROLE_MAP_*` in `.env` |
+| [`SCRUM-MASTER-REQUEST.md`](./SCRUM-MASTER-REQUEST.md) | Scrum master / eng lead | Signed-off JQL per widget | Edit `.env` widget-by-widget, restart |
+| [`HR-WORKDAY-REQUEST.md`](./HR-WORKDAY-REQUEST.md) | HR / People Ops | CSV or iCal feed of team PTO | Save as `data/workday-absences.csv` or add `WORKDAY_ICAL_URL` to `.env` |
+
+### 🛠 Reference material
+
+| Doc | For |
+|-----|-----|
+| [`JQL-WORKBOOK.md`](./JQL-WORKBOOK.md) | Scrum master's working doc. Current live defaults at the top; blank tables per widget for PROD-JQL + reviewer sign-off. |
+| [`WORKDAY.md`](./WORKDAY.md) | How the Workday provider chain works (CSV → iCal → REST), including roster-match rules. |
+| [`USER-ACCOUNT-PLAN.md`](./USER-ACCOUNT-PLAN.md) | Design doc for Azure AD SSO: OIDC + PKCE, claims → roles mapping, security posture, rollout plan. |
+| [`data/workday-absences.template.csv`](./data/workday-absences.template.csv) | Pre-populated template for HR. Copy to `data/workday-absences.csv` and fill. |
 
 ---
 
