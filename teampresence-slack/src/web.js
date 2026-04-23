@@ -142,9 +142,16 @@ export function registerWebRoutes({
   const presenceModel = (process.env.PRESENCE_MODEL ?? "bot")
     .trim()
     .toLowerCase();
-  const presenceUsesSlack =
-    presenceModel === "slack" || presenceModel === "slack+workday";
-  const presenceUsesWorkday = presenceModel === "slack+workday";
+  // Use substring matching so each provider is enabled/disabled
+  // independently. Supported values:
+  //   "bot"            — legacy Slack-bot checkin commands (default)
+  //   "slack"          — read presence from Slack status only
+  //   "workday"        — read vacations from Workday only (no Slack)
+  //   "slack+workday"  — both; Workday wins for whole-day OOO
+  // This lets us turn on Workday BEFORE Slack is approved by the
+  // workspace admin, without synthesising a fake Slack provider.
+  const presenceUsesSlack = /\bslack\b/.test(presenceModel);
+  const presenceUsesWorkday = /\bworkday\b/.test(presenceModel);
 
   let slackPresenceProvider = null;
   let workdayPresenceProvider = null;
@@ -199,9 +206,28 @@ export function registerWebRoutes({
 
   // Per-project scalar resolvers. Each returns the resolved value
   // plus which env var it came from (for the filter drawer).
+  //
+  // Why we peek at process.env keys directly:
+  //   resolveProjectScalar returns `value: ""` both when the env var
+  //   is missing AND when it's explicitly set to "". For filters like
+  //   TOP_PRIORITY_STATUS we need those two cases to differ — an
+  //   explicit empty should mean "no filter" rather than falling
+  //   back to the hardcoded default ("To Do"). We therefore check
+  //   for key presence and only apply `fallback` when the key isn't
+  //   defined at any level.
   function perProjectScalar(projectKey, suffix, fallback) {
     const r = resolveProjectScalar(process.env, projectKey, suffix);
-    return { value: r.value || fallback, source: r.source };
+    const proj = String(projectKey || "").toUpperCase();
+    const candidateKeys = [
+      proj && proj !== "ALL" ? `JIRA_${proj}_${suffix}` : null,
+      proj === "ALL" ? `JIRA_ALL_${suffix}` : null,
+      `JIRA_${suffix}`,
+    ].filter(Boolean);
+    const keySetExplicitly = candidateKeys.some((k) =>
+      Object.prototype.hasOwnProperty.call(process.env, k)
+    );
+    const value = keySetExplicitly ? r.value : fallback;
+    return { value, source: r.source };
   }
   function perProjectList(projectKey, suffix, fallback) {
     const r = resolveProjectScalar(process.env, projectKey, suffix);
@@ -532,7 +558,15 @@ export function registerWebRoutes({
       // New presence models route through src/presence/*. Legacy bot
       // mode keeps the SQLite check-in + rollcall flow exactly as
       // before so flipping the flag is a zero-risk reversal.
-      if (presenceUsesSlack && slackPresenceProvider) {
+      //
+      // We also take this path when ONLY Workday is wired (no Slack
+      // yet) so the team grid still gets vacation overlays today —
+      // otherwise users see an empty roster until the Slack admin
+      // approves the app, which can be days or weeks away.
+      if (
+        (presenceUsesSlack && slackPresenceProvider) ||
+        (presenceUsesWorkday && workdayPresenceProvider)
+      ) {
         const payload = await buildTeamPayloadFromProviders();
         res.json(payload);
         return;
@@ -758,15 +792,52 @@ export function registerWebRoutes({
       if (entry?.slug) slugByUserId.set(uid, entry.slug);
     }
 
-    const presenceByUser = slackPresenceProvider
-      ? await resolvePresence({
-          userIds: memberIds,
-          slackProvider: slackPresenceProvider,
-          workdayProvider: workdayPresenceProvider ?? undefined,
-          emailByUserId,
-          slugByUserId,
-        })
-      : new Map();
+    // Feed resolvePresence a noop slack shim when Slack isn't wired
+    // yet — the aggregator requires *some* slackProvider to key off,
+    // and falling back to UNKNOWN for every user is correct in that
+    // state. Workday overlays still win (see presence/index.js).
+    const slackProviderForResolve = slackPresenceProvider ?? {
+      async fetchPresenceForUsers() {
+        return new Map();
+      },
+    };
+    const presenceByUser =
+      slackPresenceProvider || workdayPresenceProvider
+        ? await resolvePresence({
+            userIds: memberIds,
+            slackProvider: slackProviderForResolve,
+            workdayProvider: workdayPresenceProvider ?? undefined,
+            emailByUserId,
+            slugByUserId,
+          })
+        : new Map();
+
+    // Workday-only overlay for roster members NOT yet mapped to a
+    // Slack id. resolvePresence above only checks Workday for users
+    // it has a slackId for, so when Slack isn't wired the whole team
+    // falls through the fallback path below with workday=null — and
+    // Kristýna-on-PTO would look "available". Here we fetch today's
+    // active absences once and index by slug so the fallback loop can
+    // attach a Vacation badge without double-fetching.
+    const activeWorkdayBySlug = new Map();
+    if (workdayPresenceProvider) {
+      try {
+        const todayY = todayInTz();
+        const activeRows = await listUpcomingAbsences({
+          workdayProvider: workdayPresenceProvider,
+          days: 1,
+          roster: TEAM,
+        });
+        for (const r of activeRows) {
+          if (!r.slug) continue;
+          if (todayY >= r.startDate && todayY <= r.endDate) {
+            activeWorkdayBySlug.set(r.slug, r);
+          }
+        }
+      } catch (err) {
+        console.warn("[web] Workday today-overlay skipped:", err?.message);
+      }
+    }
 
     const members = memberIds.map((userId) => {
       const identity = identityById.get(userId) ?? null;
@@ -821,19 +892,37 @@ export function registerWebRoutes({
     const seenNames = new Set(members.map((m) => m.name.toLowerCase()));
     for (const fallback of rosterFallbackMembers()) {
       if (!seenNames.has(fallback.name.toLowerCase())) {
+        // If the CSV says this person is out today, overlay Vacation
+        // even though we don't have a Slack id for them yet. This is
+        // the bridge between "Workday works" (today) and "Slack works
+        // too" (after workspace admin approves).
+        const wd = fallback.slug
+          ? activeWorkdayBySlug.get(fallback.slug)
+          : null;
         members.push({
           ...fallback,
-          slackStatus: {
-            bucket: BUCKETS.UNKNOWN,
-            reason: "not mapped to a Slack user id yet",
-            line: null,
-            emoji: "",
-            text: "",
-            expiration: 0,
-            autoPresence: null,
-            source: "none",
-          },
-          workday: null,
+          slackStatus: wd
+            ? {
+                bucket: BUCKETS.VACATION,
+                reason: `Workday ${wd.type} through ${wd.endDate}`,
+                line: null,
+                emoji: "",
+                text: "",
+                expiration: 0,
+                autoPresence: null,
+                source: "workday",
+              }
+            : {
+                bucket: BUCKETS.UNKNOWN,
+                reason: "not mapped to a Slack user id yet",
+                line: null,
+                emoji: "",
+                text: "",
+                expiration: 0,
+                autoPresence: null,
+                source: "none",
+              },
+          workday: wd ? { type: wd.type, through: wd.endDate } : null,
         });
       }
     }
@@ -926,6 +1015,10 @@ export function registerWebRoutes({
       .filter((m) => m.slackIds.length === 0)
       .map((m) => ({
         id: `roster:${m.slug}`,
+        // Carry the slug through so the Workday overlay can match
+        // by slug (src/presence/index.js indexes this way when we
+        // don't yet have a Slack id for the roster member).
+        slug: m.slug,
         name: m.displayName || m.fullName,
         avatarUrl: m.avatarUrl,
         initials: initialsFor(m.fullName),

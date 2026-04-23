@@ -1,6 +1,6 @@
 import "dotenv/config";
 import crypto from "node:crypto";
-import { App } from "@slack/bolt";
+import { App, ExpressReceiver } from "@slack/bolt";
 import {
   openDb,
   upsertPresence,
@@ -120,14 +120,74 @@ if (WEB_ONLY_MODE) {
   );
 }
 
+/* ------------------------------------------------------------------ *
+ * Receiver choice — ExpressReceiver, always.
+ *
+ * Bolt's default HTTPReceiver does NOT expose `.router`, so
+ * `src/web.js` (which mounts /api/widgets/*, /api/team, /healthz,
+ * the dashboard, etc.) would silently disable itself. We therefore
+ * instantiate ExpressReceiver explicitly. It:
+ *   - Gives us `receiver.router` for custom routes (what web.js needs).
+ *   - Gives us `receiver.app` (the underlying Express instance) so we
+ *     can `listen()` directly in web-only mode and skip Bolt's
+ *     `app.start()` path (which otherwise fires a Slack auth probe
+ *     with our placeholder token and crashes the process with
+ *     `invalid_auth`).
+ *   - Is incompatible with Socket Mode. That's fine — when we
+ *     eventually turn Slack on, we'll use HTTP events with a public
+ *     URL (Cloudflare tunnel → /slack/events) rather than Socket
+ *     Mode, which is the documented recommendation for any host that
+ *     can accept inbound HTTPS.
+ * ------------------------------------------------------------------ */
+const PORT = Number(process.env.PORT ?? 3000);
+
+const receiver = new ExpressReceiver({
+  signingSecret: BOOT_SLACK_SECRET || "web-only-placeholder-signing-secret",
+  endpoints: "/slack/events",
+  // In web-only mode we never expect real Slack deliveries, but
+  // ExpressReceiver insists on a signing secret. We accept the
+  // placeholder and leave signature verification ON so any stray
+  // inbound request is rejected with a clean 401 instead of being
+  // silently processed by handlers wired up for a real workspace.
+  processBeforeResponse: true,
+});
+
 const app = new App({
   token: BOOT_SLACK_TOKEN || "xoxb-web-only-placeholder",
-  signingSecret: BOOT_SLACK_SECRET || "web-only-placeholder-signing-secret",
-  // Socket mode requires a valid app token; force-disable in web-only.
-  socketMode: !WEB_ONLY_MODE && process.env.SLACK_SOCKET_MODE === "true",
-  appToken: process.env.SLACK_APP_TOKEN,
-  port: Number(process.env.PORT ?? 3000),
+  receiver,
 });
+
+/* ------------------------------------------------------------------ *
+ * Web-only safety net.
+ *
+ * Our `.env` today has no real Slack token. Bolt's internals
+ * (authorization cache warm-up, and a few background calls) still
+ * fire `auth.test` / `users.info` against the placeholder on a
+ * timer — which rejects with `invalid_auth` and, if nobody catches
+ * it, kills the process. We don't want to mask these in FULL mode
+ * (they'd mean something really is wrong), but in WEB-ONLY mode we
+ * intentionally boot without Slack, so we log+swallow any Slack
+ * WebAPI error originating from the placeholder token. All other
+ * unhandled rejections still crash the process, as they should.
+ * ------------------------------------------------------------------ */
+if (WEB_ONLY_MODE) {
+  const SUPPRESS_CODES = new Set([
+    "slack_webapi_platform_error",
+    "slack_webapi_request_error",
+    "slack_webapi_rate_limited_error",
+  ]);
+  process.on("unhandledRejection", (err) => {
+    if (err && SUPPRESS_CODES.has(err.code)) {
+      console.warn(
+        `[web-only] suppressed Slack API rejection: ${err.code}` +
+          (err.data?.error ? ` (${err.data.error})` : "")
+      );
+      return;
+    }
+    console.error("[unhandledRejection]", err);
+    process.exit(1);
+  });
+}
 
 async function postBossAlert(client, text) {
   if (!BOSS_CHANNEL_ID) return;
@@ -635,11 +695,24 @@ scheduleWeekly({
 
 (async () => {
   try {
-    await app.start();
+    if (WEB_ONLY_MODE) {
+      // In web-only mode, skip Bolt's `app.start()` — it probes Slack
+      // with our placeholder token and crashes. Instead, bind the
+      // Express app (wired with /api/* routes by registerWebRoutes
+      // above) directly. Slash-command and action handlers are still
+      // registered on the Bolt app but will never fire because the
+      // signature check will reject any stray request.
+      await new Promise((resolve, reject) => {
+        const server = receiver.app.listen(PORT, () => resolve());
+        server.once("error", reject);
+      });
+    } else {
+      await app.start(PORT);
+    }
   } catch (err) {
     console.error(
       "\n[FATAL] Server failed to start on port",
-      process.env.PORT ?? 3000,
+      PORT,
       "\nReason:",
       err?.message ?? err,
       "\n\nCommon causes:\n" +
@@ -650,11 +723,10 @@ scheduleWeekly({
     process.exit(1);
   }
   const mode = WEB_ONLY_MODE ? "WEB-ONLY" : "FULL (Slack connected)";
-  const port = process.env.PORT ?? 3000;
   console.log(
-    `\n${BRAND_NAME} Gen Pulse running on http://localhost:${port}\n` +
+    `\n${BRAND_NAME} Gen Pulse running on http://localhost:${PORT}\n` +
       `  mode: ${mode}\n` +
       `  tz:   ${TEAM_TIMEZONE}\n` +
-      `  open: http://localhost:${port}/?key=${(process.env.DASHBOARD_KEY ?? "").trim() || "<set DASHBOARD_KEY in .env>"}\n`
+      `  open: http://localhost:${PORT}/?key=${(process.env.DASHBOARD_KEY ?? "").trim() || "<set DASHBOARD_KEY in .env>"}\n`
   );
 })();

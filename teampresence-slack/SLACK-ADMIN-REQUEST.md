@@ -4,6 +4,56 @@ This doc is a ready-to-forward template for the Slack workspace admin at Gen Dig
 
 ---
 
+## ⚡ When you're ready to turn Slack ON (3-step checklist)
+
+Use this once the workspace admin has approved the app and given you the tokens. Expected time: 10 minutes end-to-end.
+
+### Step 1 — create the Slack app at https://api.slack.com/apps
+
+1. Click **Create New App** → **From scratch**.
+2. App Name: `Gen Pulse`. Workspace: `Gen Digital`.
+3. Under **OAuth & Permissions → Bot Token Scopes**, add exactly three:
+   - `users:read`
+   - `users.profile:read`
+   - `users:read.presence`
+4. Click **Install to Workspace** → this is the point where workspace admin approval is required (see email template below).
+5. Once approved, copy the **Bot User OAuth Token** — starts with `xoxb-`.
+6. From **Basic Information → App Credentials**, copy the **Signing Secret**.
+
+### Step 2 — put the tokens in `.env` (never in chat, never in commits)
+
+```bash
+cd teampresence-slack
+# Paste each token when prompted — NEVER paste them into chat:
+./scripts/set-slack-tokens.sh
+```
+
+*(If that script doesn't exist yet, create it by copying `scripts/set-jira-token.sh` and renaming the env var — or just edit `.env` manually with an editor that doesn't sync to iCloud/OneDrive.)*
+
+Then flip the presence model from Workday-only to combined:
+```ini
+PRESENCE_MODEL=slack+workday
+```
+
+### Step 3 — restart + verify
+
+```bash
+pkill -9 -f 'node src/index.js'
+PORT=3000 node src/index.js &
+sleep 3
+curl -s "http://localhost:3000/api/team?key=$(awk -F= '/^DASHBOARD_KEY=/{print $2}' .env)" | python3 -c "
+import sys, json
+d = json.load(sys.stdin)
+real = [m for m in d['members'] if m['slackStatus']['source'] == 'slack']
+print(f'Slack presence: {len(real)}/{len(d[\"members\"])} resolved')"
+```
+
+Expected: `Slack presence: 8/8 resolved` (or however many roster members have `slackIds` in `src/team.js`).
+
+If fewer than 8 resolve, fill in the missing `slackIds: [...]` in `src/team.js` for roster members the bot hasn't seen yet — you can find their IDs in the Slack admin directory or by clicking "View profile → More → Copy member ID".
+
+---
+
 ## Email template
 
 **To:** `[Slack workspace admin distro]` *(usually IT / collab-tools team)*

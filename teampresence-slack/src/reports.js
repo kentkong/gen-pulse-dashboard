@@ -665,10 +665,29 @@ export async function buildTopPriorityTickets({
   if (!jql) throw new Error("buildTopPriorityTickets: jql required");
 
   const priList = priorities.map((p) => `"${p}"`).join(", ");
-  // Scope defaults to the single "To Do" column of the team's RapidBoard
-  // so this widget stays cheap and fast — leadership just wants the
-  // next ~6 tickets queued up, not the entire backlog.
-  const statusClause = status ? ` AND status = "${status}"` : "";
+  // `status` accepts either a single name ("To Do") or a comma-separated
+  // list ("To Do, In Progress"). We build:
+  //   no status   — scope the full base JQL (any open status)
+  //   one status  — `status = "X"`
+  //   many        — `status in ("X", "Y", ...)`
+  // The previous single-string-only shape hid in-flight high-priority
+  // work from leadership — feedback was "this widget shows 0 even
+  // though Kristýna has 2 Highest tickets in progress right now".
+  const statusList = Array.isArray(status)
+    ? status
+    : typeof status === "string"
+      ? status
+          .split(",")
+          .map((s) => s.trim())
+          .filter(Boolean)
+      : [];
+  let statusClause = "";
+  if (statusList.length === 1) {
+    statusClause = ` AND status = "${statusList[0]}"`;
+  } else if (statusList.length > 1) {
+    const quoted = statusList.map((s) => `"${s}"`).join(", ");
+    statusClause = ` AND status in (${quoted})`;
+  }
   const scopedJql =
     `(${jql}) AND priority in (${priList})${statusClause}` +
     ` ORDER BY priority DESC, updated DESC`;

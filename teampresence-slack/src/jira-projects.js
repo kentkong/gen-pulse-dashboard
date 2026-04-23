@@ -142,7 +142,11 @@ export function defaultProjectKey(env = process.env) {
 export function isValidProjectKey(env = process.env, key) {
   if (!key) return false;
   const list = listProjects(env);
-  return list.some((p) => p.key === String(key).toUpperCase());
+  // Case-insensitive compare: real project keys are stored uppercase
+  // ("EMOPS"), but the reserved combined key is lowercase ("all").
+  // Callers may pass either; accept both forms for both.
+  const needle = String(key).toLowerCase();
+  return list.some((p) => p.key.toLowerCase() === needle);
 }
 
 /**
