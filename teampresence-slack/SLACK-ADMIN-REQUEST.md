@@ -1,11 +1,51 @@
 # Slack workspace admin — app approval request
 
-> **Status (2026-04-20):** filed in ServiceNow as **RITM0213806** (Slack
-> workspace admin → install Gen Pulse app). Awaiting Slack admin approval
-> and the three tokens (`SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`,
-> optionally `SLACK_APP_TOKEN`). When the ticket resolves, follow the
-> 3-step checklist below. Tracked against the Slack integration milestone
-> in `GO-LIVE-RUNBOOK.md` Step 3a.
+> **Status (2026-04-24 PM):** filed in ServiceNow as **RITM0213806**
+> (Slack workspace admin → install Gen Pulse app). App created,
+> collaborator added, scopes configured, **install request submitted
+> and visible to the admin**. Awaiting admin approval on the Gen
+> workspace.
+>
+> **Completed on 2026-04-24 (Kevin):**
+>
+> - Created "Gen Pulse" as a "From scratch" app in the **Gen**
+>   workspace (not "Gen External" — that's for partners).
+> - Added `svc.slack.appadm` as a collaborator on the app.
+> - Replied to the admin with the App ID and workspace context.
+> - Configured bot-token scopes (see table below).
+> - Submitted **Request to Install** to the Gen workspace. First
+>   attempt failed with a generic "Try again later" error — resolved
+>   on the second attempt after the admin enabled install requests
+>   on their side. Admin can now see the request.
+>
+> **App metadata (non-secret, safe to share in tickets):**
+>
+> | Field | Value |
+> | --- | --- |
+> | App Name | `Gen Pulse` |
+> | App ID | `A0AUY7JRG5T` |
+> | Dev workspace | `Gen` (Gen Digital Inc) |
+> | Created | 2026-04-24 |
+> | Collaborators | `Kevin Mold`, `svc.slack.appadm` |
+> | Bot-token scopes | `users:read`, `users.profile:read` |
+>
+> **Scope-count deviation from the original request — intentional:**
+> the original ticket named three scopes
+> (`users:read`, `users.profile:read`, `users:read.presence`). Modern
+> (OAuth v2) Slack bot apps no longer expose `users:read.presence` as
+> a separate scope — presence is bundled into `users:read`. The
+> two-scope set is the correct final configuration for our read-only
+> presence use case, with no loss of functionality.
+>
+> **Still pending (admin side):** approval of the install request.
+> On approval we receive `SLACK_BOT_TOKEN` and `SLACK_SIGNING_SECRET`
+> (and optionally `SLACK_APP_TOKEN` for Socket Mode). When those
+> land, follow the 3-step checklist below. Tracked against the Slack
+> integration milestone in `GO-LIVE-RUNBOOK.md` Step 3a.
+>
+> **Do not paste `Client Secret`, `Signing Secret`, or
+> `SLACK_BOT_TOKEN` into this repo or into chat.** Only `App ID`,
+> `Client ID`, scope names, and the app name are safe to share.
 
 This doc is a ready-to-forward template for the Slack workspace admin at Gen Digital. Copy the email body below, fill in the **[bracketed]** fields, send.
 

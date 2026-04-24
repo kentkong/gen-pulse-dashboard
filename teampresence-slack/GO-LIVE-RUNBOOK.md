@@ -122,14 +122,20 @@ Covered in `WORKDAY.md`.
 
 Forward `SLACK-ADMIN-REQUEST.md` to your Slack workspace admin. Expected turnaround: 1–5 business days.
 
-**In flight (as of 2026-04-20):**
+**In flight (as of 2026-04-24 PM):**
 
 | Item | Status | Reference |
 | --- | --- | --- |
-| ServiceNow Slack-app workspace-install ticket | **Filed, awaiting Slack admin** | **RITM0213806** |
-| `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` in `.env` | Blocked on above | `./scripts/set-slack-tokens.sh` |
-| Roster `slackIds: []` populated in `src/team.js` | Blocked on above | `users.list` curl below |
-| `PRESENCE_MODEL=slack+workday` flipped | Blocked on above | Step 3d |
+| ServiceNow Slack-app workspace-install ticket | **In progress — admin can see the install request, awaiting approval** | **RITM0213806** |
+| Gen Pulse app created on api.slack.com (Gen workspace) | ✅ 2026-04-24 — App ID `A0AUY7JRG5T` | `SLACK-ADMIN-REQUEST.md` status banner |
+| `svc.slack.appadm` added as collaborator on the app | ✅ 2026-04-24 | api.slack.com → Gen Pulse → Collaborators |
+| App ID + collaborator confirmation sent to admin | ✅ 2026-04-24 | RITM0213806 thread |
+| Bot scopes configured on the app (`users:read`, `users.profile:read`) | ✅ 2026-04-24 — two scopes (modern v2 apps bundle presence into `users:read`; no separate `users:read.presence` needed) | api.slack.com → Gen Pulse → OAuth & Permissions |
+| Install request submitted to the Gen workspace | ✅ 2026-04-24 — second attempt succeeded after admin enabled install requests on their side | api.slack.com → Gen Pulse → Install App |
+| Install request approved by workspace admin | Pending — admin's next action | RITM0213806 thread |
+| `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` in `.env` | Blocked on install approval | `./scripts/set-slack-tokens.sh` |
+| Roster `slackIds: []` populated in `src/team.js` | Blocked on install approval | `users.list` curl below |
+| `PRESENCE_MODEL=slack+workday` flipped | Blocked on install approval | Step 3d |
 
 ### 3b. Once approved [it → you]
 

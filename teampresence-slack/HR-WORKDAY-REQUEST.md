@@ -4,6 +4,16 @@ Gen Pulse shows the EMAIL NORTON team who's on vacation / sick / leave today and
 
 ---
 
+## 📌 Status — 2026-04-24
+
+**Interim demo:** ✅ Unblocked. One-off Workday-native absence export for the EMAIL NORTON team (current + next ~2 weeks) received from the HR contact and landed in the dashboard. The file lives under `data/` (gitignored) and is consumed by the existing `csv` provider; the parser resolved every row to the roster with zero unmatched. Provenance + cleanup notes are captured in the header of the active file so future handoffs are trivial.
+
+**Long-term path (agreed in principle, not committed to a date):** Workday absences flow into the corporate Outlook calendar, Slack mirrors the resulting calendar state as presence, and Gen Pulse picks it up via Slack — i.e. no direct Workday integration on our side. The `ical` / `rest` / `csv` providers documented below stay in the codebase as a fallback, but the target operating state is Slack-driven once the upstream Workday → Outlook sync is switched on for our org.
+
+**Privacy note:** Workday → Outlook rollout on the HR side is an internal-only project; don't paste the interim CSV or its contents into any Slack channel, wiki, or external doc. Keep it on the host filesystem (already gitignored).
+
+---
+
 ## ✅ Interim scope agreed with HR (April 2026)
 
 After the call with [HR contact] + Andy, the agreed first delivery for Alan Rogoyski's demo is **a one-off Workday report**, not an API. Specifically:
@@ -96,6 +106,12 @@ Template file in the repo (pre-populated with the 8 roster slugs and detailed in
 3. Open the dashboard and check Team Presence + "Out next 7 days" — they should match.
 
 If anyone is missing or showing the wrong day range, it's either a slug mismatch (check `src/team.js`) or a date format issue (it MUST be `YYYY-MM-DD` — not `DD/MM/YYYY` or `2026-5-1`).
+
+**Gotchas observed in practice** (from the 2026-04-24 one-off delivery — fold these into the file before saving):
+
+1. **Date locale.** Workday tenants configured for EU locale export dates as `DD/MM/YYYY`. The parser does string comparisons, so that shape silently breaks the "out today" check. Convert to `YYYY-MM-DD` before saving.
+2. **Character encoding.** The raw Workday CSV can arrive as Windows-1252 with CRLF line endings, and some non-ASCII characters (notably Czech `č`) are replaced with a literal `?` on export. Re-save as UTF-8 (LF), and restore any mangled diacritics against `src/team.js` so the `findByName` matcher can hit the roster slug.
+3. **Filename.** The landing file is canonically `data/workday-absences.<org>.csv` (e.g. `workday-absences.norton-email.csv`) with `WORKDAY_CSV_PATH` pointing at it. Don't overwrite `data/workday-absences.workday-native.csv` — that's the committed reference template used for CI / docs.
 
 ---
 
