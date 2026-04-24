@@ -3896,6 +3896,456 @@
       }
 
       /* ---------------------------------------------------------------
+         Pre-auth banner — "You're viewing Gen Pulse in read-only mode"
+
+         Sits directly under .sn-topnav when /api/me reports
+         signedIn=false AND OIDC is active. Hidden by default; the JS
+         flips [data-state="visible"] on the element to reveal it, and
+         also carries a sessionStorage dismiss flag per-tab so an
+         intentional "not now" click doesn't keep nagging the user.
+
+         Visually: a thin Gen-gradient strip with a clean CTA button
+         on the right. Read-only mode = amber-leaning hint; actionable
+         CTA = solid Gen blue so it stands out from surrounding chrome.
+         --------------------------------------------------------------- */
+      .sn-auth-banner {
+        display: none;
+        align-items: center;
+        gap: 0.75rem;
+        padding: 0.55rem 1.25rem;
+        background: linear-gradient(
+          90deg,
+          color-mix(in srgb, var(--gen-blue, #0400f5) 8%, var(--surface, #fff)) 0%,
+          color-mix(in srgb, var(--gen-purple, #5a00ba) 6%, var(--surface, #fff)) 100%
+        );
+        border-bottom: 1px solid color-mix(in srgb, var(--gen-blue, #0400f5) 22%, var(--border, #e5e5ef));
+        color: var(--text, #12111c);
+        font-size: 0.86rem;
+        line-height: 1.35;
+      }
+      .sn-auth-banner[data-state="visible"] { display: flex; }
+      .sn-auth-banner-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.6rem;
+        height: 1.6rem;
+        border-radius: 6px;
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 14%, transparent);
+        color: var(--gen-blue, #0400f5);
+        flex: 0 0 auto;
+      }
+      .sn-auth-banner-icon svg { width: 1rem; height: 1rem; }
+      .sn-auth-banner-text {
+        flex: 1 1 auto;
+        min-width: 0;
+      }
+      .sn-auth-banner-text strong { font-weight: 700; }
+      .sn-auth-banner-text .sn-auth-banner-sub {
+        color: var(--muted-fg, #5a5a6d);
+        margin-left: 0.4rem;
+      }
+      .sn-auth-banner-cta {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.45rem 0.85rem;
+        border-radius: 9999px;
+        background: var(--gen-blue, #0400f5);
+        color: #ffffff;
+        border: 0;
+        font-weight: 600;
+        font-size: 0.83rem;
+        cursor: pointer;
+        text-decoration: none;
+        white-space: nowrap;
+        flex: 0 0 auto;
+        transition: filter 120ms ease, transform 120ms ease;
+      }
+      .sn-auth-banner-cta:hover { filter: brightness(1.07); }
+      .sn-auth-banner-cta:active { transform: translateY(1px); }
+      .sn-auth-banner-cta .sn-ms-tile {
+        display: inline-grid;
+        grid-template-columns: repeat(2, 0.45rem);
+        grid-template-rows: repeat(2, 0.45rem);
+        gap: 2px;
+      }
+      .sn-auth-banner-cta .sn-ms-tile span { display: block; border-radius: 1px; }
+      .sn-auth-banner-dismiss {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        width: 1.8rem;
+        height: 1.8rem;
+        border-radius: 9999px;
+        background: transparent;
+        border: 0;
+        color: var(--muted-fg, #5a5a6d);
+        cursor: pointer;
+        flex: 0 0 auto;
+      }
+      .sn-auth-banner-dismiss:hover {
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 8%, transparent);
+        color: var(--text, #12111c);
+      }
+      /* Dark-mode variants — warmer gradient, amber-leaning border so
+         the banner reads as a soft nudge rather than a Gen-blue wall. */
+      html.theme-dark .sn-auth-banner {
+        background: linear-gradient(
+          90deg,
+          color-mix(in srgb, var(--status-amber, #f59e0b) 10%, var(--surface, #141524)) 0%,
+          color-mix(in srgb, var(--gen-purple, #5a00ba) 14%, var(--surface, #141524)) 100%
+        );
+        border-bottom-color: color-mix(in srgb, var(--status-amber, #f59e0b) 30%, var(--border, #242539));
+        color: var(--text, #e7e7f2);
+      }
+      html.theme-dark .sn-auth-banner-icon {
+        background: color-mix(in srgb, var(--status-amber, #f59e0b) 20%, transparent);
+        color: var(--status-amber, #f59e0b);
+      }
+      @media (max-width: 640px) {
+        .sn-auth-banner { padding: 0.5rem 0.9rem; gap: 0.5rem; font-size: 0.78rem; }
+        .sn-auth-banner-sub { display: none; }
+        .sn-auth-banner-cta { padding: 0.4rem 0.65rem; font-size: 0.78rem; }
+      }
+
+      /* ---------------------------------------------------------------
+         Share-demo-link popover.
+
+         Triggered by #topnav-share, anchored under the utility row in
+         the top-nav. Uses position:fixed with JS-computed coordinates
+         so it tracks the trigger button on scroll/resize without
+         escaping viewport edges. Pattern mirrors the user-menu
+         popover so focus/dismiss behaviour feels consistent.
+
+         The `data-state` on .sn-share-status drives the live indicator
+         colour — green when a public URL is up, amber when it's down.
+         --------------------------------------------------------------- */
+      .sn-topnav-dot {
+        position: absolute;
+        top: 0.32rem;
+        right: 0.32rem;
+        width: 0.55rem;
+        height: 0.55rem;
+        border-radius: 999px;
+        background: var(--muted-fg, #9a9ab5);
+        box-shadow: 0 0 0 2px var(--surface, #ffffff);
+        transition: background 140ms ease, box-shadow 140ms ease;
+      }
+      #topnav-share[data-tunnel-status="up"] .sn-topnav-dot {
+        background: #16a34a;
+      }
+      #topnav-share[data-tunnel-status="down"] .sn-topnav-dot {
+        background: var(--status-amber, #f59e0b);
+      }
+      html.theme-dark .sn-topnav-dot,
+      html:not(.theme-light) .sn-topnav-dot {
+        box-shadow: 0 0 0 2px rgba(10, 13, 26, 0.95);
+      }
+
+      .sn-share-pop {
+        position: fixed;
+        z-index: 80;
+        width: min(22rem, calc(100vw - 2rem));
+        background: var(--surface, #ffffff);
+        color: var(--text, #12111c);
+        border: 1px solid var(--border, #e5e5ef);
+        border-radius: 0.85rem;
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.04),
+          0 20px 50px -12px rgba(15, 18, 40, 0.28);
+        padding: 0.95rem 1rem 1rem;
+        display: none;
+      }
+      .sn-share-pop[data-state="open"] { display: block; }
+
+      .sn-share-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 0.6rem;
+        margin-bottom: 0.55rem;
+      }
+      .sn-share-icon {
+        flex: 0 0 auto;
+        width: 1.85rem;
+        height: 1.85rem;
+        border-radius: 0.55rem;
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 12%, transparent);
+        color: var(--gen-blue, #0400f5);
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .sn-share-icon svg { width: 1.05rem; height: 1.05rem; }
+      .sn-share-head-meta {
+        flex: 1 1 auto;
+        display: flex;
+        flex-direction: column;
+        gap: 0.15rem;
+        min-width: 0;
+      }
+      .sn-share-head-meta strong {
+        font-size: 0.9rem;
+        font-weight: 700;
+      }
+      .sn-share-sub {
+        font-size: 0.78rem;
+        color: var(--muted-fg, #5c5c75);
+        line-height: 1.35;
+      }
+      .sn-share-close {
+        flex: 0 0 auto;
+        width: 1.6rem;
+        height: 1.6rem;
+        border-radius: 0.45rem;
+        border: 1px solid transparent;
+        background: transparent;
+        color: var(--muted-fg, #5c5c75);
+        cursor: pointer;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+      }
+      .sn-share-close:hover {
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 8%, transparent);
+        color: var(--text, #12111c);
+      }
+      .sn-share-close:focus-visible {
+        outline: 2px solid var(--gen-blue, #0400f5);
+        outline-offset: 2px;
+      }
+
+      .sn-share-body {
+        display: flex;
+        flex-direction: column;
+        gap: 0.7rem;
+      }
+
+      .sn-share-status {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.45rem;
+        padding: 0.35rem 0.6rem;
+        border-radius: 999px;
+        font-size: 0.72rem;
+        font-weight: 600;
+        align-self: flex-start;
+        border: 1px solid transparent;
+      }
+      .sn-share-status-dot {
+        width: 0.45rem;
+        height: 0.45rem;
+        border-radius: 999px;
+        background: var(--muted-fg, #9a9ab5);
+      }
+      .sn-share-status[data-state="up"] {
+        background: color-mix(in srgb, #16a34a 12%, transparent);
+        border-color: color-mix(in srgb, #16a34a 35%, transparent);
+        color: #15803d;
+      }
+      .sn-share-status[data-state="up"] .sn-share-status-dot {
+        background: #16a34a;
+        box-shadow: 0 0 0 3px color-mix(in srgb, #16a34a 20%, transparent);
+      }
+      .sn-share-status[data-state="down"] {
+        background: color-mix(in srgb, var(--status-amber, #f59e0b) 14%, transparent);
+        border-color: color-mix(in srgb, var(--status-amber, #f59e0b) 40%, transparent);
+        color: #b45309;
+      }
+      .sn-share-status[data-state="down"] .sn-share-status-dot {
+        background: var(--status-amber, #f59e0b);
+      }
+      .sn-share-status[data-state="loading"] {
+        background: color-mix(in srgb, var(--muted-fg, #9a9ab5) 10%, transparent);
+        border-color: color-mix(in srgb, var(--muted-fg, #9a9ab5) 25%, transparent);
+        color: var(--muted-fg, #5c5c75);
+      }
+
+      .sn-share-field {
+        display: flex;
+        flex-direction: column;
+        gap: 0.3rem;
+      }
+      .sn-share-label {
+        font-size: 0.7rem;
+        font-weight: 700;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+        color: var(--muted-fg, #5c5c75);
+      }
+      .sn-share-input-row {
+        display: flex;
+        gap: 0.35rem;
+        align-items: stretch;
+      }
+      .sn-share-input {
+        flex: 1 1 auto;
+        min-width: 0;
+        padding: 0.45rem 0.6rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--border, #e5e5ef);
+        background: color-mix(in srgb, var(--gen-blue, #0400f5) 4%, var(--surface, #ffffff));
+        color: var(--text, #12111c);
+        font-size: 0.78rem;
+        font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+      }
+      .sn-share-input:focus-visible {
+        outline: 2px solid var(--gen-blue, #0400f5);
+        outline-offset: 1px;
+      }
+      .sn-share-copy {
+        flex: 0 0 auto;
+        padding: 0.45rem 0.75rem;
+        border-radius: 0.5rem;
+        border: 1px solid var(--gen-blue, #0400f5);
+        background: var(--gen-blue, #0400f5);
+        color: #ffffff;
+        font-size: 0.78rem;
+        font-weight: 700;
+        cursor: pointer;
+        min-width: 3.75rem;
+        transition: filter 120ms ease, transform 120ms ease;
+      }
+      .sn-share-copy:hover:not(:disabled) { filter: brightness(1.1); }
+      .sn-share-copy:active:not(:disabled) { transform: translateY(1px); }
+      .sn-share-copy:disabled {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+      .sn-share-copy[data-copied="true"] {
+        background: #16a34a;
+        border-color: #16a34a;
+      }
+      .sn-share-hint {
+        font-size: 0.7rem;
+        line-height: 1.35;
+        color: var(--muted-fg, #5c5c75);
+      }
+      .sn-share-footer {
+        margin: 0;
+        padding-top: 0.55rem;
+        border-top: 1px dashed var(--border, #e5e5ef);
+        font-size: 0.7rem;
+        line-height: 1.4;
+        color: var(--muted-fg, #5c5c75);
+      }
+
+      html.theme-dark .sn-share-pop,
+      html:not(.theme-light) .sn-share-pop {
+        background: #14162a;
+        border-color: rgba(255, 255, 255, 0.08);
+        color: #e7e7f2;
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.2),
+          0 20px 50px -12px rgba(0, 0, 0, 0.55);
+      }
+      html.theme-dark .sn-share-icon,
+      html:not(.theme-light) .sn-share-icon {
+        background: color-mix(in srgb, var(--status-amber, #f59e0b) 18%, transparent);
+        color: var(--status-amber, #f59e0b);
+      }
+      html.theme-dark .sn-share-input,
+      html:not(.theme-light) .sn-share-input {
+        background: rgba(255, 255, 255, 0.04);
+        border-color: rgba(255, 255, 255, 0.12);
+        color: #e7e7f2;
+      }
+      html.theme-dark .sn-share-copy,
+      html:not(.theme-light) .sn-share-copy {
+        background: var(--status-amber, #f59e0b);
+        border-color: var(--status-amber, #f59e0b);
+        color: #1a1408;
+      }
+      html.theme-dark .sn-share-status[data-state="up"],
+      html:not(.theme-light) .sn-share-status[data-state="up"] {
+        color: #86efac;
+      }
+      html.theme-dark .sn-share-status[data-state="down"],
+      html:not(.theme-light) .sn-share-status[data-state="down"] {
+        color: #fde68a;
+      }
+      html.theme-dark .sn-share-footer,
+      html:not(.theme-light) .sn-share-footer {
+        border-top-color: rgba(255, 255, 255, 0.08);
+      }
+
+      @media (max-width: 640px) {
+        .sn-share-pop {
+          width: calc(100vw - 1rem);
+          left: 0.5rem !important;
+          right: 0.5rem !important;
+        }
+      }
+
+      /* ---------------------------------------------------------------
+         Session badge on the user-chip.
+
+         Three states surface here:
+           - auth="oidc"        → green "SSO" shield (you're really signed in)
+           - auth="oidc" + mock → purple "DEMO" badge (dev/demo session)
+           - auth="shared-key"  → amber "read-only" badge (breakglass key)
+
+         Hidden by default; JS sets data-session on the chip and the
+         rules below target each variant. Badge sits between the meta
+         stack and the chevron so it's in peripheral vision but doesn't
+         force the chip to grow.
+         --------------------------------------------------------------- */
+      .sn-session-badge {
+        display: none;
+        align-items: center;
+        gap: 0.25rem;
+        padding: 0.08rem 0.42rem;
+        border-radius: 9999px;
+        font-size: 0.62rem;
+        font-weight: 800;
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+        line-height: 1;
+        flex: 0 0 auto;
+        border: 1px solid transparent;
+      }
+      .sn-session-badge svg { width: 0.7rem; height: 0.7rem; }
+      .sn-user-chip[data-session="sso"] .sn-session-badge {
+        display: inline-flex;
+        color: #046c4e;
+        background: color-mix(in srgb, #10b981 18%, transparent);
+        border-color: color-mix(in srgb, #10b981 55%, transparent);
+      }
+      .sn-user-chip[data-session="demo"] .sn-session-badge {
+        display: inline-flex;
+        color: var(--gen-purple, #5a00ba);
+        background: color-mix(in srgb, var(--gen-purple, #5a00ba) 14%, transparent);
+        border-color: color-mix(in srgb, var(--gen-purple, #5a00ba) 55%, transparent);
+      }
+      .sn-user-chip[data-session="shared"] .sn-session-badge {
+        display: inline-flex;
+        color: #92400e;
+        background: color-mix(in srgb, var(--status-amber, #f59e0b) 18%, transparent);
+        border-color: color-mix(in srgb, var(--status-amber, #f59e0b) 55%, transparent);
+      }
+      html.theme-dark .sn-user-chip[data-session="sso"] .sn-session-badge {
+        color: #a7f3d0;
+        background: color-mix(in srgb, #10b981 22%, transparent);
+        border-color: color-mix(in srgb, #10b981 55%, transparent);
+      }
+      html.theme-dark .sn-user-chip[data-session="demo"] .sn-session-badge {
+        color: #e9d5ff;
+        background: color-mix(in srgb, #a855f7 28%, transparent);
+        border-color: color-mix(in srgb, #a855f7 58%, transparent);
+      }
+      html.theme-dark .sn-user-chip[data-session="shared"] .sn-session-badge {
+        color: #fde68a;
+        background: color-mix(in srgb, var(--status-amber, #f59e0b) 22%, transparent);
+        border-color: color-mix(in srgb, var(--status-amber, #f59e0b) 58%, transparent);
+      }
+      @media (max-width: 640px) {
+        /* On phones the chip already hides the meta column — keep the
+           badge visible but shrink the text to avoid blowing up the
+           chip width. */
+        .sn-session-badge { font-size: 0.55rem; padding: 0.08rem 0.35rem; }
+      }
+
+      /* ---------------------------------------------------------------
          Phone polish — final cascade.
          This block sits at the END of <style> on purpose: many earlier
          base rules (e.g. `.sn-hero-tag { max-width: 62ch }`) would win
@@ -5500,6 +5950,33 @@
               <path d="M12 15V3"></path>
             </svg>
           </a>
+          <!--
+            Share-demo-link icon. Opens a popover showing the current
+            public Cloudflare quick-tunnel URL + a read-only team URL
+            (with ?key=... appended) so the operator can paste into
+            Slack in one click. Badge colour tracks tunnel state:
+            green dot = live public URL, amber = tunnel down.
+          -->
+          <button
+            id="topnav-share"
+            class="sn-topnav-action"
+            type="button"
+            title="Share this dashboard"
+            aria-label="Share this dashboard"
+            aria-haspopup="dialog"
+            aria-expanded="false"
+            aria-controls="share-popover"
+            data-tunnel-status="unknown"
+          >
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="6" cy="12" r="2.5"></circle>
+              <circle cx="18" cy="6" r="2.5"></circle>
+              <circle cx="18" cy="18" r="2.5"></circle>
+              <path d="M8.2 10.8l7.6-3.6"></path>
+              <path d="M8.2 13.2l7.6 3.6"></path>
+            </svg>
+            <span id="topnav-share-dot" class="sn-topnav-dot" aria-hidden="true"></span>
+          </button>
           <button
             id="topnav-notifications"
             class="sn-topnav-action"
@@ -5540,6 +6017,16 @@
               <span id="user-name" class="sn-user-name">Loading…</span>
               <span id="user-role" class="sn-user-role sn-muted"></span>
             </span>
+            <!--
+              Session badge — painted by renderMe() once /api/me replies.
+              data-session on the parent chip drives which variant shows
+              (sso / demo / shared). Hidden until a variant is applied.
+            -->
+            <span
+              id="user-session-badge"
+              class="sn-session-badge"
+              aria-live="polite"
+            ></span>
             <span class="sn-chevron" aria-hidden="true">▾</span>
           </button>
           <div
@@ -5598,6 +6085,163 @@
         </div>
       </div>
     </nav>
+    <!--
+      Pre-auth banner — shown only when SSO is enabled on the server
+      but this browser has no valid session cookie yet. Painted by
+      renderMe() in index.html JS; starts hidden so there's zero
+      flicker when the user IS signed in (or when SSO is off).
+    -->
+    <div
+      id="auth-banner"
+      class="sn-auth-banner"
+      role="region"
+      aria-label="Sign-in status"
+      hidden
+    >
+      <span class="sn-auth-banner-icon" aria-hidden="true">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="10" width="18" height="11" rx="2"></rect>
+          <path d="M7 10V7a5 5 0 0 1 10 0v3"></path>
+        </svg>
+      </span>
+      <span class="sn-auth-banner-text">
+        <strong id="auth-banner-title">You're in read-only mode</strong>
+        <span id="auth-banner-sub" class="sn-auth-banner-sub">Sign in with your Gen Digital account to unlock personalized insights.</span>
+      </span>
+      <a
+        id="auth-banner-cta"
+        class="sn-auth-banner-cta"
+        href="/auth/login"
+      >
+        <span class="sn-ms-tile" aria-hidden="true">
+          <span style="background:#F25022"></span><span style="background:#7FBA00"></span><span style="background:#00A4EF"></span><span style="background:#FFB900"></span>
+        </span>
+        Sign in with Microsoft
+      </a>
+      <button
+        id="auth-banner-dismiss"
+        type="button"
+        class="sn-auth-banner-dismiss"
+        aria-label="Dismiss sign-in banner for this tab"
+        title="Not now"
+      >
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+          <path d="M6 6l12 12M18 6L6 18"></path>
+        </svg>
+      </button>
+    </div>
+    <!--
+      Share-demo-link popover — anchored under the share button in the
+      topnav utility row. Painted by initSharePopover() using data from
+      /api/demo-url. Holds the current ephemeral Cloudflare tunnel URL
+      plus a read-only variant pre-stamped with the shared dashboard
+      key, each with a one-click Copy button. Hidden until the share
+      button is clicked, and dismisses on Esc / outside click.
+    -->
+    <div
+      id="share-popover"
+      class="sn-share-pop"
+      role="dialog"
+      aria-labelledby="share-pop-title"
+      aria-describedby="share-pop-sub"
+      hidden
+    >
+      <div class="sn-share-head">
+        <span class="sn-share-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="6" cy="12" r="2.5"></circle>
+            <circle cx="18" cy="6" r="2.5"></circle>
+            <circle cx="18" cy="18" r="2.5"></circle>
+            <path d="M8.2 10.8l7.6-3.6"></path>
+            <path d="M8.2 13.2l7.6 3.6"></path>
+          </svg>
+        </span>
+        <div class="sn-share-head-meta">
+          <strong id="share-pop-title">Share this dashboard</strong>
+          <span id="share-pop-sub" class="sn-share-sub">Copy a link teammates can open from any device.</span>
+        </div>
+        <button
+          id="share-pop-close"
+          type="button"
+          class="sn-share-close"
+          aria-label="Close share panel"
+          title="Close"
+        >
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true">
+            <path d="M6 6l12 12M18 6L6 18"></path>
+          </svg>
+        </button>
+      </div>
+      <div id="share-pop-body" class="sn-share-body" data-state="loading">
+        <!--
+          Live tunnel state banner. `data-state` drives colour:
+            "up"      → green, shows uptime
+            "down"    → amber, explains why
+            "loading" → neutral, briefly visible on open
+        -->
+        <div class="sn-share-status" data-state="loading">
+          <span class="sn-share-status-dot" aria-hidden="true"></span>
+          <span id="share-pop-status" class="sn-share-status-text">Checking tunnel…</span>
+        </div>
+
+        <label class="sn-share-field" for="share-pop-public">
+          <span class="sn-share-label">Public URL</span>
+          <span class="sn-share-input-row">
+            <input
+              id="share-pop-public"
+              class="sn-share-input"
+              type="text"
+              readonly
+              aria-label="Current public URL"
+              value=""
+            />
+            <button
+              id="share-pop-copy-public"
+              type="button"
+              class="sn-share-copy"
+              data-target="share-pop-public"
+              disabled
+            >
+              Copy
+            </button>
+          </span>
+          <span class="sn-share-hint">What you'll see when you open this URL yourself.</span>
+        </label>
+
+        <label class="sn-share-field" for="share-pop-readonly">
+          <span class="sn-share-label">Team read-only URL</span>
+          <span class="sn-share-input-row">
+            <input
+              id="share-pop-readonly"
+              class="sn-share-input"
+              type="text"
+              readonly
+              aria-label="Team read-only URL with shared key"
+              value=""
+            />
+            <button
+              id="share-pop-copy-readonly"
+              type="button"
+              class="sn-share-copy"
+              data-target="share-pop-readonly"
+              disabled
+            >
+              Copy
+            </button>
+          </span>
+          <span class="sn-share-hint">
+            Opens straight into the dashboard — no sign-in required.
+            Safe for your 8-person team; don't post publicly.
+          </span>
+        </label>
+
+        <p class="sn-share-footer">
+          Powered by an ephemeral Cloudflare quick-tunnel. The URL
+          rotates on restart — open this panel again if teammates
+          report a broken link.
+        </p>
+      </div>
+    </div>
     <main class="mx-auto max-w-6xl px-6 py-10">
       <!--
         "Coming soon" empty state — shown ONLY when the team switcher
@@ -9196,12 +9840,128 @@
         const avatarEl = document.getElementById("user-avatar");
         const nameEl = document.getElementById("user-name");
         const roleEl = document.getElementById("user-role");
+        const sessionBadgeEl = document.getElementById("user-session-badge");
         const menuAvatar = document.getElementById("menu-avatar");
         const menuName = document.getElementById("menu-name");
         const menuRole = document.getElementById("menu-role");
         const menuRoles = document.getElementById("menu-roles");
         const menuProfile = document.getElementById("menu-profile-link");
         const menuCustomize = document.getElementById("menu-customize");
+
+        // Pre-auth banner elements + dismiss-state. Dismissal is per-tab
+        // via sessionStorage so a user who clicks "not now" doesn't get
+        // re-nagged on every page refresh, but a brand-new tab DOES
+        // remind them SSO is available.
+        const bannerEl = document.getElementById("auth-banner");
+        const bannerCta = document.getElementById("auth-banner-cta");
+        const bannerTitle = document.getElementById("auth-banner-title");
+        const bannerSub = document.getElementById("auth-banner-sub");
+        const bannerDismiss = document.getElementById("auth-banner-dismiss");
+        const BANNER_DISMISS_KEY = "gp:auth-banner-dismissed";
+        let bannerDismissedThisTab = false;
+        try {
+          bannerDismissedThisTab =
+            sessionStorage.getItem(BANNER_DISMISS_KEY) === "1";
+        } catch (_err) {
+          // Private-mode Safari throws — fine, treat as not-dismissed.
+        }
+        if (bannerDismiss) {
+          bannerDismiss.addEventListener("click", () => {
+            bannerDismissedThisTab = true;
+            try { sessionStorage.setItem(BANNER_DISMISS_KEY, "1"); } catch (_err) {}
+            if (bannerEl) {
+              bannerEl.removeAttribute("data-state");
+              bannerEl.setAttribute("hidden", "");
+            }
+          });
+        }
+
+        function showAuthBanner(me) {
+          if (!bannerEl) return;
+          if (bannerDismissedThisTab) return;
+          // Only show when OIDC is on the server but this browser has
+          // no session. Anything else (shared-key-only install, real
+          // signed-in session) -> leave banner hidden.
+          const showIt =
+            me &&
+            me.signedIn === false &&
+            typeof me.loginUrl === "string" &&
+            me.loginUrl.length > 0;
+          if (!showIt) {
+            bannerEl.removeAttribute("data-state");
+            bannerEl.setAttribute("hidden", "");
+            return;
+          }
+          // Tune the copy for real-OIDC vs mock-OIDC so a demo viewer
+          // knows why they're looking at a demo sign-in form.
+          if (me.mock === true) {
+            if (bannerTitle) bannerTitle.textContent = "Demo mode active";
+            if (bannerSub) {
+              bannerSub.textContent =
+                "Azure SSO is pending IT approval (RITM0213874). Sign in with a test identity to preview the authenticated experience.";
+            }
+          } else {
+            if (bannerTitle) bannerTitle.textContent = "You're in read-only mode";
+            if (bannerSub) {
+              bannerSub.textContent =
+                "Sign in with your Gen Digital account to unlock personalized insights.";
+            }
+          }
+          if (bannerCta) {
+            const back = window.location.pathname + window.location.search;
+            bannerCta.setAttribute(
+              "href",
+              me.loginUrl + "?return_to=" + encodeURIComponent(back)
+            );
+          }
+          bannerEl.removeAttribute("hidden");
+          bannerEl.setAttribute("data-state", "visible");
+        }
+
+        // Session badge on the chip - three variants, driven by /api/me.
+        // Hidden for pre-auth (the chip already swaps to a sign-in CTA
+        // so a badge would be noise).
+        function applySessionBadge(me) {
+          if (!sessionBadgeEl) return;
+          // Clear first so re-renders don't leak state.
+          chip.removeAttribute("data-session");
+          sessionBadgeEl.innerHTML = "";
+          sessionBadgeEl.removeAttribute("title");
+          if (!me || me.error || me.signedIn === false) return;
+
+          if (me.auth === "oidc" && me.mock === true) {
+            chip.setAttribute("data-session", "demo");
+            sessionBadgeEl.innerHTML =
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="9"></circle><path d="M12 7v5l3 2"></path></svg>' +
+              "<span>Demo</span>";
+            sessionBadgeEl.setAttribute(
+              "title",
+              "Demo sign-in - mock SSO for the Gen Pulse demo. Not a real Azure session."
+            );
+          } else if (me.auth === "oidc") {
+            chip.setAttribute("data-session", "sso");
+            sessionBadgeEl.innerHTML =
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 3l7 3v6c0 4.5-3 8.3-7 9-4-0.7-7-4.5-7-9V6l7-3z"></path><path d="M9 12l2 2 4-4"></path></svg>' +
+              "<span>SSO</span>";
+            sessionBadgeEl.setAttribute(
+              "title",
+              "Signed in via Azure AD single sign-on."
+            );
+          } else if (me.auth === "shared-key" && me.loginUrl) {
+            // Breakglass key path when SSO is enabled - surface the
+            // downgrade so it's visible during QA / demos.
+            chip.setAttribute("data-session", "shared");
+            sessionBadgeEl.innerHTML =
+              '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 7a4 4 0 1 1-8 0 4 4 0 0 1 8 0z"></path><path d="M19 7l-4 4M19 7v4"></path></svg>' +
+              "<span>Read-only</span>";
+            sessionBadgeEl.setAttribute(
+              "title",
+              "Authorised via shared access key, not SSO. Some personalised features are unavailable."
+            );
+          }
+          // When auth is shared-key and SSO isn't even on the server,
+          // we deliberately show no badge - there's nothing to surface.
+        }
 
         function paintAvatar(target, me) {
           target.textContent = "";
@@ -9269,6 +10029,12 @@
         }
 
         function renderMe(me) {
+          // Paint the pre-auth banner + session badge on every render.
+          // Both functions are idempotent: they hide themselves if the
+          // /api/me payload doesn't justify showing them.
+          showAuthBanner(me);
+          applySessionBadge(me);
+
           // OIDC server says "SSO is on, you're not signed in" — render
           // the Sign-in pill and stop.
           if (me && me.signedIn === false && typeof me.loginUrl === "string") {
@@ -9389,6 +10155,224 @@
         refreshMenuThemeLabel();
 
         loadMe();
+      })();
+
+      // ================================================================
+      // Share-demo-link popover
+      //
+      // Lights up the #topnav-share button and its companion popover
+      // using the current state of the ephemeral Cloudflare tunnel,
+      // surfaced by /api/demo-url. We poll on popover open (fresh
+      // state every time the operator asks) plus a quiet background
+      // tick every 60s so the little status dot stays honest without
+      // hammering the endpoint.
+      //
+      // Copy is driven via the async Clipboard API with a visible
+      // "Copied!" affordance; a tiny textarea + execCommand fallback
+      // keeps this working inside Cursor's preview pane and older
+      // Safari builds that still gate Clipboard behind secure-context.
+      // ================================================================
+      (function initSharePopover() {
+        const btn = document.getElementById("topnav-share");
+        const pop = document.getElementById("share-popover");
+        if (!btn || !pop) return;
+
+        const closeBtn = document.getElementById("share-pop-close");
+        const bodyEl = document.getElementById("share-pop-body");
+        const statusEl = bodyEl?.querySelector(".sn-share-status");
+        const statusText = document.getElementById("share-pop-status");
+        const publicInput = document.getElementById("share-pop-public");
+        const readonlyInput = document.getElementById("share-pop-readonly");
+        const copyPublic = document.getElementById("share-pop-copy-public");
+        const copyReadOnly = document.getElementById("share-pop-copy-readonly");
+
+        let isOpen = false;
+        let lastState = null;
+        let pollHandle = null;
+
+        // Anchor the popover under the share button, clamped to the
+        // viewport so we never spill off the right edge on narrow
+        // screens. position:fixed means we re-run this on scroll/resize
+        // while the popover is open.
+        function anchorPopover() {
+          const rect = btn.getBoundingClientRect();
+          const popWidth = pop.offsetWidth || 352;
+          const margin = 8;
+          const maxLeft = window.innerWidth - popWidth - margin;
+          let left = rect.right - popWidth;
+          if (left < margin) left = margin;
+          if (left > maxLeft) left = Math.max(margin, maxLeft);
+          const top = rect.bottom + 8;
+          pop.style.left = left + "px";
+          pop.style.top = top + "px";
+        }
+
+        function setCopyCooldown(copyBtn) {
+          if (!copyBtn) return;
+          const original = copyBtn.dataset.originalLabel || copyBtn.textContent;
+          copyBtn.dataset.originalLabel = original;
+          copyBtn.textContent = "Copied!";
+          copyBtn.setAttribute("data-copied", "true");
+          clearTimeout(copyBtn._snCopyTimer);
+          copyBtn._snCopyTimer = setTimeout(() => {
+            copyBtn.textContent = original;
+            copyBtn.removeAttribute("data-copied");
+          }, 1400);
+        }
+
+        async function copyValue(value, copyBtn) {
+          if (!value) return;
+          try {
+            if (navigator.clipboard && window.isSecureContext) {
+              await navigator.clipboard.writeText(value);
+              setCopyCooldown(copyBtn);
+              return;
+            }
+          } catch (_err) {
+            // Fall through to legacy path — don't swallow silently if
+            // that path also fails.
+          }
+          // Fallback for non-secure context (e.g. plain http://localhost
+          // through a dev proxy) where navigator.clipboard is blocked.
+          try {
+            const ta = document.createElement("textarea");
+            ta.value = value;
+            ta.setAttribute("readonly", "");
+            ta.style.position = "fixed";
+            ta.style.top = "-1000px";
+            document.body.appendChild(ta);
+            ta.select();
+            document.execCommand("copy");
+            document.body.removeChild(ta);
+            setCopyCooldown(copyBtn);
+          } catch (err) {
+            console.warn("[share] copy failed", err);
+          }
+        }
+
+        function paintState(state) {
+          lastState = state;
+          const up = state && state.status === "up" && state.publicUrl;
+
+          // Topnav button dot
+          btn.setAttribute("data-tunnel-status", up ? "up" : "down");
+          btn.setAttribute(
+            "title",
+            up ? "Share this dashboard — tunnel live" : "Share this dashboard — tunnel offline"
+          );
+
+          // Body state indicator
+          if (statusEl) statusEl.setAttribute("data-state", up ? "up" : "down");
+          if (statusText) {
+            if (up) {
+              let agePretty = "";
+              if (state.startedAt) {
+                const ageMs = Date.now() - Date.parse(state.startedAt);
+                if (!Number.isNaN(ageMs) && ageMs >= 0) {
+                  const mins = Math.floor(ageMs / 60000);
+                  if (mins < 1) agePretty = " · started moments ago";
+                  else if (mins < 60) agePretty = ` · up ${mins}m`;
+                  else agePretty = ` · up ${Math.floor(mins / 60)}h ${mins % 60}m`;
+                }
+              }
+              statusText.textContent = "Tunnel live" + agePretty;
+            } else {
+              statusText.textContent =
+                "No tunnel running. Start it with scripts/tunnel-watchdog.sh.";
+            }
+          }
+
+          // Inputs + copy buttons
+          if (publicInput) {
+            publicInput.value = state?.publicUrl ?? "";
+            publicInput.placeholder = up ? "" : "(no public URL available)";
+          }
+          if (copyPublic) copyPublic.disabled = !up;
+
+          if (readonlyInput) {
+            readonlyInput.value = state?.readOnlyUrl ?? "";
+            readonlyInput.placeholder = state?.hasSharedKey === false
+              ? "(no DASHBOARD_KEY set)"
+              : up ? "" : "(no public URL available)";
+          }
+          if (copyReadOnly) {
+            copyReadOnly.disabled = !up || !state?.readOnlyUrl;
+          }
+        }
+
+        async function fetchState() {
+          try {
+            const res = await fetch(apiUrl("/api/demo-url"), {
+              credentials: "same-origin",
+              cache: "no-store",
+            });
+            if (!res.ok) {
+              paintState({ status: "down" });
+              return;
+            }
+            const json = await res.json();
+            paintState(json);
+          } catch (err) {
+            console.warn("[share] /api/demo-url fetch failed", err);
+            paintState({ status: "down" });
+          }
+        }
+
+        function setOpen(open) {
+          isOpen = open;
+          btn.setAttribute("aria-expanded", open ? "true" : "false");
+          if (open) {
+            pop.hidden = false;
+            pop.setAttribute("data-state", "open");
+            anchorPopover();
+            fetchState();
+            // Focus the first actionable element for keyboard users.
+            setTimeout(() => publicInput?.select?.(), 0);
+            window.addEventListener("resize", anchorPopover);
+            window.addEventListener("scroll", anchorPopover, true);
+          } else {
+            pop.removeAttribute("data-state");
+            pop.hidden = true;
+            window.removeEventListener("resize", anchorPopover);
+            window.removeEventListener("scroll", anchorPopover, true);
+          }
+        }
+
+        btn.addEventListener("click", (ev) => {
+          ev.preventDefault();
+          setOpen(!isOpen);
+        });
+        closeBtn?.addEventListener("click", () => setOpen(false));
+
+        document.addEventListener("click", (ev) => {
+          if (!isOpen) return;
+          if (pop.contains(ev.target) || btn.contains(ev.target)) return;
+          setOpen(false);
+        });
+        document.addEventListener("keydown", (ev) => {
+          if (!isOpen) return;
+          if (ev.key === "Escape") {
+            setOpen(false);
+            btn.focus();
+          }
+        });
+
+        copyPublic?.addEventListener("click", () => {
+          copyValue(publicInput?.value ?? "", copyPublic);
+        });
+        copyReadOnly?.addEventListener("click", () => {
+          copyValue(readonlyInput?.value ?? "", copyReadOnly);
+        });
+
+        // Background tick so the topnav dot is accurate even when the
+        // operator hasn't opened the popover yet. 60s is frequent
+        // enough to catch a tunnel drop within the demo window but
+        // quiet enough to be invisible in the server logs.
+        fetchState();
+        pollHandle = setInterval(fetchState, 60000);
+        window.addEventListener("beforeunload", () => {
+          if (pollHandle) clearInterval(pollHandle);
+        });
       })();
 
       // Team switcher — toggles the dropdown of CSM teams this Pulse

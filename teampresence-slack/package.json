@@ -7,7 +7,9 @@
   "main": "src/index.js",
   "scripts": {
     "start": "node src/index.js",
-    "dev": "node --watch src/index.js"
+    "dev": "node --watch src/index.js",
+    "demo": "bash scripts/demo-start.sh",
+    "tunnel": "bash scripts/tunnel-watchdog.sh"
   },
   "engines": {
     "node": ">=20"

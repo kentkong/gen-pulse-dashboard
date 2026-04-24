@@ -4,6 +4,27 @@
 > Add new application → Gen Pulse). Identity team asked to hold execution
 > until Kevin emails the go-ahead from senior manager + director. This doc
 > was attached to the ticket as the full spec.
+>
+> **Update (2026-04-24):** CMDB team (Jaanvi) intercepted the RITM for a
+> validation task — Gen Pulse does not yet have a CMDB application record,
+> so before the Azure app registration can execute we need to create one.
+> Kevin sent the full CMDB intake reply to Jaanvi via Slack on 2026-04-24
+> with the canonical values: Business Criticality = Business Supporting,
+> DR = No, Install type = On Premise, Application type = IaaS,
+> Architecture = Web-based, Compliance = none at pilot stage, SSO = Yes,
+> plus Business Contact (Alan Rogoyski) / SME & Service Owner (Kevin Mold).
+> Currently classified **UAT** — a separate CMDB record will be raised for
+> Production once the corporate hostname is assigned.
+>
+> **Update (2026-04-24, afternoon):** Jaanvi (CMDB) confirmed the reply was
+> more than sufficient — no further info required from our side. She's
+> proceeding directly and expects the CMDB record to be updated **today or
+> Monday**. After that the RITM automatically returns to the Identity team
+> for app registration execution.
+>
+> **Status:** ⏳ CMDB in-progress (Jaanvi, ETA today / Monday 2026-04-27).
+> Identity-team execution unblocks as soon as CMDB flips the record to
+> active. No action required from Kevin until credentials arrive.
 
 Gen Pulse is being rolled out to the EMAIL NORTON CSM team and (soon) the wider CSM org. Senior management gated the roll-out on **Azure AD SSO** replacing the current shared-key demo auth. This doc is a ready-to-forward packet for whoever owns Entra ID / Azure AD app registrations at Gen Digital.
 

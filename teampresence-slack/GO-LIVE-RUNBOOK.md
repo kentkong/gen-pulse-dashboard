@@ -182,13 +182,67 @@ Swap the current `DASHBOARD_KEY` gate for Azure AD SSO. See `USER-ACCOUNT-PLAN.m
 
 | Item | Status | Reference |
 | --- | --- | --- |
-| MyApps / ServiceNow app-registration ticket | **Filed, awaiting identity team** | **RITM0213874** |
+| MyApps / ServiceNow app-registration ticket | **In progress — CMDB validation complete (2026-04-24), awaiting CMDB record creation (ETA today / Mon 2026-04-27), then identity-team execution** | **RITM0213874** |
+| CMDB validation intake (from Jaanvi, CMDB team) | ✅ Complete — reply accepted 2026-04-24. No further info required. | Thread on RITM0213874 |
 | Senior manager + director sign-off to proceed | Pending — identity team asked to hold execution until Kevin emails the go-ahead | — |
 | OIDC_* credentials populated in `.env` | Blocked on above | `./scripts/set-oidc-credentials.sh` |
 | Four security-group Object IDs for role mapping | Blocked on above | `OIDC_ROLE_MAP_*` env vars |
 | First successful `/auth/login` round-trip | Blocked on above | `curl -s $PUBLIC_URL/auth/status` |
 
 When **RITM0213874** resolves, follow the 3-step activation path documented in `AZURE-AD-ADMIN-REQUEST.md` → "When the credentials arrive — 3-step activation". Do not paste credentials anywhere except through `./scripts/set-oidc-credentials.sh`.
+
+---
+
+### 4d. Interim demo URL — ephemeral Cloudflare quick-tunnel [you]
+
+Until Step 4a–4c land, you need a public URL to drive the demo (and let a small pilot group preview on their phones). The repo ships a supervised quick-tunnel for exactly this.
+
+**One-shot start:**
+
+```bash
+cd teampresence-slack
+npm run demo
+```
+
+This boots three things in order:
+
+1. `node src/index.js` — the dashboard (PORT=3000 by default).
+2. `scripts/tunnel-watchdog.sh` — supervises `cloudflared tunnel --url http://localhost:3000`, auto-restarts on network drops, writes the announced public URL to `data/tunnel-state.json`.
+3. A polling loop that waits for the tunnel URL, prints it plus the read-only team URL (with `?key=…` appended if `DASHBOARD_KEY` is set), then tails both log files.
+
+Ctrl+C tears both children down cleanly and wipes the state file so the UI stops advertising a dead URL.
+
+**Surface the URL in the dashboard itself:**
+
+Click the share-link icon in the topnav (three circles with connecting lines, between Search and Notifications). The popover shows:
+
+- Current public URL + a Copy button
+- Team read-only URL (public URL + `?key=…`) + a Copy button
+- Live tunnel status (green = up with uptime counter, amber = down with reason)
+
+The status dot on the topnav icon also tracks the tunnel so you can tell at a glance whether the link is live.
+
+**Known limitations — be honest with the audience:**
+
+- The URL rotates on every tunnel restart. Open the share popover again after a restart and re-paste.
+- Ephemeral `*.trycloudflare.com` URLs are **not acceptable as an Azure AD redirect URI**, so real-SSO testing has to wait for Step 4a–4c. Demo-mode SSO (`AUTH_STRATEGY=mock-oidc`) works over the tunnel just fine.
+- Don't post the URL publicly. The 8-person pilot is the target audience.
+
+**Run just the tunnel (if the server is already running elsewhere):**
+
+```bash
+npm run tunnel
+```
+
+**Logs:** `data/logs/server.log`, `data/logs/tunnel.log` (both gitignored).
+
+**Troubleshooting:**
+
+| Symptom | Check | Fix |
+| --- | --- | --- |
+| Popover says "No tunnel running" but `demo-start.sh` is in the foreground | `data/logs/tunnel.log` | Usually Cloudflare rate-limit or corp proxy. Watchdog will retry with backoff; give it 30–60s. |
+| Popover says "up" but URL 404s | tail `tunnel.log` for the announced URL; compare with popover | Re-open popover (it re-fetches `/api/demo-url`). The watchdog may have just rotated. |
+| `cloudflared: command not found` | `~/bin/cloudflared` present? | Install: `brew install cloudflared` or `curl -L ...` — see Cloudflare docs. |
 
 ---
 
