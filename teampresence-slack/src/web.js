@@ -61,6 +61,7 @@ import {
   completeMockLogin,
 } from "./oidc.js";
 import { readTunnelState, buildShareLinks } from "./demoShare.js";
+import { weatherServiceFromEnv } from "./weather.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
@@ -233,6 +234,19 @@ export function registerWebRoutes({
     workdayPresenceProvider = workdayProviderFromEnv(process.env);
     console.log(
       `[presence] Workday provider: ${workdayPresenceProvider.kind ?? "unknown"}`
+    );
+  }
+
+  /* ---------------------------------------------------------------- *
+   * Weather widget — small hero-chip provider.
+   *
+   * Optional. Opts in when WEATHER_LAT + WEATHER_LON are set in the
+   * env. See src/weather.js for the cache / soft-fail behaviour.
+   * ---------------------------------------------------------------- */
+  const weatherService = weatherServiceFromEnv(process.env);
+  if (weatherService) {
+    console.log(
+      `[weather] enabled for "${weatherService.location}" via ${weatherService.kind}`
     );
   }
   /* ---------------------------------------------------------------- *
@@ -1305,6 +1319,36 @@ export function registerWebRoutes({
       updatedAt: state.updatedAt,
       hasSharedKey: Boolean(dashboardKey),
     });
+  });
+
+  router.get("/api/weather", async (req, res) => {
+    if (!authorized(req, dashboardKey)) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if (!weatherService) {
+      // Return 200 with {enabled:false} rather than 404 so the client
+      // can just hide the chip without logging a network error.
+      res.set("Cache-Control", "no-store");
+      res.json({ enabled: false });
+      return;
+    }
+    try {
+      const reading = await weatherService.getCurrent();
+      if (!reading) {
+        res.set("Cache-Control", "no-store");
+        res.json({ enabled: true, available: false });
+        return;
+      }
+      // 5-min browser cache — half the server TTL — so tabs left
+      // open don't hammer the endpoint, but the UI still picks up
+      // fresh data within one refresh cycle of a real change.
+      res.set("Cache-Control", "public, max-age=300");
+      res.json({ enabled: true, available: true, ...reading });
+    } catch (err) {
+      console.warn("[weather] route error:", err?.message ?? err);
+      res.status(200).json({ enabled: true, available: false });
+    }
   });
 
   router.get("/api/widgets", (req, res) => {
