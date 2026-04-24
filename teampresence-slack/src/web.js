@@ -58,7 +58,9 @@ import {
   startLoginRedirect,
   finishLoginCallback,
   performLogout,
+  completeMockLogin,
 } from "./oidc.js";
+import { readTunnelState, buildShareLinks } from "./demoShare.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
@@ -138,7 +140,7 @@ export function registerWebRoutes({
   let oidcConfig = null;
 
   const authStrategyEnv = (process.env.AUTH_STRATEGY ?? "").trim().toLowerCase();
-  if (authStrategyEnv === "oidc") {
+  if (authStrategyEnv === "oidc" || authStrategyEnv === "mock-oidc") {
     initOidcFromEnv(process.env)
       .then((oidc) => {
         if (!oidc.ready) {
@@ -158,8 +160,9 @@ export function registerWebRoutes({
         const fallback = oidc.allowSharedKeyFallback
           ? "shared-key ALSO accepted (OIDC_ALLOW_SHARED_KEY_FALLBACK=true)"
           : "SSO only";
+        const mode = oidc.mock ? "MOCK" : "OIDC";
         console.log(
-          `[auth] OIDC enabled — issuer=${oidc.issuerUrl} redirect=${oidc.redirectUri} fallback=${fallback}`
+          `[auth] ${mode} enabled — issuer=${oidc.issuerUrl} redirect=${oidc.redirectUri} fallback=${fallback}`
         );
       })
       .catch((err) => {
@@ -169,7 +172,7 @@ export function registerWebRoutes({
       });
   } else if (authStrategyEnv && authStrategyEnv !== "shared-key") {
     console.warn(
-      `[auth] unknown AUTH_STRATEGY=${authStrategyEnv}; valid values: shared-key, oidc. Staying on shared-key.`
+      `[auth] unknown AUTH_STRATEGY=${authStrategyEnv}; valid values: shared-key, oidc, mock-oidc. Staying on shared-key.`
     );
   }
   const seedMemberIds = parseCsv(process.env.TEAM_MEMBER_IDS);
@@ -616,6 +619,23 @@ export function registerWebRoutes({
     }
   });
 
+  // Mock-OIDC callback: the demo login form POSTs back here with the
+  // chosen display name / email / roles. No-op (404) when real OIDC
+  // is active, since Azure never POSTs to /auth/login.
+  router.post("/auth/login", async (req, res, next) => {
+    if (!oidcOrFail(res)) return;
+    if (!oidcConfig?.mock) {
+      res.statusCode = 405;
+      res.type("text/plain").send("POST /auth/login is only available in mock mode.");
+      return;
+    }
+    try {
+      await completeMockLogin(oidcConfig, req, res);
+    } catch (err) {
+      next(err);
+    }
+  });
+
   router.get("/auth/callback", async (req, res, next) => {
     if (!oidcOrFail(res)) return;
     try {
@@ -646,8 +666,10 @@ export function registerWebRoutes({
   // purpose — it only reveals whether OIDC is ON, never anything
   // user-specific. The real "who am I" answer lives at /api/me.
   router.get("/auth/status", (_req, res) => {
+    const ssoPending = !oidcConfig && (authStrategyEnv === "oidc" || authStrategyEnv === "mock-oidc");
     res.json({
-      strategy: oidcConfig ? "oidc" : authStrategyEnv === "oidc" ? "oidc-pending" : "shared-key",
+      strategy: oidcConfig ? "oidc" : ssoPending ? "oidc-pending" : "shared-key",
+      mock: Boolean(oidcConfig?.mock),
       loginUrl: "/auth/login",
       logoutUrl: "/auth/logout",
       enabled: Boolean(oidcConfig),
@@ -1173,9 +1195,11 @@ export function registerWebRoutes({
       // over a 401. The dashboard polls this to decide "show Sign In
       // button vs. show user pill" — 401 would noisy-up the console
       // and force conditional-catch boilerplate in the client.
+      const ssoPending = !oidcConfig && (authStrategyEnv === "oidc" || authStrategyEnv === "mock-oidc");
       res.json({
         signedIn: false,
-        auth: oidcConfig ? "oidc" : authStrategyEnv === "oidc" ? "oidc-pending" : "shared-key",
+        auth: oidcConfig ? "oidc" : ssoPending ? "oidc-pending" : "shared-key",
+        mock: Boolean(oidcConfig?.mock),
         loginUrl: oidcConfig ? "/auth/login" : null,
       });
       return;
@@ -1196,6 +1220,7 @@ export function registerWebRoutes({
       res.json({
         signedIn: true,
         auth: "oidc",
+        mock: Boolean(oidcConfig?.mock),
         userId: user.sub,
         roles: user.roles ?? [],
         displayName: user.displayName ?? null,
@@ -1224,6 +1249,7 @@ export function registerWebRoutes({
     res.json({
       signedIn: false, // not SSO-signed-in; still dashboard-authorised
       auth: "shared-key",
+      mock: false,
       userId,
       roles,
       displayName: identity?.displayName ?? null,
@@ -1236,7 +1262,48 @@ export function registerWebRoutes({
         ? `slack://user?team=&id=${encodeURIComponent(userId)}`
         : null,
       canCustomize: roles.includes("manager") || roles.includes("any"),
-      loginUrl: authStrategyEnv === "oidc" ? "/auth/login" : null,
+      loginUrl: oidcConfig ? "/auth/login" : null,
+    });
+  });
+
+  /* ---------------------------------------------------------------- *
+   * /api/demo-url
+   *
+   * Surfaces the *current* public URL of the ephemeral Cloudflare
+   * quick-tunnel (if any) to the dashboard UI, so the operator can
+   * copy-paste a shareable link without hunting through a terminal.
+   *
+   * The URL is written by scripts/tunnel-watchdog.sh into
+   * data/tunnel-state.json whenever cloudflared announces one; this
+   * endpoint just reads that file. It's always safe to call —
+   * returns `{ status: "down", url: null }` if no tunnel is active.
+   *
+   * Auth gate: we require the normal dashboard auth because the
+   * read-only URL includes the shared dashboard key. Anonymous
+   * callers get 401, same as every other /api/* route.
+   * ---------------------------------------------------------------- */
+  router.get("/api/demo-url", (req, res) => {
+    if (!authorized(req, dashboardKey)) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    const state = readTunnelState();
+    const { publicUrl, readOnlyUrl } = buildShareLinks({
+      publicUrl: state.url,
+      dashboardKey,
+    });
+    // No-store because the URL rotates on tunnel restart. We don't
+    // want a 5-minute desktop cache serving an address that hangs up
+    // in the middle of a demo.
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    res.json({
+      status: state.status,
+      publicUrl: publicUrl ?? null,
+      readOnlyUrl: readOnlyUrl ?? null,
+      localUrl: state.localUrl,
+      startedAt: state.startedAt,
+      updatedAt: state.updatedAt,
+      hasSharedKey: Boolean(dashboardKey),
     });
   });
 

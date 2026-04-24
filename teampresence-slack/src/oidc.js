@@ -171,6 +171,9 @@ export function rolesFromGroups(groups, roleMap) {
  */
 export async function initOidcFromEnv(env = process.env) {
   const strategy = (env.AUTH_STRATEGY ?? "").trim().toLowerCase();
+  if (strategy === "mock-oidc") {
+    return initMockOidcFromEnv(env);
+  }
   if (strategy !== "oidc") {
     return { ready: false, reason: `AUTH_STRATEGY=${strategy || "(unset)"} — OIDC disabled` };
   }
@@ -238,6 +241,348 @@ export async function initOidcFromEnv(env = process.env) {
 }
 
 /* ------------------------------------------------------------------ *
+ * Mock OIDC (AUTH_STRATEGY=mock-oidc)
+ *
+ * Rationale: before Azure AD app registration is approved (RITM0213874
+ * at time of writing), we still need to exercise the full signed-in
+ * UI end-to-end — user chip, avatar, role chips, /api/me shape, the
+ * banner/badge affordances. A separate "demo" auth mode means we can
+ * demo Gen Pulse in "what a signed-in manager sees" state without
+ * being blocked on IT.
+ *
+ * The mock mode produces the EXACT same session-cookie format as
+ * real OIDC (same signPayload / verifyPayload, same cookie name,
+ * same shape in /api/me) — the only thing it skips is the Azure
+ * round-trip. This guarantees that flipping AUTH_STRATEGY from
+ * mock-oidc → oidc is a pure env-var swap: no UI changes needed.
+ *
+ * Security posture: mock mode MUST NEVER be enabled in production.
+ * We guard it two ways:
+ *   1. OIDC_MOCK_ALLOW=true must be set (explicit opt-in).
+ *   2. A loud console warning on boot that includes the pid.
+ * ------------------------------------------------------------------ */
+
+function initMockOidcFromEnv(env) {
+  const allow = String(env.OIDC_MOCK_ALLOW ?? "").toLowerCase() === "true";
+  if (!allow) {
+    return {
+      ready: false,
+      reason:
+        "AUTH_STRATEGY=mock-oidc requires OIDC_MOCK_ALLOW=true — this mode bypasses Azure and must be enabled explicitly.",
+    };
+  }
+
+  const sessionSecret = (env.OIDC_SESSION_SECRET ?? "").trim();
+  if (!sessionSecret) {
+    return {
+      ready: false,
+      reason:
+        "AUTH_STRATEGY=mock-oidc needs OIDC_SESSION_SECRET (>=32 chars). Run `openssl rand -hex 32` and paste the output.",
+    };
+  }
+  if (sessionSecret.length < 32) {
+    return {
+      ready: false,
+      reason:
+        "OIDC_SESSION_SECRET must be >=32 chars (`openssl rand -hex 32` is a good default)",
+    };
+  }
+
+  const port = String(env.PORT ?? "3000").trim();
+  const redirectUri = (env.OIDC_REDIRECT_URI ?? `http://localhost:${port}/auth/callback`).trim();
+  const sessionTtlMinutes = Number(env.OIDC_SESSION_TTL_MINUTES ?? 480);
+  const sessionCookieName = (env.OIDC_SESSION_COOKIE ?? "gp_session").trim();
+  const allowSharedKeyFallback =
+    String(env.OIDC_ALLOW_SHARED_KEY_FALLBACK ?? "").toLowerCase() === "true";
+
+  // Prefill values for the login form — lets a demo rehearsal be a
+  // single click ("Sign in as Kevin Mold (manager)") instead of typing.
+  const mockDefaults = {
+    displayName: (env.OIDC_MOCK_DEFAULT_NAME ?? "Kevin Mold").trim(),
+    email: (env.OIDC_MOCK_DEFAULT_EMAIL ?? "kevin.mold@gendigital.com").trim(),
+    roles: (env.OIDC_MOCK_DEFAULT_ROLES ?? "manager")
+      .split(",")
+      .map((s) => s.trim())
+      .filter(Boolean),
+  };
+
+  console.warn(
+    `[auth] ⚠ MOCK OIDC ENABLED (AUTH_STRATEGY=mock-oidc, pid=${process.pid}). ` +
+      `This bypasses Azure AD — do NOT enable in production. Default identity: ` +
+      `${mockDefaults.displayName} <${mockDefaults.email}> roles=[${mockDefaults.roles.join(",")}]`
+  );
+
+  return {
+    ready: true,
+    mock: true,
+    clientId: "mock-oidc-demo",
+    redirectUri,
+    sessionSecret,
+    sessionCookieName,
+    sessionTtlSeconds: Math.max(60, Math.floor(sessionTtlMinutes * 60)),
+    roleMap: new Map(),
+    allowSharedKeyFallback,
+    secureCookies: redirectUri.startsWith("https://"),
+    issuerUrl: "mock://gen-pulse-demo/",
+    mockDefaults,
+  };
+}
+
+/**
+ * Read a urlencoded or JSON request body into a plain object. Used by
+ * the mock login POST handler. We avoid adding body-parser middleware
+ * (same reason we avoid cookie-parser) — the surface we need is small
+ * enough to hand-roll without risking a CVE-adjacent dep.
+ */
+function readRequestBody(req) {
+  return new Promise((resolve, reject) => {
+    // Slack Bolt's ExpressReceiver registers urlencoded/json globally,
+    // so in almost all cases req.body is already parsed. Short-circuit
+    // when that's true so we don't await the stream a second time.
+    if (req.body && typeof req.body === "object") {
+      resolve(req.body);
+      return;
+    }
+    const chunks = [];
+    let total = 0;
+    const MAX = 1024 * 16; // 16KB is comically generous for a login form
+    req.on("data", (chunk) => {
+      total += chunk.length;
+      if (total > MAX) {
+        reject(new Error("request body too large"));
+        req.destroy();
+        return;
+      }
+      chunks.push(chunk);
+    });
+    req.on("end", () => {
+      const raw = Buffer.concat(chunks).toString("utf8");
+      if (!raw) return resolve({});
+      const ct = (req.headers?.["content-type"] ?? "").toLowerCase();
+      if (ct.includes("application/json")) {
+        try {
+          resolve(JSON.parse(raw));
+        } catch (err) {
+          reject(err);
+        }
+        return;
+      }
+      // Default: urlencoded. Same-name keys (e.g. a multi-select
+      // `<input type=checkbox name="roles">` block) must fold into an
+      // array — otherwise the POST loses every value but the last.
+      const out = {};
+      for (const part of raw.split("&")) {
+        if (!part) continue;
+        const eq = part.indexOf("=");
+        const rawK = eq < 0 ? part : part.slice(0, eq);
+        const rawV = eq < 0 ? "" : part.slice(eq + 1);
+        const k = decodeURIComponent(rawK.replace(/\+/g, " "));
+        const v = decodeURIComponent(rawV.replace(/\+/g, " "));
+        if (Object.prototype.hasOwnProperty.call(out, k)) {
+          const existing = out[k];
+          out[k] = Array.isArray(existing) ? [...existing, v] : [existing, v];
+        } else {
+          out[k] = v;
+        }
+      }
+      resolve(out);
+    });
+    req.on("error", reject);
+  });
+}
+
+function sanitizeReturnTo(raw) {
+  if (typeof raw !== "string") return "/";
+  if (!raw.startsWith("/") || raw.startsWith("//")) return "/";
+  return raw;
+}
+
+export function renderMockLoginForm(oidc, req, res) {
+  const returnTo = sanitizeReturnTo(req.query?.return_to ?? "/");
+  const { displayName, email, roles } = oidc.mockDefaults ?? {
+    displayName: "",
+    email: "",
+    roles: [],
+  };
+  const rolesValue = roles.join(", ");
+  // Minimal, self-contained, inline styles — no external CSS or JS.
+  // Matches the "Gen Pulse" visual language (Gen blue, rounded pill
+  // button, soft card) without pulling anything from the app.
+  const html = `<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Gen Pulse — Demo sign-in</title>
+<style>
+  :root {
+    --bg: #f7f7fb;
+    --card: #ffffff;
+    --ink: #12111c;
+    --muted: #5a5a6d;
+    --border: #e5e5ef;
+    --gen-blue: #0400f5;
+    --gen-purple: #5a00ba;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; background: var(--bg); color: var(--ink); font: 15px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; }
+  .wrap { min-height: 100vh; display: grid; place-items: center; padding: 2rem 1rem; }
+  .card { width: 100%; max-width: 440px; background: var(--card); border: 1px solid var(--border); border-radius: 14px; padding: 2rem 2rem 1.75rem; box-shadow: 0 20px 50px -30px rgba(16,18,46,0.25); }
+  .brand { display: flex; align-items: center; gap: 0.55rem; margin-bottom: 1.1rem; font-weight: 700; font-size: 0.95rem; letter-spacing: 0.01em; }
+  .gen-logo { display: inline-flex; align-items: center; justify-content: center; width: 1.8rem; height: 1.8rem; border-radius: 6px; background: linear-gradient(135deg, var(--gen-blue), var(--gen-purple)); color: #fff; font-weight: 700; font-size: 0.75rem; letter-spacing: 0.02em; }
+  .crumb { color: var(--muted); font-weight: 500; }
+  h1 { font-size: 1.3rem; margin: 0.25rem 0 0.35rem; }
+  .lede { color: var(--muted); margin: 0 0 1.4rem; font-size: 0.92rem; }
+  .warn { display: flex; gap: 0.5rem; align-items: flex-start; padding: 0.6rem 0.75rem; border-radius: 8px; background: #fff8e1; border: 1px solid #facc15; color: #713f12; font-size: 0.82rem; margin-bottom: 1.2rem; }
+  .warn strong { display: block; margin-bottom: 0.1rem; }
+  label { display: block; font-size: 0.78rem; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; margin: 0.85rem 0 0.3rem; }
+  input[type=text], input[type=email] { width: 100%; padding: 0.6rem 0.75rem; border-radius: 8px; border: 1px solid var(--border); font: inherit; color: inherit; background: #fff; }
+  input:focus { outline: 2px solid color-mix(in srgb, var(--gen-blue) 45%, transparent); outline-offset: 1px; border-color: var(--gen-blue); }
+  .roles { display: flex; flex-wrap: wrap; gap: 0.4rem; margin-top: 0.3rem; }
+  .role-chip { border: 1px solid var(--border); background: #fff; padding: 0.35rem 0.7rem; border-radius: 999px; font-size: 0.8rem; cursor: pointer; user-select: none; }
+  .role-chip input { position: absolute; opacity: 0; pointer-events: none; }
+  .role-chip:has(input:checked) { border-color: var(--gen-blue); background: color-mix(in srgb, var(--gen-blue) 8%, transparent); color: var(--gen-blue); font-weight: 600; }
+  .actions { display: flex; align-items: center; gap: 0.75rem; margin-top: 1.4rem; }
+  button.primary { flex: 1; padding: 0.7rem 1rem; background: linear-gradient(135deg, var(--gen-blue), var(--gen-purple)); color: #fff; border: 0; border-radius: 8px; font: inherit; font-weight: 600; cursor: pointer; }
+  button.primary:hover { filter: brightness(1.05); }
+  a.cancel { color: var(--muted); text-decoration: none; font-size: 0.88rem; }
+  a.cancel:hover { color: var(--ink); }
+  .ms-logo { display: inline-grid; grid-template-columns: repeat(2, 0.5rem); grid-template-rows: repeat(2, 0.5rem); gap: 2px; vertical-align: -2px; margin-right: 0.4rem; }
+  .ms-logo span { display: block; }
+  footer { margin-top: 1rem; color: var(--muted); font-size: 0.75rem; text-align: center; }
+</style>
+</head>
+<body>
+  <div class="wrap">
+    <form class="card" method="POST" action="/auth/login">
+      <div class="brand">
+        <span class="gen-logo">Gen</span>
+        <span>Gen Pulse</span>
+        <span class="crumb">› Demo sign-in</span>
+      </div>
+      <h1>Sign in as a test user</h1>
+      <p class="lede">Azure AD app registration is in flight (<code>RITM0213874</code>). Until it clears, this mock sign-in issues the same session cookie format as real SSO so the dashboard can be demo&rsquo;d end-to-end.</p>
+      <div class="warn">
+        <span aria-hidden="true">⚠</span>
+        <span>
+          <strong>Mock mode is active</strong>
+          No Azure round-trip. This page is only available when <code>AUTH_STRATEGY=mock-oidc</code> + <code>OIDC_MOCK_ALLOW=true</code>.
+        </span>
+      </div>
+
+      <input type="hidden" name="return_to" value="${escapeHtml(returnTo)}" />
+
+      <label for="displayName">Display name</label>
+      <input type="text" id="displayName" name="displayName" value="${escapeHtml(displayName)}" autocomplete="off" required />
+
+      <label for="email">Email</label>
+      <input type="email" id="email" name="email" value="${escapeHtml(email)}" autocomplete="off" required />
+
+      <label>Roles (for widget permissions)</label>
+      <div class="roles">
+        ${["member", "manager", "director", "admin"]
+          .map(
+            (r) =>
+              `<label class="role-chip"><input type="checkbox" name="roles" value="${r}"${
+                roles.includes(r) ? " checked" : ""
+              } />${r}</label>`
+          )
+          .join("")}
+      </div>
+
+      <div class="actions">
+        <button type="submit" class="primary">
+          <span class="ms-logo" aria-hidden="true">
+            <span style="background:#F25022"></span><span style="background:#7FBA00"></span><span style="background:#00A4EF"></span><span style="background:#FFB900"></span>
+          </span>
+          Sign in (mock SSO)
+        </button>
+        <a class="cancel" href="${escapeHtml(returnTo)}">Cancel</a>
+      </div>
+
+      <footer>Returns you to <code>${escapeHtml(returnTo)}</code> after sign-in.</footer>
+    </form>
+  </div>
+</body>
+</html>`;
+  res.statusCode = 200;
+  res.setHeader("content-type", "text/html; charset=utf-8");
+  res.setHeader("cache-control", "no-store");
+  res.end(html);
+}
+
+export async function completeMockLogin(oidc, req, res) {
+  let body;
+  try {
+    body = await readRequestBody(req);
+  } catch (err) {
+    res.statusCode = 400;
+    res.setHeader("content-type", "text/plain");
+    res.end(`Could not read login form: ${err?.message ?? err}`);
+    return;
+  }
+
+  const displayName = String(body.displayName ?? "").trim() || "Demo User";
+  const email = String(body.email ?? "").trim() || "demo@gen-pulse.invalid";
+  // Checkboxes come through as either a single string or (if the web
+  // framework groups same-named fields) an array.
+  let roles = [];
+  if (Array.isArray(body.roles)) {
+    roles = body.roles.map(String);
+  } else if (typeof body.roles === "string" && body.roles.length) {
+    roles = [body.roles];
+  }
+  roles = Array.from(new Set(roles.map((r) => r.trim()).filter(Boolean)));
+
+  const returnTo = sanitizeReturnTo(body.return_to ?? "/");
+  const now = Math.floor(Date.now() / 1000);
+
+  // Deterministic-but-per-identity sub so repeated demo sign-ins as
+  // the same user collapse to the same auditable subject.
+  const subSeed = `${displayName}|${email}`;
+  const sub =
+    "mock-" +
+    crypto.createHash("sha256").update(subSeed).digest("hex").slice(0, 16);
+
+  const sessionCookie = signPayload(
+    {
+      v: 1,
+      sub,
+      email,
+      displayName,
+      roles,
+      mock: true,
+      iat: now,
+      exp: now + oidc.sessionTtlSeconds,
+    },
+    oidc.sessionSecret
+  );
+
+  res.setHeader(
+    "set-cookie",
+    serializeCookie(oidc.sessionCookieName, sessionCookie, {
+      path: "/",
+      httpOnly: true,
+      sameSite: "Lax",
+      secure: oidc.secureCookies,
+      maxAge: oidc.sessionTtlSeconds,
+    })
+  );
+  res.statusCode = 302;
+  res.setHeader("location", returnTo);
+  res.end();
+}
+
+function escapeHtml(s) {
+  return String(s ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/* ------------------------------------------------------------------ *
  * Flow helpers
  *
  * These take (oidc, req, res) and do one thing each. They never
@@ -263,6 +608,11 @@ function absoluteSelfUrl(req) {
 }
 
 export async function startLoginRedirect(oidc, req, res) {
+  if (oidc?.mock) {
+    renderMockLoginForm(oidc, req, res);
+    return;
+  }
+
   const codeVerifier = randomPKCECodeVerifier();
   const codeChallenge = await calculatePKCECodeChallenge(codeVerifier);
   const state = randomState();
@@ -410,6 +760,14 @@ export function performLogout(oidc, req, res) {
       maxAge: 0,
     })
   );
+
+  // Mock mode: no Azure, just bounce back to the root.
+  if (oidc?.mock) {
+    res.statusCode = 302;
+    res.setHeader("location", "/");
+    res.end();
+    return;
+  }
 
   // Try to build an Azure end-session URL so the SSO session is also
   // closed — if the discovery doc didn't expose one (rare), fall back
