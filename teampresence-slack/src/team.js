@@ -14,7 +14,30 @@
  * Photos live under /public/team/<slug>.png and are served by the web
  * layer. When switched to prod Slack, real Slack profile photos take
  * precedence — the local avatar is only used as a fallback.
+ *
+ * ---------------- Slack-id override layer ----------------
+ * Real Slack IDs are NOT checked into this file. They live in
+ *   data/slack-overrides.json           (gitignored)
+ * with shape
+ *   { "slug": ["U0123ABCD", ...], ... }
+ * and are merged into the roster at module load. This keeps PII
+ * (Slack workspace identifiers) out of the repo and lets the
+ * `scripts/activate-slack.sh` one-shot activator regenerate the
+ * mapping without touching source code. Missing file = silent
+ * no-op; malformed JSON logs a warning and falls through.
  */
+
+import fs from "node:fs";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const SLACK_OVERRIDES_PATH = path.join(
+  __dirname,
+  "..",
+  "data",
+  "slack-overrides.json"
+);
 
 const AVATAR_BASE = "/team";
 
@@ -120,6 +143,58 @@ export const TEAM = [
     avatarUrl: `${AVATAR_BASE}/jan-bartoncik.png`,
   },
 ];
+
+/**
+ * Merge slackIds from data/slack-overrides.json into the TEAM
+ * array in-place, before any of the index maps are built. Silent
+ * on missing file (pre-Slack state); warns on malformed JSON so a
+ * typo in the overrides file doesn't brick the roster.
+ */
+function applySlackIdOverrides() {
+  let raw;
+  try {
+    raw = fs.readFileSync(SLACK_OVERRIDES_PATH, "utf8");
+  } catch (err) {
+    if (err && err.code === "ENOENT") return; // no overrides yet — expected pre-Slack
+    console.warn(
+      `[team] slack overrides: unreadable at ${SLACK_OVERRIDES_PATH}:`,
+      err.message
+    );
+    return;
+  }
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (err) {
+    console.warn(`[team] slack overrides: malformed JSON — ignoring`, err.message);
+    return;
+  }
+  if (!parsed || typeof parsed !== "object") return;
+  const bySlugLocal = new Map(TEAM.map((m) => [m.slug, m]));
+  let applied = 0;
+  for (const [slug, ids] of Object.entries(parsed)) {
+    // Accept JSON "comment" keys (`//`, `//generated`, etc.) — the
+    // activator writes a small preamble we shouldn't warn about.
+    if (slug.startsWith("/")) continue;
+    const entry = bySlugLocal.get(slug);
+    if (!entry) {
+      console.warn(`[team] slack overrides: unknown slug "${slug}" — skipped`);
+      continue;
+    }
+    if (!Array.isArray(ids)) continue;
+    const clean = ids
+      .map((x) => String(x ?? "").trim())
+      .filter((x) => /^[UW][A-Z0-9]{7,}$/.test(x));
+    if (clean.length === 0) continue;
+    // Replace, not append — activator is the source of truth.
+    entry.slackIds = clean;
+    applied += 1;
+  }
+  if (applied > 0) {
+    console.log(`[team] slack overrides: applied to ${applied} roster entries`);
+  }
+}
+applySlackIdOverrides();
 
 export function initialsFor(fullName) {
   if (!fullName) return "?";

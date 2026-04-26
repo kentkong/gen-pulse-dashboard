@@ -420,7 +420,85 @@ function parseCsv(text, onUnmatched = null) {
       })
     );
   }
-  return rows;
+  // Workday's native CSV export emits one row per absence-day (a 4-day
+  // vacation = 4 rows with start==end), so without this the UI shows
+  // "Jan · Apr 27", "Jan · Apr 28", … as four separate cards. Collapse
+  // contiguous same-person / same-type runs into single ranges.
+  return mergeContiguousAbsences(rows);
+}
+
+/**
+ * Merge adjacent / overlapping absences for the same person + type.
+ *
+ * Two rows are combined when:
+ *   - They resolve to the same person (same slackId, email, or slug),
+ *   - They share the same `type` (PTO, Sick, …),
+ *   - Neither one carries a `½ day` marker — half-days are semantically
+ *     different and must stay as their own cards, and
+ *   - They are adjacent or overlapping (nextStart <= endDate + 1 day).
+ *
+ * Rows that don't share any identifier are left alone; we'd rather
+ * leak a duplicate card than accidentally glue two different people
+ * together.
+ */
+function mergeContiguousAbsences(rows) {
+  if (!Array.isArray(rows) || rows.length < 2) return rows ?? [];
+
+  function personKey(a) {
+    // Prefer the most specific identifier available; fall back through
+    // email then slug. Rows without any identifier get a unique key so
+    // they never merge with anything.
+    if (a.slackId) return `sid:${a.slackId}`;
+    if (a.email) return `em:${a.email}`;
+    if (a.slug) return `sg:${a.slug}`;
+    return `__unkeyed__${Math.random()}`;
+  }
+  function addOneDay(ymd) {
+    const d = new Date(`${ymd}T00:00:00Z`);
+    d.setUTCDate(d.getUTCDate() + 1);
+    return d.toISOString().slice(0, 10);
+  }
+  const isHalfDay = (a) => typeof a.note === "string" && a.note.includes("½");
+
+  const groups = new Map();
+  for (const r of rows) {
+    const k = `${personKey(r)}|${r.type || ""}`;
+    if (!groups.has(k)) groups.set(k, []);
+    groups.get(k).push(r);
+  }
+
+  const out = [];
+  for (const group of groups.values()) {
+    group.sort((a, b) =>
+      a.startDate.localeCompare(b.startDate) ||
+      a.endDate.localeCompare(b.endDate)
+    );
+    let cur = null;
+    for (const r of group) {
+      if (!cur) { cur = { ...r }; continue; }
+      const glue = addOneDay(cur.endDate);
+      const canMerge =
+        !isHalfDay(cur) &&
+        !isHalfDay(r) &&
+        r.startDate <= glue; // adjacent or overlapping
+      if (canMerge) {
+        if (r.endDate > cur.endDate) cur.endDate = r.endDate;
+        // Keep the first non-empty note; ranges rarely carry per-day notes.
+        if (!cur.note && r.note) cur.note = r.note;
+      } else {
+        out.push(cur);
+        cur = { ...r };
+      }
+    }
+    if (cur) out.push(cur);
+  }
+  // Restore startDate-ascending order across the whole list so the
+  // widget renders people in chronological order.
+  out.sort((a, b) =>
+    a.startDate.localeCompare(b.startDate) ||
+    a.endDate.localeCompare(b.endDate)
+  );
+  return out;
 }
 
 /* ================================================================== *

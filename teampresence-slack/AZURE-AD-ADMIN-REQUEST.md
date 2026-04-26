@@ -22,9 +22,31 @@
 > Monday**. After that the RITM automatically returns to the Identity team
 > for app registration execution.
 >
-> **Status:** ⏳ CMDB in-progress (Jaanvi, ETA today / Monday 2026-04-27).
-> Identity-team execution unblocks as soon as CMDB flips the record to
-> active. No action required from Kevin until credentials arrive.
+> **Update (2026-04-26):** Jaanvi (CMDB) posted on RITM0213874:
+> *"Application created in CMDB as requested. No further action
+> required from CMDB team. Closing the ticket."* CMDB's portion is
+> complete ✅ — but the phrasing *"closing the ticket"* is ambiguous:
+> it could mean (a) CMDB closed only their subtask and the RITM has
+> automatically flipped back to the Identity team, or (b) the entire
+> RITM was closed, in which case Identity never picks it up.
+>
+> **Action for Kevin (2026-04-26):** open RITM0213874 in ServiceNow
+> and verify:
+>
+> 1. Is the RITM state "Closed Complete" overall, or still "Work in
+>    Progress" / "Assigned" to the Identity team?
+> 2. If fully closed → reply in the ticket thread asking Jaanvi to
+>    route it back to Identity, OR file a fresh RITM against the
+>    Identity team with a link to the now-complete CMDB record.
+> 3. If still assigned to Identity → nudge the Identity team in the
+>    thread with a one-liner: *"CMDB validation complete per Jaanvi's
+>    comment — can the app registration now execute?"*
+>
+> **Status:** ⚠️ CMDB done; Identity handoff **to be verified**.
+> Kevin still needs to email senior manager + director to lift the
+> "hold for sign-off" flag that was on the RITM from day one (this
+> was always going to be required regardless of CMDB routing — see
+> original 2026-04-20 status above).
 
 Gen Pulse is being rolled out to the EMAIL NORTON CSM team and (soon) the wider CSM org. Senior management gated the roll-out on **Azure AD SSO** replacing the current shared-key demo auth. This doc is a ready-to-forward packet for whoever owns Entra ID / Azure AD app registrations at Gen Digital.
 

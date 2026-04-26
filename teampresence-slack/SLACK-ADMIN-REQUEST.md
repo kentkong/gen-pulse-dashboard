@@ -1,10 +1,30 @@
 # Slack workspace admin — app approval request
 
-> **Status (2026-04-24 PM):** filed in ServiceNow as **RITM0213806**
-> (Slack workspace admin → install Gen Pulse app). App created,
-> collaborator added, scopes configured, **install request submitted
-> and visible to the admin**. Awaiting admin approval on the Gen
-> workspace.
+> **Status (2026-04-26 PM): ✅ APPROVED — pending token retrieval.**
+> RITM0213806 received both approvals on 2026-04-26:
+>
+> - **Petr Šilhan** (app owner) — "I have approved the application for
+>   installation." (sent via Slack-side approval path.)
+> - **Rob Ryan** (workspace admin / senior approver) — "I approve the
+>   request." (ServiceNow approver chain, ref `MSG7711702_TRc8EWEzUeCNfXTb9Psu`.)
+>
+> **Immediate next action (Kevin):** go to `api.slack.com/apps` →
+> **Gen Pulse** → **Install App** — the "Install to Workspace" button
+> should now complete. Copy `Bot User OAuth Token` (`xoxb-…`) and the
+> `Signing Secret` from **Basic Information**. Then run:
+>
+> ```
+> ./scripts/activate-slack.sh
+> ```
+>
+> This one command writes the tokens to `.env`, flips
+> `PRESENCE_MODEL=slack+workday`, maps the 8 roster people to their
+> Slack IDs via `users.list`, and restarts the server. See
+> `GO-LIVE-RUNBOOK.md` Step 3b for the full breakdown.
+>
+> **Original filing (2026-04-24 PM):** App created in the Gen
+> workspace, collaborator added, scopes configured, install request
+> submitted and visible to the admin.
 >
 > **Completed on 2026-04-24 (Kevin):**
 >
@@ -67,36 +87,30 @@ Use this once the workspace admin has approved the app and given you the tokens.
 5. Once approved, copy the **Bot User OAuth Token** — starts with `xoxb-`.
 6. From **Basic Information → App Credentials**, copy the **Signing Secret**.
 
-### Step 2 — put the tokens in `.env` (never in chat, never in commits)
+### Step 2 — run the one-shot activator
 
 ```bash
 cd teampresence-slack
-# Paste each token when prompted — NEVER paste them into chat:
-./scripts/set-slack-tokens.sh
+./scripts/activate-slack.sh
 ```
 
-*(If that script doesn't exist yet, create it by copying `scripts/set-jira-token.sh` and renaming the env var — or just edit `.env` manually with an editor that doesn't sync to iCloud/OneDrive.)*
+It prompts (hidden input) for `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, and `SLACK_APP_TOKEN` (optional — only if Socket Mode is wanted), then in one pass:
 
-Then flip the presence model from Workday-only to combined:
+1. Verifies the bot token with `auth.test` **before touching anything**.
+2. Backs up `.env` to `.env.<timestamp>.bak`.
+3. Writes the three env vars + flips `PRESENCE_MODEL=slack+workday`.
+4. Calls `scripts/map-slack-users.mjs --write` to build `data/slack-overrides.json` (slug → Slack ID mapping, gitignored) by calling `users.list` and name-matching the roster.
+5. Restarts the server on :3000.
+6. Smoke-tests `/api/team` and prints `members=8 slack-driven=N live-avatars=N`.
 
-```ini
-PRESENCE_MODEL=slack+workday
-```
+Never paste tokens into chat / git / this repo. The activator reads them from stdin and the `.env` file is gitignored.
 
-### Step 3 — restart + verify
+### Step 3 — manual verification in the UI
 
-```bash
-pkill -9 -f 'node src/index.js'
-PORT=3000 node src/index.js &
-sleep 3
-curl -s "http://localhost:3000/api/team?key=$(awk -F= '/^DASHBOARD_KEY=/{print $2}' .env)" | python3 -c "
-import sys, json
-d = json.load(sys.stdin)
-real = [m for m in d['members'] if m['slackStatus']['source'] == 'slack']
-print(f'Slack presence: {len(real)}/{len(d[\"members\"])} resolved')"
-```
-
-Expected: `Slack presence: 8/8 resolved` (or however many roster members have `slackIds` in `src/team.js`).
+Open the dashboard, check Team Presence:
+- Green / away dots next to each of the 8 people match their live Slack state.
+- Profile photos switch from the local `/team/<slug>.png` fallbacks to real Slack avatars.
+- Changing your own Slack status to "🏖️ On vacation" flips your Gen Pulse card to "Vacation" within ~60 seconds.
 
 If fewer than 8 resolve, fill in the missing `slackIds: [...]` in `src/team.js` for roster members the bot hasn't seen yet — you can find their IDs in the Slack admin directory or by clicking "View profile → More → Copy member ID".
 
