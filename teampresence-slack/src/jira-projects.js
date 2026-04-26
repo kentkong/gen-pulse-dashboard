@@ -211,6 +211,109 @@ export function resolveJql(env = process.env, projectKey, widgetKey) {
   };
 }
 
+/**
+ * Apply team-scope exclusion clauses to an already-resolved JQL.
+ *
+ * EMOPS and EMAILCO are shared Jira projects. The Norton Email team
+ * and e.g. the Avast Freemium team both file tickets into them, so a
+ * naive `project = EMOPS AND statusCategory != Done` surfaces every
+ * other team's cards on our kanban / throughput / backlog.
+ *
+ * Rather than keep a positive include-list (which has to track every
+ * new extended team member we onboard), we maintain a small negative
+ * exclude-list of the *other* team's signals — their assignees and
+ * their product labels/components. Unassigned work stays visible
+ * (most EMOPS intake is unassigned at the Request stage), and
+ * everyone on our extended team stays visible without having to be
+ * explicitly enrolled.
+ *
+ * The wrapper is purely additive — existing JQL is untouched, we
+ * just AND-append:
+ *
+ *     (assignee is EMPTY OR assignee not in ("Kamila Královcová", …))
+ *     AND (labels is EMPTY OR labels not in ("avast", "A1F"))
+ *     AND (component is EMPTY OR component not in ("Avast Freemium"))
+ *
+ * Driven by three per-project env vars (all optional, all parsed as
+ * comma-separated lists with quote/backslash-safe JQL escaping):
+ *
+ *     JIRA_<PROJECT>_EXCLUDE_ASSIGNEES
+ *     JIRA_<PROJECT>_EXCLUDE_LABELS
+ *     JIRA_<PROJECT>_EXCLUDE_COMPONENTS
+ *
+ * An empty env var means "no exclusion for this dimension"; the
+ * clause is omitted entirely so the JQL stays minimal.
+ */
+export function applyTeamScope(
+  jql,
+  env = process.env,
+  projectKey,
+  { logger = console } = {}
+) {
+  if (!jql || typeof jql !== "string") return { jql: jql ?? "", applied: [] };
+
+  const assignees = parseCsvScope(
+    resolveProjectScalar(env, projectKey, "EXCLUDE_ASSIGNEES").value
+  );
+  const labels = parseCsvScope(
+    resolveProjectScalar(env, projectKey, "EXCLUDE_LABELS").value
+  );
+  const components = parseCsvScope(
+    resolveProjectScalar(env, projectKey, "EXCLUDE_COMPONENTS").value
+  );
+
+  if (
+    assignees.length === 0 &&
+    labels.length === 0 &&
+    components.length === 0
+  ) {
+    return { jql, applied: [] };
+  }
+
+  const applied = [];
+  const clauses = [`(${jql})`];
+
+  if (assignees.length > 0) {
+    const list = assignees.map(jqlQuote).join(", ");
+    clauses.push(`(assignee is EMPTY OR assignee not in (${list}))`);
+    applied.push({ field: "assignee", values: assignees });
+  }
+  if (labels.length > 0) {
+    const list = labels.map(jqlQuote).join(", ");
+    clauses.push(`(labels is EMPTY OR labels not in (${list}))`);
+    applied.push({ field: "labels", values: labels });
+  }
+  if (components.length > 0) {
+    const list = components.map(jqlQuote).join(", ");
+    clauses.push(`(component is EMPTY OR component not in (${list}))`);
+    applied.push({ field: "component", values: components });
+  }
+
+  const wrapped = clauses.join(" AND ");
+  logger.log?.(
+    `[jira] team-scope applied to ${projectKey ?? "default"}: ` +
+      applied
+        .map((a) => `${a.field}×${a.values.length}`)
+        .join(", ")
+  );
+  return { jql: wrapped, applied };
+}
+
+function parseCsvScope(raw) {
+  if (!raw) return [];
+  return String(raw)
+    .split(/,|\n/)
+    .map((s) => s.trim())
+    .filter((s) => s.length > 0);
+}
+
+function jqlQuote(v) {
+  // JQL string escaping: backslash and double-quote are the only
+  // characters we must escape. Wrap in double quotes.
+  const escaped = String(v).replace(/\\/g, "\\\\").replace(/"/g, '\\"');
+  return `"${escaped}"`;
+}
+
 /** Convenience helper: fetch a scalar non-JQL env var, scoped by project. */
 export function resolveProjectScalar(env = process.env, projectKey, suffix) {
   const proj = upperProject(projectKey);

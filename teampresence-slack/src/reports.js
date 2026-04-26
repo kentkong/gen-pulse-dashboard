@@ -380,6 +380,9 @@ export async function buildKanbanBoard({
       "updated",
       "created",
       "issuetype",
+      "labels",
+      "components",
+      "parent",
     ],
     pageSize: 50,
     hardCap,
@@ -400,6 +403,13 @@ export async function buildKanbanBoard({
     issueType: iss.fields?.issuetype?.name ?? null,
     updatedAt: iss.fields?.updated ?? null,
     createdAt: iss.fields?.created ?? null,
+    // Team-scoping signals — carried through so web.js can optionally
+    // filter to just the Norton Email team's work when EMOPS is a
+    // shared project across multiple teams.
+    labels: iss.fields?.labels ?? [],
+    components: (iss.fields?.components ?? []).map((c) => c.name),
+    parentKey: iss.fields?.parent?.key ?? null,
+    parentSummary: iss.fields?.parent?.fields?.summary ?? null,
   });
 
   for (const iss of issues) {

@@ -29,6 +29,7 @@ import {
   defaultProjectKey,
   resolveJql,
   resolveProjectScalar,
+  applyTeamScope,
   isValidProjectKey,
   ALL_PROJECT_KEY,
 } from "./jira-projects.js";
@@ -371,12 +372,12 @@ export function registerWebRoutes({
         return entry.payload;
       }
       const jira = jiraFromEnv();
-      const { jql, source, fallbackFrom } = resolveJql(
+      const { jql: baseJql, source, fallbackFrom } = resolveJql(
         process.env,
         project,
         widgetKey
       );
-      if (!jira || !jql) {
+      if (!jira || !baseJql) {
         return {
           unavailable: true,
           project: project ?? null,
@@ -388,12 +389,22 @@ export function registerWebRoutes({
           generatedAt: Date.now(),
         };
       }
+      // Layer the team-scope exclusions (Avast Freemium etc.) onto the
+      // resolved JQL so every widget — not just kanban — shows just
+      // Norton Email's work. Driven by JIRA_<PROJECT>_EXCLUDE_* env
+      // vars; a no-op when those are unset.
+      const { jql, applied: teamScopeApplied } = applyTeamScope(
+        baseJql,
+        process.env,
+        project
+      );
       const payload = await buildFn({ jira, jql, project });
       const withMeta = {
         ...payload,
         project: project ?? null,
         jqlSource: source,
         jqlFallbackFrom: fallbackFrom,
+        teamScopeApplied,
       };
       caches.set(key, { payload: withMeta, fetchedAt: Date.now() });
       return withMeta;
