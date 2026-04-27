@@ -33,7 +33,7 @@ import {
   isValidProjectKey,
   ALL_PROJECT_KEY,
 } from "./jira-projects.js";
-import { TEAM, findBySlackId, initialsFor } from "./team.js";
+import { TEAM, findBySlackId, findByName, initialsFor } from "./team.js";
 import {
   filterForWeeklyThroughput,
   filterForBacklogOverview,
@@ -577,14 +577,34 @@ export function registerWebRoutes({
   const getThroughputLeaderboard = makeCachedBuilder({
     ttlMs: MEDIUM_TTL_MS,
     widgetKey: "LEADERBOARD",
-    buildFn: ({ jira, jql, project }) => {
+    buildFn: async ({ jira, jql, project }) => {
       const o = leaderboardOptsFor(project);
-      return buildThroughputLeaderboard({
+      const data = await buildThroughputLeaderboard({
         jira,
         jql,
         topN: o.limit,
         timezone,
       });
+      // Avatar swap: Jira returns absolute URLs on the corporate Jira
+      // host (jira.corp.nortonlifelock.com) which a phone on cellular
+      // — or any non-VPN visitor — cannot reach. The <img> falls back
+      // to onerror=this.remove(), leaving an empty circle on Alan's
+      // phone. Remap each row by name to our roster's local
+      // /team/<slug>.png avatars so the leaderboard renders for any
+      // viewer regardless of network. Names not in the roster get
+      // null'd so the gradient+initials placeholder kicks in instead
+      // of a broken corp URL.
+      if (data && Array.isArray(data.rows)) {
+        for (const row of data.rows) {
+          const match = findByName(row?.name);
+          if (match?.avatarUrl) {
+            row.avatarUrl = match.avatarUrl;
+          } else {
+            row.avatarUrl = null;
+          }
+        }
+      }
+      return data;
     },
   });
 
@@ -713,11 +733,23 @@ export function registerWebRoutes({
     });
   });
 
+  /* ---------------------------------------------------------------- *
+   * /team/:file — roster portrait photos.
+   *
+   * Same rationale as /img/:file below: browsers don't forward the
+   * shared-key `?key=` query when fetching <img src> URLs, so leaving
+   * this auth-gated meant any visitor on a network that *can* reach
+   * the public tunnel but *can't* reach the original Jira host (i.e.
+   * any phone on cellular) saw broken/empty avatars on the
+   * Throughput Leaderboard. The photos are not secrets — they're
+   * the same images the corp directory exposes — and the dashboard
+   * already shows everyone's names + roles publicly to anyone with
+   * the share link, so dropping auth on the *image bytes* leaks no
+   * additional information. Strict filename allowlist + path
+   * traversal guard keep the surface area to "files we put in
+   * public/team/".
+   * ---------------------------------------------------------------- */
   router.get("/team/:file", (req, res) => {
-    if (!authorized(req, dashboardKey)) {
-      res.status(401).type("text/plain").send("Unauthorized");
-      return;
-    }
     const file = req.params.file;
     if (!/^[\w.\-]+\.(png|jpg|jpeg|webp)$/i.test(file)) {
       res.status(404).type("text/plain").send("Not found");
@@ -739,6 +771,44 @@ export function registerWebRoutes({
         : ext === ".webp" ? "image/webp"
         : "image/jpeg";
       res.setHeader("cache-control", "public, max-age=3600");
+      res.type(mime).send(buf);
+    });
+  });
+
+  /* ---------------------------------------------------------------- *
+   * /img/:file — static branding assets (logos, badges, decorations).
+   *
+   * These are intentionally UNAUTH'd: they're shipped with the
+   * product, contain no user data, and need to load from inside an
+   * <img> tag where browsers won't forward the `?key=` shared-key
+   * query string. Strict allowlist on the filename + path-traversal
+   * guard keeps the surface area to "files we put in public/img/".
+   * ---------------------------------------------------------------- */
+  router.get("/img/:file", (req, res) => {
+    const file = req.params.file;
+    if (!/^[\w.\-]+\.(png|jpg|jpeg|webp|svg)$/i.test(file)) {
+      res.status(404).type("text/plain").send("Not found");
+      return;
+    }
+    const abs = path.resolve(PUBLIC_DIR, "img", file);
+    if (!abs.startsWith(path.join(PUBLIC_DIR, "img") + path.sep)) {
+      res.status(403).type("text/plain").send("Forbidden");
+      return;
+    }
+    fs.readFile(abs, (err, buf) => {
+      if (err) {
+        res.status(404).type("text/plain").send("Not found");
+        return;
+      }
+      const ext = path.extname(abs).toLowerCase();
+      const mime =
+        ext === ".png" ? "image/png"
+        : ext === ".webp" ? "image/webp"
+        : ext === ".svg" ? "image/svg+xml"
+        : "image/jpeg";
+      // Long cache: branding assets are immutable per deploy. If we
+      // ever swap a file in place, append ?v=N at the call site.
+      res.setHeader("cache-control", "public, max-age=86400, immutable");
       res.type(mime).send(buf);
     });
   });

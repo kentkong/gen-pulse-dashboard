@@ -1362,6 +1362,50 @@
         object-fit: cover;
         display: block;
       }
+
+      /* ------------------------------------------------------------------
+       * Slack-style presence dot — green when the Slack client reports
+       * active, amber when away. Layered over the avatar's bottom-right
+       * corner so it never gets clipped by `overflow: hidden` on
+       * .sn-member-avatar (which we need to keep, otherwise photos
+       * wouldn't crop into a circle).
+       *
+       * The dot is INDEPENDENT of the bucket ring around the avatar:
+       *   - Ring color  = "where they are" / status bucket
+       *                   (WFH = blue, Meeting = indigo, Vacation = navy…)
+       *   - Dot color   = "right now, are they at their desk?"
+       *                   (green = active, amber = idle/away)
+       * Without this two-signal layout, setting a Slack status like
+       * ":house: Working from home" hid the green/amber availability dot
+       * entirely — operators couldn't tell at a glance whether a WFH
+       * teammate was online or just left their laptop.
+       * ------------------------------------------------------------------ */
+      .sn-member-avatar-wrap {
+        position: relative;
+        display: inline-flex;
+        flex: none;
+        line-height: 0;
+      }
+      .sn-presence-dot {
+        position: absolute;
+        right: -1px;
+        bottom: -1px;
+        width: 0.65rem;
+        height: 0.65rem;
+        border-radius: 999px;
+        box-shadow:
+          0 0 0 2px var(--surface),
+          0 1px 2px rgba(8, 16, 58, 0.35);
+        background: transparent;
+        pointer-events: none;
+        transition: background-color 120ms ease;
+      }
+      .sn-presence-dot[data-presence="active"] {
+        background: var(--slack-green, #2bac76);
+      }
+      .sn-presence-dot[data-presence="away"] {
+        background: var(--status-amber, #c88f00);
+      }
       .sn-member-name-row {
         display: flex;
         align-items: center;
@@ -4662,6 +4706,25 @@
         #widget-weekly-throughput .min-w-\[240px\] {
           min-width: 0;
         }
+        /* Headline row (value + delta-pill + SP): on narrow screens,
+           the three items collide because the parent flex row has
+           no `flex-wrap`. Allow it to wrap so the SP figure drops
+           cleanly to its own line below the value+delta when the
+           viewport can't fit them inline. Without this you see the
+           "+77.8% vs prev week" pill text overlapping with
+           "· 113 SP delivered" on phones (caught during a real
+           QR-code phone test). */
+        #widget-weekly-throughput .sn-card > div:first-child > div:first-child > .flex.items-end {
+          flex-wrap: wrap;
+          row-gap: 0.35rem;
+        }
+        /* When SP wraps to a second line, give it the full row so it
+           isn't visually grouped against the delta pill anymore. */
+        #widget-weekly-throughput #wt-sp {
+          flex-basis: 100%;
+          margin-bottom: 0;
+          margin-top: 0.15rem;
+        }
         /* Sparkline SVG: make sure it never dictates a min-width.  */
         #wt-spark {
           width: 100%;
@@ -7543,17 +7606,38 @@
         const bucketAttr = m.slackStatus
           ? `data-bucket="${esc(m.slackStatus.bucket || "unknown")}"`
           : legacyBucketAttr(m);
-        if (m.avatarUrl) {
-          return `
-            <span class="sn-member-avatar" ${bucketAttr} aria-hidden="true">
+
+        // Slack-style availability dot. We surface this independently
+        // of the ring/bucket because operators told us they couldn't
+        // tell whether a "Working from home" teammate was actually at
+        // their desk or had stepped away — Slack's own UI shows both,
+        // and so do we now. Vacation overrides everything else, so we
+        // suppress the dot in that case to avoid sending mixed signals.
+        const ap = m.slackStatus?.autoPresence;
+        const bucket = m.slackStatus?.bucket;
+        const showDot =
+          (ap === "active" || ap === "away") &&
+          bucket !== "vacation" &&
+          bucket !== "unknown";
+        const dotLabel = ap === "active" ? "Online" : "Away";
+        const dotHtml = showDot
+          ? `<span class="sn-presence-dot" data-presence="${esc(ap)}" role="img" aria-label="${esc(dotLabel)}" title="${esc(dotLabel)}"></span>`
+          : "";
+
+        const avatarInner = m.avatarUrl
+          ? `<span class="sn-member-avatar" ${bucketAttr} aria-hidden="true">
               <img src="${esc(m.avatarUrl)}" alt="" loading="lazy"
                    onerror="this.remove();this.parentNode.textContent=${JSON.stringify(initials)};">
-            </span>`;
-        }
-        return `
-          <span class="sn-member-avatar" ${bucketAttr}
+            </span>`
+          : `<span class="sn-member-avatar" ${bucketAttr}
                 style="background:${memberGradient(m.id || m.name)};"
                 aria-hidden="true">${esc(initials)}</span>`;
+
+        // Wrap only when there's a dot to position — keeps the legacy
+        // bot-mode markup byte-for-byte identical, so no other layouts
+        // shift unexpectedly.
+        if (!dotHtml) return avatarInner;
+        return `<span class="sn-member-avatar-wrap">${avatarInner}${dotHtml}</span>`;
       }
 
       // Map the legacy bot-mode checkin/presence state to a ring
@@ -9062,39 +9146,26 @@
       }
 
       /* ---- Last-place badge ----------------------------------------- *
-       * In-joke for the Czech-heavy team: a stylised "ÚP" badge that
-       * nods to Úřad práce ČR (the Czech labour office) without using
-       * its actual logo or wordmark. Rendered the same size as the
-       * bronze trophy so row alignment stays put, and only when there
-       * is a clear "last place" — i.e. > 3 rows visible AND rank ===
-       * totalRows. We use an aria-label, not the wordmark, so the
-       * joke is silent for screen-reader users (no "you're going to
-       * the labour office" announcements at standup).                  */
+       * In-joke for the Czech-heavy team: the Úřad práce ČR (Czech
+       * labour office) ÚP monogram. The wordmark "ÚŘAD PRÁCE" is
+       * intentionally cropped out so we ship only the mark — keeps
+       * row alignment matched to the bronze trophy slot and avoids
+       * stamping a state agency's full logotype into product UI.
+       * Only renders when there is a clear "last place" — i.e. > 3
+       * rows visible AND rank === totalRows. The aria-label stays
+       * neutral so the joke is silent for screen-reader users (no
+       * "you're going to the labour office" announcements at standup). */
       function lbLastPlaceSvg(rank, totalRows) {
         if (totalRows <= 3) return "";
         if (rank !== totalRows) return "";
-        const gradId = `lb-up-grad`;
         return `
           <span class="sn-lb-trophy sn-lb-trophy-last"
                 role="img" aria-label="Bottom of the table — keep going!"
                 title="Bottom of the leaderboard">
-            <svg viewBox="0 0 32 32" width="100%" height="100%" aria-hidden="true">
-              <defs>
-                <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stop-color="#23467f" />
-                  <stop offset="100%" stop-color="#15315c" />
-                </linearGradient>
-              </defs>
-              <circle cx="16" cy="16" r="14" fill="url(#${gradId})"
-                      stroke="#0d2547" stroke-width="0.8" />
-              <circle cx="16" cy="16" r="11.5" fill="none"
-                      stroke="rgba(255,255,255,0.35)" stroke-width="0.5" />
-              <text x="16" y="19.7" text-anchor="middle"
-                    font-family="'Helvetica Neue', Arial, sans-serif"
-                    font-weight="800" font-size="11"
-                    fill="#ffffff" letter-spacing="0.5">ÚP</text>
-              <rect x="10.7" y="6.3" width="1.8" height="1.4" fill="#ffffff" />
-            </svg>
+            <img src="/img/up-badge-mono.png" alt=""
+                 draggable="false"
+                 style="width:100%;height:100%;object-fit:contain;display:block;"
+                 onerror="this.remove()" />
           </span>`;
       }
 
