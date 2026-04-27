@@ -1071,6 +1071,15 @@ export async function buildThroughputLeaderboard({
     const resolved = iss.fields?.resolutiondate;
     if (!resolved) continue;
 
+    // Leaderboards rank *people*, not tickets — a ticket that was
+    // closed/auto-resolved while unassigned (bulk-close, admin
+    // triage, automation) doesn't belong in a "who cleared the most"
+    // ranking, and letting it in surfaces a phantom "Unassigned"
+    // contributor that always beats real people simply by
+    // aggregating every such ticket. Drop them silently; they're
+    // still visible in the throughput/inflow totals.
+    if (!assignee) continue;
+
     // Find which week bucket this resolution falls into. We walk the
     // week starts instead of computing an ISO week directly — avoids
     // off-by-one noise at the Mon boundary in the team timezone.
