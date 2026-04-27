@@ -701,6 +701,46 @@ export async function finishLoginCallback(oidc, req, res) {
   const groups = Array.isArray(claims.groups) ? claims.groups : [];
   const roles = rolesFromGroups(groups, oidc.roleMap);
 
+  // ---- Azure AD specific gotchas worth surfacing in the boot log ---
+  //
+  // (1) "Groups overage": when a user belongs to more than ~150 groups
+  //     Azure stops emitting `groups` and instead emits a hint at
+  //     `_claim_names.groups` pointing to the Graph endpoint where the
+  //     full list lives. We don't follow that pointer (it would require
+  //     an additional Graph permission and a network round-trip per
+  //     login) — but we MUST tell the operator, otherwise a director
+  //     who's in many AD groups will silently get zero roles and
+  //     blame Gen Pulse instead of their AD bloat.
+  //
+  // (2) Role-map configured but produced no roles: by far the most
+  //     common "SSO works but I'm not an admin" support ticket. Almost
+  //     always means the GUID in the env var doesn't match the user's
+  //     actual group membership (typo, swapped tenant, group renamed).
+  //     We can't auto-fix it — but we can make sure the diagnosis is
+  //     a single grep away.
+  const overage =
+    groups.length === 0 &&
+    claims._claim_names &&
+    typeof claims._claim_names === "object" &&
+    "groups" in claims._claim_names;
+  if (overage) {
+    console.warn(
+      `[auth] Azure groups-overage for sub=${claims.oid ?? claims.sub}: ` +
+        `user is in too many groups for the id_token (${
+          claims._claim_sources?.[claims._claim_names.groups]?.endpoint ?? "<no endpoint>"
+        }). Roles will be empty until we wire Graph fallback. ` +
+        `Workaround: ask AD owners to scope the app to a single group claim.`
+    );
+  } else if (oidc.roleMap?.size && groups.length > 0 && roles.length === 0) {
+    console.warn(
+      `[auth] role-map configured but produced no roles for sub=${
+        claims.oid ?? claims.sub
+      }: ${groups.length} groups arrived in the id_token but none matched ` +
+        `OIDC_ROLE_MAP_*. Verify GUIDs against this user's actual AD groups: ` +
+        `[${groups.slice(0, 5).join(", ")}${groups.length > 5 ? `, …+${groups.length - 5}` : ""}]`
+    );
+  }
+
   const now = Math.floor(Date.now() / 1000);
   // Session cookie — everything we need to answer "who is this?"
   // without another network trip. We intentionally do NOT store the
