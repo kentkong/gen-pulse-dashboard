@@ -1016,6 +1016,12 @@ export async function buildThroughputLeaderboard({
   weeksOfTrend = WEEKS_OF_TREND,
   topN = 6,
   hardCap = 2000,
+  // The Jira custom field that holds story points on this instance.
+  // Discovered once via /rest/api/2/field; pinned via env so the
+  // "SP delivered" totals on this widget match the same field used by
+  // Jira's native throughput gadget. Leave empty to disable SP rollup
+  // (the widget falls back to ticket-count-only behaviour).
+  storyPointsField = process.env.JIRA_STORY_POINTS_FIELD?.trim() || "",
 }) {
   if (!jira) throw new Error("buildThroughputLeaderboard: jira client required");
   if (!jql) throw new Error("buildThroughputLeaderboard: jql required");
@@ -1031,8 +1037,11 @@ export async function buildThroughputLeaderboard({
     `(${jql}) AND resolved >= "${windowStart}"` +
     ` AND resolved < "${lastSunday23}"`;
 
+  const fields = ["assignee", "resolutiondate"];
+  if (storyPointsField) fields.push(storyPointsField);
+
   const issues = await jira.searchAll(searchJql, {
-    fields: ["assignee", "resolutiondate"],
+    fields,
     pageSize: 100,
     hardCap,
   });
@@ -1060,7 +1069,13 @@ export async function buildThroughputLeaderboard({
         name: display,
         avatarUrl: avatar ?? null,
         weekly: new Array(weeksOfTrend).fill(0),
+        weeklySP: new Array(weeksOfTrend).fill(0),
         total: 0,
+        totalSP: 0,
+        // Tickets that were resolved but had no SP value — useful for
+        // operators wondering why a person's "X tix · Y SP" line shows
+        // SP < tix (the gap is unsized work, not lost work).
+        unsized: 0,
       });
     }
     return byPerson.get(key);
@@ -1075,6 +1090,24 @@ export async function buildThroughputLeaderboard({
   let unassignedLastWeek = 0;
   let unassignedInWindow = 0;
   const unassignedWeekly = new Array(weeksOfTrend).fill(0);
+
+  // Story-points mirrors of the same buckets. We only populate these
+  // when JIRA_STORY_POINTS_FIELD is configured AND the issue actually
+  // carries a numeric value — Jira's "SP Delivered" series ignores
+  // unsized tickets the same way, so this matches the native chart.
+  let unassignedSPLastWeek = 0;
+  let unassignedSPInWindow = 0;
+  const unassignedSPWeekly = new Array(weeksOfTrend).fill(0);
+  // Coverage diagnostics — surfaced in the payload so the dashboard
+  // can warn operators when SP usage is too sparse to be meaningful
+  // (e.g. "73 of 200 tickets had story points · 36% sized").
+  let sizedCount = 0;
+
+  const readSP = (iss) => {
+    if (!storyPointsField) return null;
+    const v = iss.fields?.[storyPointsField];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
+  };
 
   for (const iss of issues) {
     const assignee = iss.fields?.assignee;
@@ -1102,11 +1135,19 @@ export async function buildThroughputLeaderboard({
     }
     if (bucket < 0) continue;
 
+    const sp = readSP(iss);
+    if (sp != null) sizedCount += 1;
+
     if (!assignee) {
       // Unassigned: count in aggregate only, never in ranking.
       unassignedWeekly[bucket] += 1;
       unassignedInWindow += 1;
       if (bucket === weeksOfTrend - 1) unassignedLastWeek += 1;
+      if (sp != null) {
+        unassignedSPWeekly[bucket] += sp;
+        unassignedSPInWindow += sp;
+        if (bucket === weeksOfTrend - 1) unassignedSPLastWeek += sp;
+      }
       continue;
     }
 
@@ -1120,6 +1161,12 @@ export async function buildThroughputLeaderboard({
     const person = ensurePerson(key, display, avatar);
     person.weekly[bucket] += 1;
     person.total += 1;
+    if (sp != null) {
+      person.weeklySP[bucket] += sp;
+      person.totalSP += sp;
+    } else {
+      person.unsized += 1;
+    }
   }
 
   const lastIdx = weeksOfTrend - 1;
@@ -1129,18 +1176,27 @@ export async function buildThroughputLeaderboard({
     .map((p) => {
       const lastWeek = p.weekly[lastIdx] ?? 0;
       const prevWeek = p.weekly[prevIdx] ?? 0;
+      const lastWeekSP = p.weeklySP[lastIdx] ?? 0;
+      const prevWeekSP = p.weeklySP[prevIdx] ?? 0;
       return {
         ...p,
         lastWeek,
         prevWeek,
         deltaAbs: lastWeek - prevWeek,
+        lastWeekSP: round1(lastWeekSP),
+        prevWeekSP: round1(prevWeekSP),
+        totalSP: round1(p.totalSP),
       };
     })
     .filter((p) => p.total > 0)
     .sort(
+      // Ranking stays ticket-count-driven so an ops team that closes
+      // lots of small unsized work still surfaces — story points are
+      // a secondary, supplemental signal here, not the canonical sort.
       (a, b) =>
         b.lastWeek - a.lastWeek ||
         b.total - a.total ||
+        b.lastWeekSP - a.lastWeekSP ||
         a.name.localeCompare(b.name)
     );
 
@@ -1154,6 +1210,23 @@ export async function buildThroughputLeaderboard({
   const assignedInWindow = rows.reduce((a, r) => a + r.total, 0);
   const totalLastWeek = assignedLastWeek + unassignedLastWeek;
   const totalResolvedWindow = assignedInWindow + unassignedInWindow;
+
+  // Story-points roll-ups. Mirror the ticket-count fields so the UI
+  // can present "X resolved · Y SP" without doing math client-side.
+  const assignedSPLastWeek = rows.reduce((a, r) => a + (r.lastWeekSP ?? 0), 0);
+  const assignedSPWindow = rows.reduce((a, r) => a + (r.totalSP ?? 0), 0);
+  const totalSPLastWeek = round1(assignedSPLastWeek + unassignedSPLastWeek);
+  const totalSPWindow = round1(assignedSPWindow + unassignedSPInWindow);
+  const weeklySPTotals = unassignedSPWeekly.map((u, i) => {
+    const assigned = rows.reduce((a, r) => a + (r.weeklySP?.[i] ?? 0), 0);
+    return round1(assigned + u);
+  });
+
+  // Coverage telemetry — operators get a one-glance answer to "is the
+  // SP number trustworthy?" without us having to inspect Jira manually.
+  const coverageDenom = totalResolvedWindow;
+  const sizedCoveragePct =
+    coverageDenom > 0 ? Math.round((sizedCount / coverageDenom) * 100) : 0;
 
   return {
     weekLabel: isoWeekLabel(
@@ -1173,6 +1246,18 @@ export async function buildThroughputLeaderboard({
     unassignedLastWeek,
     unassignedInWindow,
     unassignedWeekly,
+    storyPointsEnabled: Boolean(storyPointsField),
+    storyPointsField: storyPointsField || null,
+    totalSPLastWeek,
+    totalSPWindow,
+    assignedSPLastWeek: round1(assignedSPLastWeek),
+    assignedSPWindow: round1(assignedSPWindow),
+    unassignedSPLastWeek: round1(unassignedSPLastWeek),
+    unassignedSPInWindow: round1(unassignedSPInWindow),
+    unassignedSPWeekly: unassignedSPWeekly.map(round1),
+    weeklySPTotals,
+    sizedCount,
+    sizedCoveragePct,
     generatedAt: Date.now(),
     timezone,
     jql: searchJql,

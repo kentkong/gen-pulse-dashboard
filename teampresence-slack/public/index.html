@@ -9015,8 +9015,17 @@
         // with Weekly Throughput (same week, same count). The ranked
         // rows below show only assigned work — the unassigned slice
         // surfaces in the footer note for transparency.
+        // Story-points are appended to the headline when they're
+        // configured AND the team actually uses them; otherwise the
+        // SP segment is hidden so we don't display a misleading "0 SP".
+        const spEnabled = Boolean(data?.storyPointsEnabled);
+        const spLastWeek = data?.totalSPLastWeek ?? 0;
+        const spSegment =
+          spEnabled && (spLastWeek > 0 || (data?.totalSPWindow ?? 0) > 0)
+            ? ` · ${spLastWeek} SP`
+            : "";
         totalsEl.textContent =
-          `${data?.totalLastWeek ?? 0} resolved · ${data?.contributorsCount ?? rows.length} contributors`;
+          `${data?.totalLastWeek ?? 0} resolved${spSegment} · ${data?.contributorsCount ?? rows.length} contributors`;
         weekEl.textContent = data?.weekLabel ?? "";
 
         if (rows.length === 0) {
@@ -9050,8 +9059,23 @@
               deltaText = `${deltaAbs} vs prev week`;
             }
 
+            const rowSP = Number(r.totalSP ?? 0);
+            const rowSPLast = Number(r.lastWeekSP ?? 0);
+            const spInline =
+              spEnabled && (rowSP > 0 || rowSPLast > 0)
+                ? ` · ${rowSP} SP`
+                : "";
             const totalLine =
-              `${r.total ?? 0} over ${data?.weeksOfTrend ?? 8} wks`;
+              `${r.total ?? 0} over ${data?.weeksOfTrend ?? 8} wks${spInline}`;
+
+            // Anchor "last wk" tile to tickets (canonical metric); the
+            // SP figure is shown as a smaller secondary line so the
+            // grey-bar number from Jira's native chart is visible
+            // without it competing with the ticket count.
+            const spTile =
+              spEnabled && (rowSPLast > 0 || rowSP > 0)
+                ? `<span class="sn-lb-count-sp" style="display:block;font-size:0.65rem;color:var(--sn-muted, #94a3b8);font-weight:500;line-height:1;margin-top:2px;">${rowSPLast} SP</span>`
+                : "";
 
             return `
               <div class="sn-lb-row${rankClass}" role="group" aria-label="${esc(r.name)} — rank ${rank}">
@@ -9071,6 +9095,7 @@
                 <span class="sn-lb-count">
                   ${r.lastWeek ?? 0}
                   <span class="sn-lb-count-suffix">last wk</span>
+                  ${spTile}
                 </span>
               </div>`;
           })
@@ -9091,9 +9116,19 @@
           unassignedWin > 0 || unassignedWk > 0
             ? `incl. ${unassignedWk} unassigned last wk / ${unassignedWin} over window · `
             : "";
+        // SP-delivered totals across the same window — matches Jira's
+        // native "SP Delivered" series. We also surface coverage so
+        // operators can tell at a glance whether the SP figure is
+        // representative ("36% sized" = many tickets ship without SP).
+        const totalSPWin = data?.totalSPWindow ?? 0;
+        const sizedPct = data?.sizedCoveragePct ?? 0;
+        const spLine =
+          spEnabled && (totalSPWin > 0 || (data?.totalSPLastWeek ?? 0) > 0)
+            ? `${totalSPWin} SP delivered (${sizedPct}% sized) · `
+            : "";
         note.textContent =
           `${moreLine}${data?.totalResolvedWindow ?? 0} resolved across the full ${data?.weeksOfTrend ?? 8}-week window · ` +
-          `${unassignedLine}tz ${data?.timezone ?? ""} · updated ${fmtTime(data?.generatedAt)}`;
+          `${spLine}${unassignedLine}tz ${data?.timezone ?? ""} · updated ${fmtTime(data?.generatedAt)}`;
       }
 
       async function loadThroughputLeaderboard() {
