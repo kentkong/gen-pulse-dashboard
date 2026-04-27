@@ -18,6 +18,27 @@ const WEEKS_OF_TREND = (() => {
   return Number.isFinite(parsed) && parsed > 0 && parsed <= 52 ? parsed : 12;
 })();
 
+/**
+ * Tidy a Jira display name by trimming trailing org suffixes.
+ *
+ * Jira's per-tenant naming convention attaches "(CS)" to contractor
+ * accounts (CS = "consulting/contractor staff"), which is internal
+ * book-keeping and clutters every dashboard cell. We strip:
+ *   - Trailing " (CS)" / " (cs)" / " ( CS )" with any whitespace
+ *   - Any trailing parenthesised abbreviation that's <=4 letters
+ *     when it's clearly an org tag (uppercase or all-lowercase)
+ * Always preserves the rest of the name — first-name lookups,
+ * sorting, and avatar-initial extraction continue to work.
+ */
+function tidyDisplayName(name) {
+  if (typeof name !== "string") return name;
+  const trimmed = name.trim();
+  if (!trimmed) return trimmed;
+  return trimmed
+    .replace(/\s*\(\s*(?:CS|cs|CON|con|EXT|ext)\s*\)\s*$/u, "")
+    .trim();
+}
+
 /** ISO week label like "2026-W15" for a given UTC ms timestamp. */
 function isoWeekLabel(ms) {
   const d = new Date(ms);
@@ -456,7 +477,7 @@ export async function buildKanbanBoard({
   const toTicket = (iss) => ({
     key: iss.key,
     summary: iss.fields?.summary ?? "(no summary)",
-    assignee: iss.fields?.assignee?.displayName ?? null,
+    assignee: tidyDisplayName(iss.fields?.assignee?.displayName ?? null),
     assigneeKey: iss.fields?.assignee?.key ?? iss.fields?.assignee?.name ?? null,
     priority: iss.fields?.priority?.name ?? null,
     status: iss.fields?.status?.name ?? "Unknown",
@@ -714,7 +735,7 @@ export async function buildSlaAgingRisk({
       risks.push({
         key: iss.key,
         summary: iss.fields?.summary ?? "(no summary)",
-        assignee: iss.fields?.assignee?.displayName ?? null,
+        assignee: tidyDisplayName(iss.fields?.assignee?.displayName ?? null),
         priority,
         status: iss.fields?.status?.name ?? "Unknown",
         ageDays: round1(ageDays),
@@ -843,7 +864,7 @@ export async function buildTopPriorityTickets({
     return {
       key: iss.key,
       summary: iss.fields?.summary ?? "(no summary)",
-      assignee: iss.fields?.assignee?.displayName ?? null,
+      assignee: tidyDisplayName(iss.fields?.assignee?.displayName ?? null),
       assigneeKey:
         iss.fields?.assignee?.key ?? iss.fields?.assignee?.name ?? null,
       priority: iss.fields?.priority?.name ?? "Unprioritised",
@@ -932,7 +953,7 @@ export async function buildSprintBacklog({
     const p = iss.fields?.priority?.name ?? "Unprioritised";
     byPriorityMap.set(p, (byPriorityMap.get(p) ?? 0) + 1);
 
-    const aName = iss.fields?.assignee?.displayName ?? null;
+    const aName = tidyDisplayName(iss.fields?.assignee?.displayName ?? null);
     if (aName) {
       byAssigneeMap.set(aName, (byAssigneeMap.get(aName) ?? 0) + 1);
     } else {
@@ -1034,7 +1055,7 @@ export async function buildReopenRate({
   const topReopened = topIssues.map((iss) => ({
     key: iss.key,
     summary: iss.fields?.summary ?? "(no summary)",
-    assignee: iss.fields?.assignee?.displayName ?? null,
+    assignee: tidyDisplayName(iss.fields?.assignee?.displayName ?? null),
     priority: iss.fields?.priority?.name ?? "Unprioritised",
     status: iss.fields?.status?.name ?? "Unknown",
     statusCategory:
@@ -1217,7 +1238,7 @@ export async function buildThroughputLeaderboard({
 
     const key =
       assignee?.key ?? assignee?.name ?? assignee?.accountId ?? "__unassigned";
-    const display = assignee?.displayName ?? "Unassigned";
+    const display = tidyDisplayName(assignee?.displayName) ?? "Unassigned";
     const avatar =
       assignee?.avatarUrls?.["48x48"] ??
       assignee?.avatarUrls?.["32x32"] ??

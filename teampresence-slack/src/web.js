@@ -478,10 +478,22 @@ export function registerWebRoutes({
     widgetKey: "LIFECYCLE",
     buildFn: ({ jira, jql, project }) => {
       const o = lifecycleOptsFor(project);
+      // The "previous period" JQL comes from its own env var
+      // (LIFECYCLE_PREV_JQL) and is NOT routed through
+      // applyTeamScope() by makeCachedBuilder — that wrapper only
+      // scopes the primary JQL. Without this, the current period
+      // would be team-scoped (Norton EMAIL only) while the previous
+      // period leaks in cross-team tickets, producing a misleading
+      // delta. Apply the same exclusion + INCLUDE_BUSINESS_TEAMS
+      // scope explicitly here so both halves of the comparison are
+      // measured against the identical population.
+      const jqlPreviousScoped = o.jqlPrevious
+        ? applyTeamScope(o.jqlPrevious, process.env, project).jql
+        : undefined;
       return buildTicketLifecycle({
         jira,
         jql,
-        jqlPrevious: o.jqlPrevious || undefined,
+        jqlPrevious: jqlPreviousScoped,
         lookbackDays: o.lookbackDays,
         timezone,
       });

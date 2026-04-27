@@ -2211,6 +2211,17 @@
         width: 1.55rem;
         height: 1.55rem;
       }
+      /* Last-place ÚP badge — sized between bronze and rank-4+ slot.
+         Subtle desaturate on hover so the row-hover lift still reads
+         as a "row" interaction rather than a badge interaction. */
+      .sn-lb-row.rank-last .sn-lb-trophy-last {
+        width: 1.55rem;
+        height: 1.55rem;
+        opacity: 0.85;
+      }
+      .sn-lb-row.rank-last:hover .sn-lb-trophy-last {
+        opacity: 1;
+      }
       .sn-lb-sub {
         font-size: 0.72rem;
         color: var(--text-muted, #6b7280);
@@ -9050,6 +9061,43 @@
           </span>`;
       }
 
+      /* ---- Last-place badge ----------------------------------------- *
+       * In-joke for the Czech-heavy team: a stylised "ÚP" badge that
+       * nods to Úřad práce ČR (the Czech labour office) without using
+       * its actual logo or wordmark. Rendered the same size as the
+       * bronze trophy so row alignment stays put, and only when there
+       * is a clear "last place" — i.e. > 3 rows visible AND rank ===
+       * totalRows. We use an aria-label, not the wordmark, so the
+       * joke is silent for screen-reader users (no "you're going to
+       * the labour office" announcements at standup).                  */
+      function lbLastPlaceSvg(rank, totalRows) {
+        if (totalRows <= 3) return "";
+        if (rank !== totalRows) return "";
+        const gradId = `lb-up-grad`;
+        return `
+          <span class="sn-lb-trophy sn-lb-trophy-last"
+                role="img" aria-label="Bottom of the table — keep going!"
+                title="Bottom of the leaderboard">
+            <svg viewBox="0 0 32 32" width="100%" height="100%" aria-hidden="true">
+              <defs>
+                <linearGradient id="${gradId}" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stop-color="#23467f" />
+                  <stop offset="100%" stop-color="#15315c" />
+                </linearGradient>
+              </defs>
+              <circle cx="16" cy="16" r="14" fill="url(#${gradId})"
+                      stroke="#0d2547" stroke-width="0.8" />
+              <circle cx="16" cy="16" r="11.5" fill="none"
+                      stroke="rgba(255,255,255,0.35)" stroke-width="0.5" />
+              <text x="16" y="19.7" text-anchor="middle"
+                    font-family="'Helvetica Neue', Arial, sans-serif"
+                    font-weight="800" font-size="11"
+                    fill="#ffffff" letter-spacing="0.5">ÚP</text>
+              <rect x="10.7" y="6.3" width="1.8" height="1.4" fill="#ffffff" />
+            </svg>
+          </span>`;
+      }
+
       function renderThroughputLeaderboard(data) {
         const list = document.getElementById("lb-list");
         const note = document.getElementById("lb-note");
@@ -9093,10 +9141,17 @@
           return;
         }
 
+        const totalRows = rows.length;
         list.innerHTML = rows
           .map((r, i) => {
             const rank = i + 1;
-            const rankClass = rank <= 3 ? ` rank-${rank}` : "";
+            // Build the rank class: top-3 medals, plus a "rank-last"
+            // marker when there are >3 contributors (the marker is
+            // skipped on tiny boards so we don't shame someone who's
+            // actually 3rd-of-3).
+            let rankClass = "";
+            if (rank <= 3) rankClass = ` rank-${rank}`;
+            if (totalRows > 3 && rank === totalRows) rankClass += " rank-last";
             const hue = lbAvatarHue(r.name);
             const avatar = r.avatarUrl
               ? `<img src="${esc(r.avatarUrl)}" alt="" onerror="this.remove()" />`
@@ -9146,7 +9201,7 @@
                       <span style="margin-left:0.4rem;">· ${esc(totalLine)}</span>
                     </span>
                   </span>
-                  ${lbTrophySvg(rank)}
+                  ${lbTrophySvg(rank)}${lbLastPlaceSvg(rank, totalRows)}
                 </span>
                 ${lbSparklineSvg(r.weekly ?? [])}
                 <span class="sn-lb-count">
