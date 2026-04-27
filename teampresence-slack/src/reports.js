@@ -1066,19 +1066,20 @@ export async function buildThroughputLeaderboard({
     return byPerson.get(key);
   };
 
+  // Track unassigned tickets separately so the leaderboard's totals
+  // reconcile with Weekly Throughput (which counts every resolved
+  // ticket regardless of assignee). We DON'T rank them, but we expose
+  // the counts so the UI can show an explicit "+N unassigned" row
+  // under the ranking — operators were comparing the two widgets and
+  // (rightly) spotted the gap when those tickets were silently dropped.
+  let unassignedLastWeek = 0;
+  let unassignedInWindow = 0;
+  const unassignedWeekly = new Array(weeksOfTrend).fill(0);
+
   for (const iss of issues) {
     const assignee = iss.fields?.assignee;
     const resolved = iss.fields?.resolutiondate;
     if (!resolved) continue;
-
-    // Leaderboards rank *people*, not tickets — a ticket that was
-    // closed/auto-resolved while unassigned (bulk-close, admin
-    // triage, automation) doesn't belong in a "who cleared the most"
-    // ranking, and letting it in surfaces a phantom "Unassigned"
-    // contributor that always beats real people simply by
-    // aggregating every such ticket. Drop them silently; they're
-    // still visible in the throughput/inflow totals.
-    if (!assignee) continue;
 
     // Find which week bucket this resolution falls into. We walk the
     // week starts instead of computing an ISO week directly — avoids
@@ -1100,6 +1101,14 @@ export async function buildThroughputLeaderboard({
       }
     }
     if (bucket < 0) continue;
+
+    if (!assignee) {
+      // Unassigned: count in aggregate only, never in ranking.
+      unassignedWeekly[bucket] += 1;
+      unassignedInWindow += 1;
+      if (bucket === weeksOfTrend - 1) unassignedLastWeek += 1;
+      continue;
+    }
 
     const key =
       assignee?.key ?? assignee?.name ?? assignee?.accountId ?? "__unassigned";
@@ -1136,8 +1145,15 @@ export async function buildThroughputLeaderboard({
     );
 
   const topRows = rows.slice(0, topN);
-  const totalResolvedWindow = rows.reduce((a, r) => a + r.total, 0);
-  const totalLastWeek = rows.reduce((a, r) => a + r.lastWeek, 0);
+  // Totals reconcile with Weekly Throughput: assigned + unassigned.
+  // The `totalLastWeek`/`totalResolvedWindow` fields always include
+  // unassigned so consumers comparing against the throughput widget
+  // see identical numbers. The `assignedLastWeek`/`assignedInWindow`
+  // fields give the people-only figures used to derive the ranking.
+  const assignedLastWeek = rows.reduce((a, r) => a + r.lastWeek, 0);
+  const assignedInWindow = rows.reduce((a, r) => a + r.total, 0);
+  const totalLastWeek = assignedLastWeek + unassignedLastWeek;
+  const totalResolvedWindow = assignedInWindow + unassignedInWindow;
 
   return {
     weekLabel: isoWeekLabel(
@@ -1152,6 +1168,11 @@ export async function buildThroughputLeaderboard({
     contributorsCount: rows.length,
     totalLastWeek,
     totalResolvedWindow,
+    assignedLastWeek,
+    assignedInWindow,
+    unassignedLastWeek,
+    unassignedInWindow,
+    unassignedWeekly,
     generatedAt: Date.now(),
     timezone,
     jql: searchJql,

@@ -9011,6 +9011,10 @@
         }
 
         const rows = Array.isArray(data?.rows) ? data.rows : [];
+        // totalLastWeek now includes unassigned so the header reconciles
+        // with Weekly Throughput (same week, same count). The ranked
+        // rows below show only assigned work — the unassigned slice
+        // surfaces in the footer note for transparency.
         totalsEl.textContent =
           `${data?.totalLastWeek ?? 0} resolved · ${data?.contributorsCount ?? rows.length} contributors`;
         weekEl.textContent = data?.weekLabel ?? "";
@@ -9076,9 +9080,20 @@
           (data?.truncated ?? 0) > 0
             ? `+${data.truncated} more contributors · `
             : "";
+        // Surface unassigned resolutions alongside the window total so
+        // operators can see *why* this widget's week total matches
+        // Weekly Throughput — the gap between "people resolved X" and
+        // "team resolved Y" is always the unassigned count, and hiding
+        // it makes the two widgets look inconsistent.
+        const unassignedWin = data?.unassignedInWindow ?? 0;
+        const unassignedWk = data?.unassignedLastWeek ?? 0;
+        const unassignedLine =
+          unassignedWin > 0 || unassignedWk > 0
+            ? `incl. ${unassignedWk} unassigned last wk / ${unassignedWin} over window · `
+            : "";
         note.textContent =
           `${moreLine}${data?.totalResolvedWindow ?? 0} resolved across the full ${data?.weeksOfTrend ?? 8}-week window · ` +
-          `tz ${data?.timezone ?? ""} · updated ${fmtTime(data?.generatedAt)}`;
+          `${unassignedLine}tz ${data?.timezone ?? ""} · updated ${fmtTime(data?.generatedAt)}`;
       }
 
       async function loadThroughputLeaderboard() {
