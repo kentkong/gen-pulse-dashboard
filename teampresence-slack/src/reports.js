@@ -97,6 +97,10 @@ export async function buildWeeklyThroughput({
   timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
   now = new Date(),
   weeksOfTrend = WEEKS_OF_TREND,
+  // Story-points custom field id; pinned via env so the SP rollup
+  // matches the grey bars on Jira's native throughput gadget. Empty
+  // string disables the SP secondary line.
+  storyPointsField = process.env.JIRA_STORY_POINTS_FIELD?.trim() || "",
 }) {
   if (!jira) throw new Error("buildWeeklyThroughput: jira client required");
   if (!jql) throw new Error("buildWeeklyThroughput: jql required");
@@ -126,9 +130,58 @@ export async function buildWeeklyThroughput({
   }
   const trend = await Promise.all(trendPromises);
 
+  // Story-points rollup for last-week + previous-week. Done as a
+  // single 2-week searchAll (rather than per-week) so the widget pays
+  // the SP cost once, not weeksOfTrend× — keeps p95 latency flat.
+  // Older weeks intentionally skip SP; the leaderboard widget already
+  // covers the 12-week SP totals if a director needs them.
+  let lastWeekSP = 0;
+  let previousSP = 0;
+  let sizedLastWeek = 0;
+  let sizedPrev = 0;
+  if (storyPointsField) {
+    const winFrom = prevMonday;
+    const winTo = lastSunday23;
+    const issues = await jira.searchAll(withinJql(winFrom, winTo), {
+      fields: ["resolutiondate", storyPointsField],
+      pageSize: 100,
+      hardCap: 2000,
+    });
+    const lastFromMs = Date.parse(`${lastMonday.split(" ")[0]}T00:00:00Z`);
+    for (const iss of issues) {
+      const sp = iss.fields?.[storyPointsField];
+      const spNum = typeof sp === "number" && Number.isFinite(sp) ? sp : null;
+      const resStr = iss.fields?.resolutiondate;
+      if (!resStr) continue;
+      const resMs = Date.parse(resStr);
+      if (Number.isNaN(resMs)) continue;
+      const isLastWeek = resMs >= lastFromMs;
+      if (isLastWeek) {
+        if (spNum != null) {
+          lastWeekSP += spNum;
+          sizedLastWeek += 1;
+        }
+      } else {
+        if (spNum != null) {
+          previousSP += spNum;
+          sizedPrev += 1;
+        }
+      }
+    }
+  }
+  const round1 = (n) => Math.round(n * 10) / 10;
+
   const deltaAbs = resolved - previous;
   const deltaPct =
     previous > 0 ? (deltaAbs / previous) * 100 : resolved > 0 ? 100 : 0;
+
+  const deltaSPAbs = round1(lastWeekSP - previousSP);
+  const deltaSPPct =
+    previousSP > 0
+      ? Math.round(((lastWeekSP - previousSP) / previousSP) * 1000) / 10
+      : lastWeekSP > 0
+      ? 100
+      : 0;
 
   return {
     weekLabel: isoWeekLabel(
@@ -141,6 +194,17 @@ export async function buildWeeklyThroughput({
     deltaPct: Math.round(deltaPct * 10) / 10,
     trend,
     trendLabels,
+    weeksOfTrend,
+    storyPointsEnabled: Boolean(storyPointsField),
+    storyPointsField: storyPointsField || null,
+    resolvedSP: round1(lastWeekSP),
+    previousSP: round1(previousSP),
+    deltaSPAbs,
+    deltaSPPct,
+    sizedCoveragePct:
+      resolved > 0 ? Math.round((sizedLastWeek / resolved) * 100) : 0,
+    sizedCoveragePrevPct:
+      previous > 0 ? Math.round((sizedPrev / previous) * 100) : 0,
     generatedAt: Date.now(),
     timezone,
     jql,

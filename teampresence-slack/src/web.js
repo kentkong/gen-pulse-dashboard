@@ -1460,6 +1460,7 @@ export function registerWebRoutes({
       timezone,
       generatedAt: p?.generatedAt,
       project: p?.project,
+      weeksOfTrend: p?.weeksOfTrend,
     })
   );
   registerWidgetRoute("backlog-overview", getBacklog, (p) =>

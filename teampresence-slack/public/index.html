@@ -6829,7 +6829,17 @@
               <div class="mt-3 flex items-end gap-3">
                 <div id="wt-value" class="sn-kpi-value" style="font-size:2.6rem;line-height:1;">–</div>
                 <span id="wt-delta" class="sn-pill sn-pill-muted mb-1">–</span>
+                <span id="wt-sp"
+                      class="sn-muted"
+                      style="font-size:0.85rem;font-weight:600;line-height:1;margin-bottom:0.35rem;display:none;"
+                      aria-label="Story points delivered last week"></span>
               </div>
+              <!-- Self-describing subtitle so newcomers (Alan!) can read
+                   the big number without asking what it counts. Kept short
+                   so it never wraps below the sparkline on mobile. -->
+              <div id="wt-subtitle"
+                   class="sn-muted mt-1 text-xs"
+                   style="font-weight:500;letter-spacing:0.01em;"></div>
               <div id="wt-note" class="sn-muted mt-2 text-xs"></div>
             </div>
             <div class="flex-1 min-w-[240px] max-w-[420px]">
@@ -7846,6 +7856,8 @@
         const weekEl = document.getElementById("wt-week");
         const valEl = document.getElementById("wt-value");
         const delEl = document.getElementById("wt-delta");
+        const spEl = document.getElementById("wt-sp");
+        const subEl = document.getElementById("wt-subtitle");
         const noteEl = document.getElementById("wt-note");
         const spark = document.getElementById("wt-spark");
         const labels = document.getElementById("wt-trend-labels");
@@ -7855,6 +7867,8 @@
           valEl.textContent = "–";
           delEl.className = "sn-pill sn-pill-muted mb-1";
           delEl.textContent = "set up Jira";
+          if (spEl) spEl.style.display = "none";
+          if (subEl) subEl.textContent = "";
           noteEl.textContent = data?.reason
             ? data.reason
             : "Set JIRA_BASE_URL, JIRA_TOKEN and JIRA_THROUGHPUT_JQL.";
@@ -7878,6 +7892,49 @@
         const arrow =
           data.deltaAbs > 0 ? "\u25B2" : data.deltaAbs < 0 ? "\u25BC" : "\u2022";
         delEl.textContent = `${arrow} ${sign}${data.deltaAbs} (${pctLabel})`;
+
+        // SP secondary line — mirrors the grey "SP Delivered" bar on
+        // Jira's native gadget so Alan can compare apples-to-apples.
+        // Hidden if the env var isn't pinned or the team simply didn't
+        // size anything (avoids a misleading "0 SP" pill).
+        if (spEl) {
+          const spVal = Number(data.resolvedSP ?? 0);
+          if (data.storyPointsEnabled && spVal > 0) {
+            const sized = data.sizedCoveragePct ?? 0;
+            spEl.textContent = `· ${spVal} SP delivered`;
+            spEl.title = `${sized}% of last week's tickets had story points sized`;
+            spEl.style.display = "";
+          } else {
+            spEl.style.display = "none";
+          }
+        }
+
+        // Self-describing subtitle. Picks the right wording based on
+        // whether SP is available — never claims SP figures we don't
+        // have, and never hides the headline ticket count.
+        if (subEl) {
+          const N = data.weeksOfTrend ?? 12;
+          // Pull the project list straight from the JQL the server
+          // echoes back — handles `project = EMOPS`, `project in
+          // (EMOPS, EMAILCO)`, or no clause at all. Defaulting to the
+          // user's two known projects keeps the subtitle non-empty
+          // even if the JQL writer ever omits the project clause.
+          let proj = "EMOPS + EMAILCO";
+          const jql = String(data.jql ?? "");
+          const inMatch = /project\s+in\s*\(([^)]+)\)/i.exec(jql);
+          const eqMatch = /project\s*=\s*([A-Z][A-Z0-9_]*)/i.exec(jql);
+          if (inMatch) {
+            proj = inMatch[1]
+              .split(",")
+              .map((s) => s.trim().replace(/['"]/g, ""))
+              .filter(Boolean)
+              .join(" + ");
+          } else if (eqMatch) {
+            proj = eqMatch[1];
+          }
+          subEl.textContent =
+            `Bugs, investigations & requests resolved last week · ${proj} · trend over ${N} wk`;
+        }
 
         noteEl.textContent =
           `Previous week: ${data.previous} resolved · ` +

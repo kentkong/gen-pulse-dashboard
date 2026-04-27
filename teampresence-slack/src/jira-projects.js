@@ -240,9 +240,23 @@ export function resolveJql(env = process.env, projectKey, widgetKey) {
  *     JIRA_<PROJECT>_EXCLUDE_ASSIGNEES
  *     JIRA_<PROJECT>_EXCLUDE_LABELS
  *     JIRA_<PROJECT>_EXCLUDE_COMPONENTS
+ *     JIRA_<PROJECT>_INCLUDE_BUSINESS_TEAMS  (positive filter — Jira
+ *       custom field "Business Team", aligns Gen Pulse with native
+ *       gadgets that scope to the team's owned product streams.
+ *       e.g. "Norton - LCM/AR, Norton - MR/PF, Product&Engineering")
  *
- * An empty env var means "no exclusion for this dimension"; the
- * clause is omitted entirely so the JQL stays minimal.
+ * An empty env var means "no scope for this dimension"; the clause
+ * is omitted entirely so the JQL stays minimal.
+ *
+ * Note on INCLUDE vs EXCLUDE semantics:
+ *   - EXCLUDE_* lists are subtractive ("don't show me Kamila's team")
+ *     and use `field is EMPTY OR field not in (…)` so unsized data
+ *     (e.g. unassigned tickets) is preserved.
+ *   - INCLUDE_BUSINESS_TEAMS is positive ("only show me my owned
+ *     streams") and uses a strict `field in (…)` — tickets without
+ *     a Business Team value are intentionally dropped, because that
+ *     matches how Jira's stock "Throughput" gadget behaves when
+ *     scoped on a multi-select field.
  */
 export function applyTeamScope(
   jql,
@@ -261,11 +275,15 @@ export function applyTeamScope(
   const components = parseCsvScope(
     resolveProjectScalar(env, projectKey, "EXCLUDE_COMPONENTS").value
   );
+  const businessTeams = parseCsvScope(
+    resolveProjectScalar(env, projectKey, "INCLUDE_BUSINESS_TEAMS").value
+  );
 
   if (
     assignees.length === 0 &&
     labels.length === 0 &&
-    components.length === 0
+    components.length === 0 &&
+    businessTeams.length === 0
   ) {
     return { jql, applied: [] };
   }
@@ -277,6 +295,15 @@ export function applyTeamScope(
     const list = assignees.map(jqlQuote).join(", ");
     clauses.push(`(assignee is EMPTY OR assignee not in (${list}))`);
     applied.push({ field: "assignee", values: assignees });
+  }
+  if (businessTeams.length > 0) {
+    // "Business Team" is a custom field; JQL accesses it by quoted
+    // display name. Strict membership (no "is EMPTY OR" branch) so
+    // tickets with no Business Team are dropped — matches how Jira's
+    // native gadget filters this dimension.
+    const list = businessTeams.map(jqlQuote).join(", ");
+    clauses.push(`"Business Team" in (${list})`);
+    applied.push({ field: "Business Team", values: businessTeams, mode: "include" });
   }
   if (labels.length > 0) {
     const list = labels.map(jqlQuote).join(", ");
