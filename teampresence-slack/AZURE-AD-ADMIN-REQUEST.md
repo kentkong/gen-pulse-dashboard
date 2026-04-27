@@ -34,12 +34,12 @@
 > and verify:
 >
 > 1. Is the RITM state "Closed Complete" overall, or still "Work in
->    Progress" / "Assigned" to the Identity team?
+>   Progress" / "Assigned" to the Identity team?
 > 2. If fully closed → reply in the ticket thread asking Jaanvi to
->    route it back to Identity, OR file a fresh RITM against the
+>   route it back to Identity, OR file a fresh RITM against the
 >    Identity team with a link to the now-complete CMDB record.
 > 3. If still assigned to Identity → nudge the Identity team in the
->    thread with a one-liner: *"CMDB validation complete per Jaanvi's
+>   thread with a one-liner: *"CMDB validation complete per Jaanvi's
 >    comment — can the app registration now execute?"*
 >
 > **Status:** ⚠️ CMDB done; Identity handoff **to be verified**.

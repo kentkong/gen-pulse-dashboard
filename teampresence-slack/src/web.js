@@ -622,7 +622,15 @@ export function registerWebRoutes({
   }
 
   router.get("/", (req, res, next) => {
-    if (!authorized(req, dashboardKey)) {
+    // When OIDC (or mock-OIDC) is active, the dashboard HTML itself
+    // is public on purpose: the in-page JS polls /api/me and renders
+    // either the Sign-in banner or the signed-in user pill. Gating
+    // the static HTML behind shared-key would prevent a signed-out
+    // visitor from ever reaching the Sign-in button — that's a
+    // chicken-and-egg the OIDC banner CSS (data-sign-in-mode="true")
+    // was designed to handle. Route-level authn still enforces the
+    // session: every /api/* endpoint goes through currentAuthenticator.
+    if (!oidcConfig && !authorized(req, dashboardKey)) {
       res.status(401).type("text/plain").send("Unauthorized — append ?key=…");
       return;
     }

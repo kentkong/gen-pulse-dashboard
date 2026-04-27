@@ -23,8 +23,9 @@
 # AirDrop to your phone for a quick mobile sanity-check.
 #
 # USAGE
-#   ./scripts/demo-share.sh                  # plain output
-#   ./scripts/demo-share.sh --no-qr          # skip both QR steps
+#   ./scripts/demo-share.sh                  # plain output (greets "team")
+#   ./scripts/demo-share.sh --to Jan         # personalise the greeting
+#   ./scripts/demo-share.sh --to Alan --no-qr
 #   ./scripts/demo-share.sh --slack-only     # just print the message
 # ============================================================================
 
@@ -37,13 +38,17 @@ cd "$REPO_DIR"
 # Args
 SKIP_QR=0
 SLACK_ONLY=0
-for arg in "$@"; do
-  case "$arg" in
-    --no-qr)      SKIP_QR=1 ;;
-    --slack-only) SLACK_ONLY=1; SKIP_QR=1 ;;
+TO="team"   # greeting; --to <name> overrides
+while (( $# > 0 )); do
+  case "$1" in
+    --no-qr)      SKIP_QR=1; shift ;;
+    --slack-only) SLACK_ONLY=1; SKIP_QR=1; shift ;;
+    --to)         TO="${2:-team}"; shift 2 ;;
+    --to=*)       TO="${1#--to=}"; shift ;;
     -h|--help)
       sed -n '/^# =\{60,\}$/,/^# =\{60,\}$/p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
       exit 0 ;;
+    *) printf "unknown arg: %s\n" "$1" >&2; exit 2 ;;
   esac
 done
 
@@ -100,10 +105,11 @@ SHORT=$(printf "%s" "$URL" | shasum -a 256 | cut -c1-8)
 # Use a here-doc with the *terminating* word quoted so $URL etc. still
 # expand. Result is ready to copy-paste into Slack as-is.
 SLACK_BODY=$(cat <<EOF
-Hi Alan — here's the live ${BRAND} dashboard for our session:
+Hi ${TO} — here's the live ${BRAND} dashboard:
 :point_right: ${SHARE_URL}
 
-Works on desktop and mobile (responsive, same link).
+Works on desktop and mobile (responsive, same link). Auto-refreshes,
+no login required — the key in the URL is your read-only access token.
 Ping me if you hit a blank page and I'll bounce the link.
 EOF
 )

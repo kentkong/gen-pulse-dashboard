@@ -18,13 +18,15 @@ Gen Pulse shows the EMAIL NORTON team who's on vacation / sick / leave today and
 
 After the call with [HR contact] + Andy, the agreed first delivery for Alan Rogoyski's demo is **a one-off Workday report**, not an API. Specifically:
 
-| Item | Agreed for first demo |
-| ---- | --------------------- |
-| Delivery format | One-off CSV / Excel report (not a live API) |
-| Scope of people | The EMAIL NORTON team (8 people — see roster below) |
-| Fields requested | Person + Start date + End date + Duration (day / half-day) |
+
+| Item                         | Agreed for first demo                                                                                                                                         |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Delivery format              | One-off CSV / Excel report (not a live API)                                                                                                                   |
+| Scope of people              | The EMAIL NORTON team (8 people — see roster below)                                                                                                           |
+| Fields requested             | Person + Start date + End date + Duration (day / half-day)                                                                                                    |
 | Fields intentionally dropped | **PTO type** (Sick / Holiday / Personal) — HR asked to leave this off for the first cut. The dashboard will show "Time off" instead of the specific sub-type. |
-| Future API path | Satish Yalamandi's integrations BA team + Andy + Ivra. Post-demo. |
+| Future API path              | Satish Yalamandi's integrations BA team + Andy + Ivra. Post-demo.                                                                                             |
+
 
 **What this means for the code:** the CSV parser (`src/presence/workday.js`) accepts the simplified report out of the box — Workday's native column names (`Worker Name`, `Start Date`, `End Date`, `Duration`, with or without a `Comment` column) all resolve automatically. Half-day entries are tagged `½ day` in the note. Rows with no `type` column default to the generic label `Time off` in the manager drill-down view, and "Vacation" on the public dashboard. No format reshaping step is required between HR sending the file and the dashboard reading it.
 

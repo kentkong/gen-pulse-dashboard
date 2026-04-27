@@ -2813,6 +2813,56 @@
         align-items: flex-start;
       }
 
+      /* Slack-status cell.
+       *
+       * Slack's API returns the emoji as a colon-shortcode
+       * (`:house_with_garden:`) — useless to a human reader. The JS
+       * looks the shortcode up in SLACK_EMOJI_MAP and renders the
+       * unicode glyph here; the original shortcode is preserved on
+       * the `title` attribute so power users can still see it on
+       * hover. The text is allowed to wrap onto a second line so
+       * statuses like "Out of Office • Outlook Calendar" don't get
+       * clipped on narrower viewports. */
+      .sn-slack-status {
+        display: inline-flex;
+        align-items: flex-start;
+        gap: 0.4rem;
+        max-width: 32ch;
+        line-height: 1.35;
+      }
+      .sn-slack-status-emoji {
+        font-size: 1.05rem;
+        line-height: 1.2;
+        flex: 0 0 auto;
+        margin-top: 0.05rem;
+        font-family: "Apple Color Emoji", "Segoe UI Emoji",
+          "Noto Color Emoji", "Twemoji Mozilla", "Segoe UI Symbol",
+          system-ui, sans-serif;
+        font-feature-settings: normal;
+      }
+      .sn-slack-status-emoji[data-fallback="true"] {
+        /* Custom workspace emoji we don't have a glyph for: render a
+           neutral dot in the muted brand colour instead of a tofu box. */
+        color: var(--muted-fg);
+        font-size: 0.8rem;
+        margin-top: 0.25rem;
+      }
+      .sn-slack-status-text {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        color: var(--muted-fg);
+      }
+      .sn-slack-status-empty {
+        color: var(--muted-fg);
+        font-style: italic;
+      }
+      /* On narrow viewports we already collapse the table to a
+         stacked card layout via data-label. Within those cards the
+         status line gets the full row width — no need to truncate. */
+      @media (max-width: 760px) {
+        .sn-slack-status { max-width: 100%; }
+      }
+
       /* Source chip — very small badge showing which provider
          (Slack / Workday) sourced this member's presence. Hovering
          shows the classifier's reason via the title attribute. */
@@ -3565,6 +3615,112 @@
       }
       .tone-muted td:first-child {
         box-shadow: inset 3px 0 0 var(--border);
+      }
+
+      /* Bucket-aware row tints for the Team Presence table.
+       *
+       * The legacy `tone-amber/blue/red/muted` rules above paint a
+       * 3px left edge only — useful in dense tables but easy to miss
+       * when scanning a longer roster. The provider-mode (Slack +
+       * Workday) presence model has six well-defined buckets, so we
+       * give each one its own row treatment: same Slack-style left
+       * stripe AS WELL AS a soft full-row background tint that
+       * matches the bucket's pill colour. Result: a manager can scan
+       * the Team Presence table and group members by status at a
+       * glance, exactly the way Slack's own member list does in the
+       * sidebar.
+       *
+       * Tints are intentionally low-contrast (5–8% saturation) so
+       * row text remains the dominant visual element — the goal is
+       * "subtle scanability", not "rainbow table". `color-mix(...
+       * transparent)` keeps the tints theme-aware: the same rule
+       * works in light AND dark mode because the percentage applies
+       * over whatever colour the variable is currently resolving to.
+       *
+       * KEEP IN SYNC with BUCKET_TONES in the JS — same string keys.
+       */
+      .tone-bucket-available td {
+        background: color-mix(in srgb, var(--status-green) 6%, transparent);
+      }
+      .tone-bucket-available td:first-child {
+        box-shadow: inset 3px 0 0 var(--status-green);
+      }
+      .tone-bucket-wfh td {
+        background: color-mix(in srgb, var(--status-blue) 6%, transparent);
+      }
+      .tone-bucket-wfh td:first-child {
+        box-shadow: inset 3px 0 0 var(--status-blue);
+      }
+      .tone-bucket-meeting td {
+        background: color-mix(in srgb, #6366f1 7%, transparent);
+      }
+      .tone-bucket-meeting td:first-child {
+        box-shadow: inset 3px 0 0 #6366f1;
+      }
+      .tone-bucket-away td {
+        background: color-mix(in srgb, var(--gen-yellow) 9%, transparent);
+      }
+      .tone-bucket-away td:first-child {
+        box-shadow: inset 3px 0 0 var(--slack-yellow);
+      }
+      .tone-bucket-vacation td {
+        background: color-mix(in srgb, #8b5cf6 7%, transparent);
+      }
+      .tone-bucket-vacation td:first-child {
+        box-shadow: inset 3px 0 0 #8b5cf6;
+      }
+      .tone-bucket-unknown {
+        color: var(--muted-fg);
+      }
+      .tone-bucket-unknown td {
+        background: color-mix(in srgb, var(--muted-fg) 4%, transparent);
+      }
+      .tone-bucket-unknown td:first-child {
+        box-shadow: inset 3px 0 0 var(--border);
+      }
+      /* Dark theme nudges: the green/blue/yellow base values are
+       * brighter on dark, so the same 6–9% mix would over-saturate
+       * the row. Knock each tint down by ~2 percentage points so
+       * they read as "tinted" rather than "highlighted". */
+      html.theme-dark .tone-bucket-available td {
+        background: color-mix(in srgb, var(--status-green) 4%, transparent);
+      }
+      html.theme-dark .tone-bucket-wfh td {
+        background: color-mix(in srgb, var(--status-blue) 5%, transparent);
+      }
+      html.theme-dark .tone-bucket-meeting td {
+        background: color-mix(in srgb, #818cf8 5%, transparent);
+      }
+      html.theme-dark .tone-bucket-away td {
+        background: color-mix(in srgb, var(--gen-yellow) 6%, transparent);
+      }
+      html.theme-dark .tone-bucket-vacation td {
+        background: color-mix(in srgb, #a78bfa 5%, transparent);
+      }
+      html.theme-dark .tone-bucket-unknown td {
+        background: color-mix(in srgb, var(--muted-fg) 6%, transparent);
+      }
+      /* Hover should still feel interactive — pull a touch more
+       * saturation per bucket so the row visibly reacts under the
+       * cursor without changing hue. Each rule roughly doubles the
+       * resting-state opacity. */
+      .tone-bucket-available:hover td {
+        background: color-mix(in srgb, var(--status-green) 12%, transparent);
+      }
+      .tone-bucket-wfh:hover td {
+        background: color-mix(in srgb, var(--status-blue) 12%, transparent);
+      }
+      .tone-bucket-meeting:hover td {
+        background: color-mix(in srgb, #6366f1 13%, transparent);
+      }
+      .tone-bucket-away:hover td {
+        background: color-mix(in srgb, var(--gen-yellow) 16%, transparent);
+      }
+      .tone-bucket-vacation:hover td {
+        background: color-mix(in srgb, #8b5cf6 13%, transparent);
+      }
+      .tone-bucket-unknown:hover td {
+        background: color-mix(in srgb, var(--muted-fg) 8%, transparent);
       }
 
       .sn-code {
@@ -7059,9 +7215,9 @@
               Planning view →
             </a>
           </div>
-          <div class="sn-muted text-xs mt-1">
+          <div class="sn-muted text-xs mt-1" id="sb-subtitle">
             How much is queued up and what's the shape — the team's current
-            To Do column on board 101032.
+            next-up lane on board 101032.
           </div>
 
           <div class="sn-donut-row mt-4">
@@ -7417,13 +7573,21 @@
         vacation: "sn-pill sn-pill-blue",
         unknown: "sn-pill sn-pill-muted",
       };
+      // Provider-mode row tones. Keep these in sync with the
+      // `.tone-bucket-*` CSS rules — the strings here ARE the class
+      // names appended to each <tr>. We split each bucket onto its
+      // own colour rather than reusing the legacy `tone-blue` /
+      // `tone-amber` set so a manager can tell "WFH" from "Meeting"
+      // (both blue/indigo families) and "Away" from "Vacation" (both
+      // out-of-office) at a glance instead of having to read the
+      // pill in the Today column.
       const BUCKET_TONES = {
-        available: "",
-        wfh: "",
-        meeting: "tone-blue",
-        away: "tone-amber",
-        vacation: "tone-blue",
-        unknown: "tone-muted",
+        available: "tone-bucket-available",
+        wfh: "tone-bucket-wfh",
+        meeting: "tone-bucket-meeting",
+        away: "tone-bucket-away",
+        vacation: "tone-bucket-vacation",
+        unknown: "tone-bucket-unknown",
       };
       // Maps a bucket → the KPI column it counts towards. Keeping the
       // KPI strip backwards-compatible with bot mode means we fold
@@ -7446,6 +7610,164 @@
         none: { label: "no data", cls: "sn-src sn-src-muted" },
         bot: { label: "via bot", cls: "sn-src sn-src-muted" },
       };
+
+      /* ------------------------------------------------------------------ *
+       * Slack-status emoji rendering.
+       *
+       * Slack's users.profile.get returns the status emoji as a
+       * colon-shortcode (`:house_with_garden:`, `:no_entry:`). That's
+       * what Slack's own clients render — they ship a translation
+       * table client-side. We do the same: a curated map of the
+       * Slack-default shortcodes our team is statistically likely
+       * to use (the "default 700" set). Workspace-custom shortcodes
+       * (e.g. `:gen-logo:`) won't be in the map and fall back to a
+       * neutral dot — which is honest, since the actual custom PNG
+       * lives in Slack's CDN behind auth and we can't fetch it.
+       *
+       * Maintenance note: this is intentionally a hand-curated subset
+       * rather than the full 1500-entry emoji-data table. Pulling in
+       * an npm-style emoji lib would balloon the bundle by ~200KB
+       * for a feature where 95% of real usage hits 20 shortcodes.
+       * Add to the map as new statuses appear in your team — there's
+       * a one-liner script in scripts/list-slack-status-emoji.mjs to
+       * sample what's actively in use.
+       * ------------------------------------------------------------------ */
+      const SLACK_EMOJI_MAP = {
+        // Working location / WFH
+        "house_with_garden": "🏡",
+        "house": "🏠",
+        "office": "🏢",
+        "desktop_computer": "🖥️",
+        "computer": "💻",
+        "headphones": "🎧",
+        "speech_balloon": "💬",
+        "calendar": "📅",
+        "spiral_calendar_pad": "🗓️",
+        "date": "📅",
+        "clock1": "🕐", "clock2": "🕑", "clock3": "🕒", "clock4": "🕓",
+        "clock5": "🕔", "clock6": "🕕", "clock7": "🕖", "clock8": "🕗",
+        "clock9": "🕘", "clock10": "🕙", "clock11": "🕚", "clock12": "🕛",
+        // Meeting / focus
+        "phone": "📞",
+        "telephone_receiver": "📞",
+        "movie_camera": "🎥",
+        "video_camera": "📹",
+        "mute": "🔇",
+        "speaker": "🔈",
+        "loud_sound": "🔊",
+        "no_bell": "🔕",
+        "zipper_mouth_face": "🤐",
+        "thinking_face": "🤔",
+        "brain": "🧠",
+        "books": "📚",
+        "memo": "📝",
+        "spiral_note_pad": "🗒️",
+        "dart": "🎯",
+        "rocket": "🚀",
+        // Out of office / vacation
+        "no_entry": "⛔",
+        "no_entry_sign": "🚫",
+        "palm_tree": "🌴",
+        "beach_with_umbrella": "🏖️",
+        "ocean": "🌊",
+        "mountain": "⛰️",
+        "tent": "⛺",
+        "airplane": "✈️",
+        "small_airplane": "🛩️",
+        "luggage": "🧳",
+        "world_map": "🗺️",
+        "earth_americas": "🌎",
+        "earth_africa": "🌍",
+        "earth_asia": "🌏",
+        // Health
+        "face_with_thermometer": "🤒",
+        "mask": "😷",
+        "face_with_head_bandage": "🤕",
+        "sneezing_face": "🤧",
+        "pill": "💊",
+        "syringe": "💉",
+        "stethoscope": "🩺",
+        "hospital": "🏥",
+        "zzz": "💤",
+        "sleeping": "😴",
+        "tired_face": "😩",
+        // Lunch / break
+        "coffee": "☕",
+        "tea": "🍵",
+        "fork_and_knife": "🍴",
+        "knife_fork_plate": "🍽️",
+        "hamburger": "🍔",
+        "pizza": "🍕",
+        "sandwich": "🥪",
+        "salad": "🥗",
+        "bento": "🍱",
+        // Status / mood
+        "warning": "⚠️",
+        "rotating_light": "🚨",
+        "fire": "🔥",
+        "tada": "🎉",
+        "raised_hands": "🙌",
+        "muscle": "💪",
+        "wave": "👋",
+        "+1": "👍", "thumbsup": "👍",
+        "-1": "👎", "thumbsdown": "👎",
+        "white_check_mark": "✅",
+        "heavy_check_mark": "✔️",
+        "x": "❌",
+        "heart": "❤️",
+        // Status dots — Slack ships these as defaults
+        "red_circle": "🔴",
+        "large_orange_circle": "🟠",
+        "large_yellow_circle": "🟡",
+        "large_green_circle": "🟢",
+        "large_blue_circle": "🔵",
+        "large_purple_circle": "🟣",
+        "black_circle": "⚫",
+        "white_circle": "⚪",
+        // Travel / commute
+        "car": "🚗",
+        "blue_car": "🚙",
+        "bus": "🚌",
+        "train2": "🚆",
+        "train": "🚊",
+        "metro": "🚇",
+        "bike": "🚲",
+        "walking": "🚶",
+        // Misc-but-common
+        "eyes": "👀",
+        "mag": "🔍",
+        "wrench": "🔧",
+        "hammer": "🔨",
+        "construction": "🚧",
+        "lock": "🔒",
+        "unlock": "🔓",
+        "bell": "🔔",
+        "star": "⭐",
+        "sparkles": "✨",
+      };
+
+      /**
+       * Render an HTML fragment for a Slack status emoji shortcode.
+       *
+       * @param {string} shortcode  e.g. ":house_with_garden:" or "house_with_garden"
+       * @returns {string} <span> markup. Empty string when the input is empty
+       *                   so the caller can chain it into a template without
+       *                   guarding for undefined.
+       */
+      function slackEmojiHtml(shortcode) {
+        const code = String(shortcode ?? "").trim().replace(/^:|:$/g, "");
+        if (!code) return "";
+        const glyph = SLACK_EMOJI_MAP[code.toLowerCase()];
+        if (glyph) {
+          // Real glyph; the title preserves the original shortcode
+          // for power users who want to know exactly what was set.
+          return `<span class="sn-slack-status-emoji" aria-hidden="true" title=":${esc(code)}:">${glyph}</span>`;
+        }
+        // Workspace-custom emoji we don't have a glyph for.
+        // Render a neutral dot so the row still aligns; show the
+        // shortcode on hover so it isn't lost.
+        return `<span class="sn-slack-status-emoji" data-fallback="true" aria-hidden="true" title=":${esc(code)}: (custom workspace emoji)">●</span>`;
+      }
 
       const API_KEY = new URLSearchParams(location.search).get("key");
       /* ------------------------------------------------------------ *
@@ -7748,16 +8070,46 @@
               const bucketHtml = `<span class="${pillCls}" title="${esc(st.reason ?? "")}">${esc(label)}</span>`;
               const srcHtml = `<span class="${src.cls}" title="${esc(st.reason ?? "")}">${esc(src.label)}</span>`;
 
-              // Status line: raw Slack "emoji + text" when set, or
-              // the Workday vacation reason ("PTO through Friday")
-              // when Workday is authoritative.
-              const statusLine = st.line
-                ? esc(st.line)
-                : m.workday
-                ? `${esc(m.workday.type || "PTO")} through ${esc(m.workday.through)}`
-                : (m.slackStatus.bucket === "unknown"
-                    ? "no Slack status set"
-                    : "—");
+              // Status cell — three branches in priority order:
+              //
+              //   1. Slack status set        → render emoji-glyph + text
+              //                                with the original shortcode
+              //                                preserved on hover.
+              //   2. Workday is authoritative → "PTO through 2026-04-30"
+              //                                (no Slack status was set,
+              //                                but Workday says they're
+              //                                out — the Workday note IS
+              //                                the status here).
+              //   3. Bucket = unknown        → "no Slack status set"
+              //                                rendered in muted italics.
+              //   4. Anything else           → em-dash placeholder.
+              //
+              // The full original "emoji + text" is mirrored to the
+              // <td>'s `title` so users on a desktop browser can hover
+              // to see exactly what Slack reports, even if our emoji
+              // map misses a workspace-custom shortcode.
+              let statusCellHtml;
+              let statusCellTitle = "";
+              if (st.emoji || st.text) {
+                const emojiHtml = slackEmojiHtml(st.emoji);
+                const textHtml = st.text
+                  ? `<span class="sn-slack-status-text">${esc(st.text)}</span>`
+                  : "";
+                statusCellHtml = `<div class="sn-slack-status">${emojiHtml}${textHtml}</div>`;
+                // Full original — emoji shortcode + text — on hover.
+                // Lets a user see ":house_with_garden: WFH" verbatim
+                // when our glyph table is missing an entry, and is a
+                // useful at-a-glance for keyboard-only users.
+                statusCellTitle = [st.emoji, st.text].filter(Boolean).join(" ");
+              } else if (m.workday) {
+                const wType = m.workday.type || "PTO";
+                statusCellHtml = `<span class="sn-slack-status-text">${esc(wType)} through ${esc(m.workday.through)}</span>`;
+                statusCellTitle = `${wType} through ${m.workday.through} (Workday)`;
+              } else if (m.slackStatus.bucket === "unknown") {
+                statusCellHtml = `<span class="sn-slack-status-empty">no Slack status set</span>`;
+              } else {
+                statusCellHtml = `<span class="sn-muted">—</span>`;
+              }
 
               // Until: Slack status_expiration OR Workday.through
               const until = m.workday?.through
@@ -7780,7 +8132,7 @@
                     </div>
                   </td>
                   <td data-label="Today"><div class="sn-status-stack">${bucketHtml}${srcHtml}</div></td>
-                  <td class="sn-muted" data-label="Status">${statusLine}</td>
+                  <td data-label="Slack status"${statusCellTitle ? ` title="${esc(statusCellTitle)}"` : ""}>${statusCellHtml}</td>
                   <td data-label="Until">${until}</td>
                 </tr>`;
             }
@@ -8782,7 +9134,20 @@
         const ageEl = document.getElementById("sb-age-val");
         const noteEl = document.getElementById("sb-note");
         const linkEl = document.getElementById("sb-board-link");
+        const subtitleEl = document.getElementById("sb-subtitle");
         if (!svg || !numEl || !legendEl || !noteEl) return;
+
+        // Mirror the *actual* JQL status filter into the subtitle so the
+        // exec reading the card knows which Jira lane this number comes
+        // from. The widget previously hard-coded "To Do" but EMOPS/EMAILCO
+        // workflows don't have that status name — caught during the
+        // pre-demo accuracy review on 2026-04-27.
+        if (subtitleEl && data && !data.unavailable) {
+          const lane = data.status || "next-up";
+          subtitleEl.textContent =
+            `How much is queued up and what's the shape — the team's current ` +
+            `“${lane}” lane on board 101032.`;
+        }
 
         if (data?.unavailable) {
           renderDonut(svg, []);
