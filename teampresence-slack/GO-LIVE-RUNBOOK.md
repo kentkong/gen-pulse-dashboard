@@ -226,6 +226,93 @@ When **RITM0213874** resolves, follow the 3-step activation path documented in `
 
 ---
 
+### 4e. Production hosting — GCP Cloud Run [you]
+
+Status: **RITM0214505 approved 28-Apr-2026.** NEMO GCP project access is granted. Everything below is scripted by `scripts/gcp-deploy.sh` — the long commentary here is for the *first* deploy only; subsequent deploys are one command.
+
+**Prerequisites (one-time, on your laptop):**
+
+1. Install the `gcloud` CLI. Easiest:
+   ```bash
+   brew install --cask google-cloud-sdk
+   ```
+2. Authenticate:
+   ```bash
+   gcloud auth login
+   gcloud auth application-default login
+   ```
+3. Confirm you can see the NEMO project (substitute the real id from the approval email):
+   ```bash
+   gcloud projects describe <PROJECT_ID>
+   ```
+   If this 403s, your IAM binding hasn't propagated yet — wait 5–10 min and retry.
+
+**First deploy:**
+
+```bash
+cd teampresence-slack
+scripts/gcp-deploy.sh --project-id <PROJECT_ID>
+```
+
+That single command does everything in order:
+
+| # | Step | What it does | Where to look if it breaks |
+|---|---|---|---|
+| 1 | **Verify prereqs** | `gcloud`, `.env`, project access, required APIs | stderr of the script |
+| 2 | **Enable APIs** | artifactregistry, run, secretmanager, iam, cloudbuild | `gcloud services list` |
+| 3 | **Artifact Registry repo** | creates `gen-pulse` docker repo in europe-west3 | `gcloud artifacts repositories list` |
+| 4 | **Runtime service account** | creates `gen-pulse-run@<proj>.iam.gserviceaccount.com` + binds `secretmanager.secretAccessor` and `logging.logWriter` | `gcloud iam service-accounts list` |
+| 5 | **Push secrets** | 6 secrets from `.env` → Secret Manager (idempotent, skips unchanged) | `gcloud secrets list --filter=labels.app=gen-pulse` |
+| 6 | **Split `.env`** | non-secrets → tmp YAML, secrets → Secret Manager bindings | tmp file path in script output |
+| 7 | **Build image** | Cloud Build (default) or local Docker (`--use-local-docker`) | `gcloud builds list --limit=5` |
+| 8 | **Deploy Cloud Run revision** | binds env-vars + secrets, starts on port 8080 | `gcloud run services describe gen-pulse --region=europe-west3` |
+| 9 | **Post-deploy URL pin** | updates `OIDC_REDIRECT_URI` + `PUBLIC_URL` to the real `run.app` URL | `gcloud run revisions list --service=gen-pulse` |
+| 10 | **Smoke-test `/healthz`** | curl returns 200 | deploy fails loud here, nothing is "half-deployed" |
+
+Expected total: **5–8 minutes**, first run.
+
+✅ **Success test:** the script prints the `run.app` URL, `/healthz` returns 200, and opening the URL shows the dashboard landing page with the "Sign in with Microsoft" chip.
+
+**The single manual step after the first deploy:** add the Cloud Run URL to Azure AD as a redirect URI. Go to the Azure portal → App registrations → **Gen Pulse (EMAIL NORTON pilot)** (App ID `072e713c-bef3-4b71-90fc-a54bb392f854`) → Authentication → Add platform → Web → Redirect URI: `<run.app URL>/auth/callback`. Save. Takes 60 seconds, no new ticket needed.
+
+**Subsequent deploys:**
+
+```bash
+# Code-only change (skip re-pushing identical secrets):
+scripts/gcp-deploy.sh --project-id <PROJECT_ID> --skip-secrets
+
+# Secret rotation only (e.g. Azure AD client_secret renewed):
+scripts/gcp-secrets-push.sh --project-id <PROJECT_ID>
+# Then either a full deploy, or:
+gcloud run services update-traffic gen-pulse --to-latest \
+  --project=<PROJECT_ID> --region=europe-west3
+```
+
+**Troubleshooting:**
+
+| Symptom | Command to diagnose | Usual fix |
+|---|---|---|
+| `permission denied` on gcloud | `gcloud auth list` | Run `gcloud auth login` again; confirm the right Gen Digital account is active. |
+| Cloud Build step 3+ min with no output | `gcloud builds list --limit=1 --format='value(status,logUrl)'` | Normal — `npm ci` compiles better-sqlite3 from source. Use `--machine-type=e2-highcpu-8` if it ever blows past 10 min (already the script default). |
+| `/healthz` returns 503 after deploy | `gcloud run services logs tail gen-pulse --region=europe-west3` | Check for missing secret binding — `gcloud secrets versions list gen-pulse-<name>` should have ≥1 ENABLED version. |
+| `/auth/login` 500s with `AADSTS50011` | Azure AD app registration | You haven't added the `run.app` URL as a redirect URI yet (the post-deploy manual step above). |
+| Image push 403s | `gcloud auth configure-docker europe-west3-docker.pkg.dev` | Re-run that command; refreshes `~/.docker/config.json`. |
+
+**Cost expectation:** Cloud Run with min-instances=0 and our 8-person traffic pattern costs roughly **$3–8/month** — the free tier covers almost all of it. Secret Manager is free under 10K accesses/month; Artifact Registry is ~$0.10/month for the single 180 MB image. No action needed on billing alerts unless we open the app up significantly wider.
+
+**Rollback:**
+
+Cloud Run keeps every past revision. To roll back to the previous version:
+```bash
+gcloud run services update-traffic gen-pulse \
+  --project=<PROJECT_ID> --region=europe-west3 \
+  --to-revisions=gen-pulse-00002-abc=100   # pick the revision you want live
+```
+
+Zero-downtime, zero risk — no image rebuild, no config reload, just a traffic flip.
+
+---
+
 ### 4d. Interim demo URL — ephemeral Cloudflare quick-tunnel [you]
 
 Until Step 4a–4c land, you need a public URL to drive the demo (and let a small pilot group preview on their phones). The repo ships a supervised quick-tunnel for exactly this.

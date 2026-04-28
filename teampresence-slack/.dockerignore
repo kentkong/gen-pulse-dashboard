@@ -1,0 +1,96 @@
+# Gen Pulse — Docker build context exclusions.
+#
+# Rule of thumb: anything containing secrets, local runtime state, or
+# pure dev tooling should NOT be baked into the container image. This
+# file is enforced by both `docker build` and `gcloud builds submit`.
+#
+# Matters for Cloud Run because (a) smaller images cold-start faster,
+# and (b) a leaked .env inside a Cloud Run image is permanently in
+# Artifact Registry history — there's no quiet rollback.
+
+# ---------------------------------------------------------------
+# Secrets — NEVER in an image.
+# Cloud Run mounts these from Secret Manager at runtime instead.
+# ---------------------------------------------------------------
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+*.p12
+*.pfx
+
+# ---------------------------------------------------------------
+# Local runtime state — regenerated on every Cloud Run boot from
+# the authoritative upstreams (Slack users.list, Workday CSV, etc).
+# Shipping these would (a) bloat the image and (b) leak PII.
+# ---------------------------------------------------------------
+data/
+!data/workday-absences.example.csv
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-journal
+
+# Tunnel state, QR codes, runtime logs — all ephemeral.
+data/logs/
+data/qr/
+data/tunnel-state.json
+logs/
+
+# ---------------------------------------------------------------
+# Version control + IDE + OS noise.
+# ---------------------------------------------------------------
+.git/
+.github/
+.gitignore
+.gitattributes
+.vscode/
+.idea/
+.cursor/
+.DS_Store
+Thumbs.db
+
+# ---------------------------------------------------------------
+# Dev dependencies that npm ci --omit=dev would prune anyway,
+# but excluding them here makes the build context smaller too.
+# ---------------------------------------------------------------
+node_modules/
+npm-debug.log*
+yarn-error.log
+.npm/
+
+# ---------------------------------------------------------------
+# Build-time scratch produced by the multi-stage Dockerfile —
+# don't feed the output of a previous build back in.
+# ---------------------------------------------------------------
+Dockerfile.bak
+.docker-build-cache/
+
+# ---------------------------------------------------------------
+# Markdown runbooks, admin-request templates, and dev scripts —
+# useful in git, pointless in a Cloud Run container.
+# ---------------------------------------------------------------
+*.md
+scripts/demo-*.sh
+scripts/tunnel-*.sh
+scripts/activate-*.sh
+scripts/set-*.sh
+scripts/export-*.sh
+scripts/probe-*.mjs
+scripts/verify-*.sh
+scripts/list-*.mjs
+scripts/map-*.mjs
+# Keep the GCP tooling available in-image only if something needs it
+# at runtime — today nothing does, so exclude those too.
+scripts/gcp-*.sh
+
+# ---------------------------------------------------------------
+# Test fixtures / snapshot data if we ever add them.
+# ---------------------------------------------------------------
+test/
+tests/
+__snapshots__/
+coverage/
+.nyc_output/
