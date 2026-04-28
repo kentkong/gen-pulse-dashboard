@@ -1490,6 +1490,60 @@
         align-items: center;
         gap: 0.65rem;
       }
+
+      /* ---------------------------------------------------------------
+         Team brand logo — Norton or Avast wordmark pinned to the top-
+         right of the hero banner, on the same horizontal line as the
+         "Gen Pulse" wordmark on the left. Switched purely via CSS
+         against `body[data-team]`, which the server stamps at render
+         time (see /api/team template substitution). Absolutely
+         positioned so it never pushes controls around or disrupts
+         the `.sn-hero-right` flex column.
+
+         Sizing is intentionally restrained: the Gen wordmark leads,
+         the team brand is a supporting accent that just answers
+         "which team am I looking at?" at a glance. Scales down on
+         phones so it never crowds the title.
+         --------------------------------------------------------------- */
+      .sn-hero-team-brand {
+        position: absolute;
+        top: 1.35rem;
+        right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        pointer-events: none;
+        z-index: 1;
+        height: 48px;
+      }
+      .sn-hero-team-brand-img {
+        display: none;
+        height: 100%;
+        width: auto;
+        max-width: 210px;
+        object-fit: contain;
+        /* Tiny lift on dark mode so the Norton yellow reads as
+           crisp wordmark rather than washed-out tint. */
+        filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.08));
+      }
+      html.theme-dark .sn-hero-team-brand-img {
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+      }
+      body[data-team="email-norton"] .sn-hero-team-brand-norton {
+        display: block;
+      }
+      body[data-team="avast"] .sn-hero-team-brand-avast {
+        display: block;
+      }
+      @media (max-width: 780px) {
+        .sn-hero-team-brand {
+          top: 0.75rem;
+          height: 30px;
+        }
+        .sn-hero-team-brand-img {
+          max-width: 140px;
+        }
+      }
       .sn-hero-lead {
         color: var(--gen-blue);
       }
@@ -5411,10 +5465,17 @@
       .sn-team-coming-soon {
         display: none;
       }
-      body[data-team]:not([data-team="email-norton"]) main > *:not(.sn-team-coming-soon) {
+      /* Live teams render full widget content. Non-live teams (still
+         in the "pilot" state) hide all widgets and show the
+         coming-soon overlay instead. AVAST went live 28-Apr-2026 —
+         its scope/roster/brand are wired end-to-end through the
+         server's team dimension, so it no longer triggers this
+         overlay. To promote another team (IPM, Mobile, …) later,
+         add its data-team value to the :not() chain below. */
+      body[data-team]:not([data-team="email-norton"]):not([data-team="avast"]) main > *:not(.sn-team-coming-soon) {
         display: none !important;
       }
-      body[data-team]:not([data-team="email-norton"]) .sn-team-coming-soon {
+      body[data-team]:not([data-team="email-norton"]):not([data-team="avast"]) .sn-team-coming-soon {
         display: flex;
         min-height: 60vh;
         align-items: center;
@@ -6227,7 +6288,7 @@
       }
     </style>
   </head>
-  <body class="min-h-screen">
+  <body class="min-h-screen" data-team="{{BODY_TEAM_ATTR}}">
     <nav class="sn-topnav" aria-label="Primary">
       <div class="sn-topnav-inner">
         <a class="sn-topnav-brand" href="/" aria-label="Gen Pulse home">
@@ -6891,6 +6952,26 @@
       </nav>
 
       <header class="sn-hero flex flex-wrap items-end justify-between gap-x-6 gap-y-8">
+        <!--
+          Team brand logo — Norton or Avast, switched by body[data-team].
+          Absolutely positioned at the top-right of the hero so it sits
+          on the same horizontal line as the "Gen Pulse" wordmark on
+          the left. aria-hidden because the wordmark is decorative:
+          the active team is already communicated textually by the
+          "VIEWING TEAM" chip in the topnav.
+        -->
+        <div class="sn-hero-team-brand" aria-hidden="true">
+          <img
+            class="sn-hero-team-brand-img sn-hero-team-brand-norton"
+            src="/img/norton-logo.png"
+            alt="Norton"
+          />
+          <img
+            class="sn-hero-team-brand-img sn-hero-team-brand-avast"
+            src="/img/avast-logo.png"
+            alt="Avast"
+          />
+        </div>
         <div class="min-w-0">
           <h1 class="sn-hero-title" aria-label="Gen Pulse">
             <span class="gen-logo" aria-hidden="true">
@@ -7791,6 +7872,27 @@
        * ------------------------------------------------------------ */
       const JIRA_SCOPED_PATHS = /^\/api\/widgets\/(weekly-throughput|backlog-overview|ticket-lifecycle|inflow-vs-resolved|sla-aging-risk|kanban-board|top-priority-tickets|sprint-backlog|reopen-rate|throughput-leaderboard)\b/;
 
+      // Resolve the active team ONCE per apiUrl() call, preferring:
+      //   (1) body dataset (set server-side from ?team= / cookie at
+      //       page render) — authoritative for the lifetime of the tab
+      //   (2) localStorage (falls back for programmatic callers on
+      //       pages that somehow lack the body attribute)
+      //   (3) "norton" (implicit default — matches server behaviour)
+      // We translate the UI slug "email-norton" → server slug
+      // "norton" so the server's normaliseTeam() accepts it.
+      function currentServerTeam() {
+        let uiTeam =
+          (document.body && document.body.dataset.team) || "";
+        if (!uiTeam) {
+          try { uiTeam = localStorage.getItem("gen-pulse-team") || ""; }
+          catch (e) { uiTeam = ""; }
+        }
+        uiTeam = String(uiTeam).toLowerCase();
+        if (uiTeam === "avast") return "avast";
+        if (uiTeam === "email-norton" || uiTeam === "norton") return "norton";
+        return "norton";
+      }
+
       const apiUrl = (p) => {
         let base = p ?? "/api/team";
         if (
@@ -7800,6 +7902,18 @@
           base = `${base}${base.includes("?") ? "&" : "?"}project=${encodeURIComponent(
             window.__activeProject
           )}`;
+        }
+        // Append team to every API URL when it's non-default. The
+        // server also honours the gp_team cookie so this is
+        // redundant in the happy path — but cookies get stripped by
+        // some corporate proxies, and carrying team in the query
+        // makes every request self-describing in DevTools too.
+        const team = currentServerTeam();
+        if (team && team !== "norton") {
+          const sep = base.includes("?") ? "&" : "?";
+          if (!/[?&]team=/.test(base)) {
+            base = `${base}${sep}team=${encodeURIComponent(team)}`;
+          }
         }
         // When the user clicks the hero "Refresh" button, the handler
         // sets __forceNextFetch=true for the duration of that load()
@@ -7946,10 +8060,25 @@
           ? `<span class="sn-presence-dot" data-presence="${esc(ap)}" role="img" aria-label="${esc(dotLabel)}" title="${esc(dotLabel)}"></span>`
           : "";
 
+        // Fallback handler: if the avatar URL fails to load (corporate
+        // proxy blocking secure.gravatar.com, revoked Slack URL, etc.),
+        // swap the broken <img> for the person's initials rendered
+        // onto the avatar chip. Earlier revisions inlined
+        // JSON.stringify(initials) directly into the attribute, which
+        // (a) breaks HTML quoting when the string is rendered inside
+        // a double-quoted attribute and (b) calls this.remove()
+        // before reading this.parentNode — which becomes null once
+        // the img is detached. Both bugs made the fallback silently
+        // fail, so people whose Gravatar/Slack URL 404'd showed as
+        // a blank chip instead of their initials.
+        //
+        // Fix: stash the initials in a data-attribute (entity-safe
+        // via esc()) and capture the parent before removing.
         const avatarInner = m.avatarUrl
           ? `<span class="sn-member-avatar" ${bucketAttr} aria-hidden="true">
               <img src="${esc(m.avatarUrl)}" alt="" loading="lazy"
-                   onerror="this.remove();this.parentNode.textContent=${JSON.stringify(initials)};">
+                   data-initials="${esc(initials)}"
+                   onerror="const p=this.parentNode;this.remove();if(p)p.textContent=this.dataset.initials||'';">
             </span>`
           : `<span class="sn-member-avatar" ${bucketAttr}
                 style="background:${memberGradient(m.id || m.name)};"
@@ -10612,45 +10741,14 @@
         }
 
         function showAuthBanner(me) {
+          // The topnav user-chip already swaps into a "Sign in with Microsoft"
+          // CTA whenever /api/me returns `signedIn:false`, so this larger
+          // pre-auth banner is redundant in production. We keep the element
+          // in the DOM (other code still references bannerEl/bannerCta) but
+          // never surface it - one sign-in affordance is enough.
           if (!bannerEl) return;
-          if (bannerDismissedThisTab) return;
-          // Only show when OIDC is on the server but this browser has
-          // no session. Anything else (shared-key-only install, real
-          // signed-in session) -> leave banner hidden.
-          const showIt =
-            me &&
-            me.signedIn === false &&
-            typeof me.loginUrl === "string" &&
-            me.loginUrl.length > 0;
-          if (!showIt) {
-            bannerEl.removeAttribute("data-state");
-            bannerEl.setAttribute("hidden", "");
-            return;
-          }
-          // Tune the copy for real-OIDC vs mock-OIDC so a demo viewer
-          // knows why they're looking at a demo sign-in form.
-          if (me.mock === true) {
-            if (bannerTitle) bannerTitle.textContent = "Demo mode active";
-            if (bannerSub) {
-              bannerSub.textContent =
-                "Azure SSO is pending IT approval (RITM0213874). Sign in with a test identity to preview the authenticated experience.";
-            }
-          } else {
-            if (bannerTitle) bannerTitle.textContent = "You're in read-only mode";
-            if (bannerSub) {
-              bannerSub.textContent =
-                "Sign in with your Gen Digital account to unlock personalized insights.";
-            }
-          }
-          if (bannerCta) {
-            const back = window.location.pathname + window.location.search;
-            bannerCta.setAttribute(
-              "href",
-              me.loginUrl + "?return_to=" + encodeURIComponent(back)
-            );
-          }
-          bannerEl.removeAttribute("hidden");
-          bannerEl.setAttribute("data-state", "visible");
+          bannerEl.removeAttribute("data-state");
+          bannerEl.setAttribute("hidden", "");
         }
 
         // Session badge on the chip - three variants, driven by /api/me.
@@ -11438,6 +11536,17 @@
           }
         }
 
+        // Teams that have a real server-side scope wired up. Clicking
+        // one of these triggers a full page navigation to `?team=…`
+        // so every widget re-runs with the new Jira scope + roster
+        // instead of just re-painting brand text locally.
+        const LIVE_TEAMS = new Set(["email-norton", "avast"]);
+
+        // Map the UI's data-team values onto the server's
+        // normaliseTeam() expectation. "email-norton" is the dashboard's
+        // long-standing slug; the server knows it as just "norton".
+        const SERVER_TEAM = { "email-norton": "norton", "avast": "avast" };
+
         function select(opt) {
           opts.forEach((o) => {
             o.classList.toggle("is-selected", o === opt);
@@ -11479,6 +11588,24 @@
               },
             })
           );
+
+          // Live teams: reload with ?team=<server-slug> so the server
+          // re-scopes every API endpoint (Jira team-scope, roster,
+          // brand copy) for the new team. A client-only brand rewrite
+          // isn't enough because the widgets are fed by /api/widgets/*
+          // which the server scopes by the request's team dimension.
+          const uiTeam = opt.dataset.team;
+          const serverTeam = SERVER_TEAM[uiTeam];
+          if (LIVE_TEAMS.has(uiTeam) && serverTeam) {
+            const currentUrl = new URL(window.location.href);
+            const currentTeam = (
+              currentUrl.searchParams.get("team") || ""
+            ).toLowerCase();
+            if (currentTeam !== serverTeam) {
+              currentUrl.searchParams.set("team", serverTeam);
+              window.location.assign(currentUrl.toString());
+            }
+          }
         }
 
         // Rewrite the visible brand prefix inside each widget's
@@ -11535,28 +11662,56 @@
           opt.addEventListener("click", () => select(opt));
         });
 
-        // Marketing / deep-link helpers.
+        // Deep-link helpers.
         //   ?team=<slug>              - preselects that team on load.
-        //                               Gated to EMAIL-NORTON only — any
-        //                               other slug (ipm/mobile/avast) is
-        //                               ignored so a shared URL can never
-        //                               open the dashboard on a non-live
-        //                               team's "coming soon" page.
+        //                               Accepts any LIVE team (see
+        //                               LIVE_TEAMS set above). Non-live
+        //                               teams (ipm/mobile) are ignored
+        //                               so a shared URL can never open
+        //                               the dashboard on a coming-soon
+        //                               page.
         //   ?open-team-switcher=1     - pops the dropdown on load so we
         //                               can screenshot the open state.
+        // The server also accepts `norton` as an alias for
+        // `email-norton`; we map both forms here so either works.
+        const UI_TEAM = { "email-norton": "email-norton", norton: "email-norton", avast: "avast" };
+        let selectedFromUrl = false;
         try {
           const teamMatch = /[?&]team=([\w-]+)/.exec(
             window.location.search || ""
           );
           if (teamMatch) {
             const wanted = teamMatch[1].toLowerCase();
-            if (wanted === "email-norton") {
-              const opt = opts.find(
-                (o) =>
-                  o.dataset.team === wanted ||
-                  (o.dataset.slug || "").toLowerCase() === wanted
-              );
-              if (opt) select(opt);
+            const uiTeam = UI_TEAM[wanted];
+            if (uiTeam && LIVE_TEAMS.has(uiTeam)) {
+              const opt = opts.find((o) => o.dataset.team === uiTeam);
+              if (opt && !opt.classList.contains("is-selected")) {
+                // Paint the switcher UI to match — but DO NOT call
+                // `select()`, because that would re-trigger a page
+                // reload loop (we're already on the right URL).
+                opts.forEach((o) => {
+                  o.classList.toggle("is-selected", o === opt);
+                  o.setAttribute(
+                    "aria-selected",
+                    o === opt ? "true" : "false"
+                  );
+                  o.setAttribute("tabindex", o === opt ? "0" : "-1");
+                });
+                const slug = opt.dataset.slug || opt.dataset.team;
+                const brand = opt.dataset.brand || slug;
+                const accent = opt.dataset.accent || "#2b4fff";
+                currentLabel.textContent = slug;
+                if (currentDot) {
+                  currentDot.style.background = accent;
+                  currentDot.style.boxShadow =
+                    "0 0 0 3px " +
+                    "color-mix(in srgb, " + accent + " 18%, transparent)";
+                }
+                document.body.dataset.team = opt.dataset.team;
+                try { localStorage.setItem(KEY, opt.dataset.team); } catch (e) {}
+                rewriteBrand(brand, slug);
+              }
+              selectedFromUrl = true;
             }
           }
           if (/[?&]open-team-switcher=1\b/.test(window.location.search || "")) {
@@ -11566,23 +11721,36 @@
           }
         } catch (e) {}
 
-        // Landing always anchors on EMAIL-NORTON.
-        //
-        // The `select()` helper writes localStorage unconditionally so
-        // the switcher still "remembers" the last click within a
-        // session (useful during the live demo when we click IPM,
-        // show the coming-soon card, then come back). But the LANDING
-        // page must never boot into a non-live team — so on every
-        // fresh page load we clear any saved non-EMAIL-NORTON value
-        // and don't call `select()` here at all. EMAIL-NORTON is the
-        // default `is-selected` option in the HTML, so zero extra
-        // work is needed to land there.
-        try {
-          const saved = localStorage.getItem(KEY);
-          if (saved && saved !== "email-norton") {
-            localStorage.removeItem(KEY);
-          }
-        } catch (e) {}
+        // When the URL doesn't pin a team, fall back to the saved
+        // localStorage value IF it's a live team — otherwise default
+        // to EMAIL-NORTON (the HTML has it preselected, so this is
+        // only needed to clear stale non-live values).
+        if (!selectedFromUrl) {
+          try {
+            const saved = localStorage.getItem(KEY);
+            if (saved && !LIVE_TEAMS.has(saved)) {
+              localStorage.removeItem(KEY);
+            } else if (saved && saved !== "email-norton") {
+              const opt = opts.find((o) => o.dataset.team === saved);
+              if (opt) {
+                // Paint only — no reload. Matches the URL case above.
+                opts.forEach((o) => {
+                  o.classList.toggle("is-selected", o === opt);
+                  o.setAttribute(
+                    "aria-selected",
+                    o === opt ? "true" : "false"
+                  );
+                  o.setAttribute("tabindex", o === opt ? "0" : "-1");
+                });
+                document.body.dataset.team = opt.dataset.team;
+                const slug = opt.dataset.slug || opt.dataset.team;
+                const brand = opt.dataset.brand || slug;
+                currentLabel.textContent = slug;
+                rewriteBrand(brand, slug);
+              }
+            }
+          } catch (e) {}
+        }
       })();
 
       /* -----------------------------------------------------------------
