@@ -155,6 +155,31 @@
     }
 
     if (mapped.kind === "file") {
+      // Mode 1: standalone / file:// build.
+      // When the data has been inlined as window.__DEMO_DATA__ (see
+      // scripts/build-demo.mjs's standalone post-pass) we resolve
+      // synchronously from that in-memory blob. Critical for the
+      // double-click-to-view UX: every modern browser blocks
+      // fetch() against file:// for security, so the network path
+      // below would silently produce empty widgets when the user
+      // opens index.html from disk. Reading from a global skips
+      // the network entirely and the same code path serves the
+      // same shape of Response, so the rest of the dashboard is
+      // none the wiser.
+      if (window.__DEMO_DATA__) {
+        const key = mapped.path.replace(/^\.\/data\//, "");
+        if (Object.prototype.hasOwnProperty.call(window.__DEMO_DATA__, key)) {
+          return Promise.resolve(jsonResponse(window.__DEMO_DATA__[key]));
+        }
+        return Promise.resolve(
+          jsonResponse(
+            { unavailable: true, error: "demo-snapshot-missing", path: key },
+            503
+          )
+        );
+      }
+
+      // Mode 2: served-over-HTTP build.
       // Use the original fetch (not the patched window.fetch — that
       // would just recurse forever) to load the static JSON file. We
       // also pass `cache: 'no-store'` because GitHub Pages serves

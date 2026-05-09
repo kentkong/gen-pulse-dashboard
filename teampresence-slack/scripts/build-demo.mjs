@@ -281,6 +281,117 @@ async function copyImageAssets() {
   return entries.length;
 }
 
+/* ------------------------------------------------------------------ *
+ * Build dist/gen-pulse-demo.html — the standalone, double-clickable
+ * single-file version.
+ *
+ * Why this exists
+ * ---------------
+ * Modern browsers block fetch() against file:// origins for security
+ * (the rationale: a file:// page reading any sibling file would let
+ * a downloaded HTML attachment exfiltrate ~/Documents on click). The
+ * server-friendly dist/index.html therefore renders blank widgets
+ * when opened by double-clicking from the Finder/Explorer — which is
+ * the single most useful UX for "share with a recruiter" or "carry
+ * around on a USB stick".
+ *
+ * The fix: walk dist/data/ at build time, parse every JSON file, and
+ * embed them all as a single window.__DEMO_DATA__ global before the
+ * shim runs. The shim already knows to prefer the inlined object
+ * over fetch (see demo-shim.js), so the rest of the page is
+ * untouched.
+ *
+ * Image handling
+ * --------------
+ * Logos in dist/img/ are referenced by relative URL ("img/norton-logo.png").
+ * Those CAN load from file:// (no fetch involved — the browser does
+ * a plain GET as the resource loader, which is allowed). To keep the
+ * standalone file truly single-file, we base64-encode them as data:
+ * URIs and inline. Costs ~50% size overhead per image; small price for
+ * a self-contained portfolio artefact.
+ * ------------------------------------------------------------------ */
+async function buildStandaloneHtml() {
+  // 1. Walk dist/data/ and build the inline data blob.
+  const dataDir = path.join(DIST_DIR, "data");
+  const dataBlob = {};
+  async function gatherJson(dir, prefix = "") {
+    const entries = await fs.readdir(dir, { withFileTypes: true });
+    for (const e of entries) {
+      const p = path.join(dir, e.name);
+      const key = prefix ? `${prefix}/${e.name}` : e.name;
+      if (e.isDirectory()) {
+        await gatherJson(p, key);
+      } else if (e.isFile() && p.endsWith(".json")) {
+        // Key shape matches what demo-shim.js looks up: shim derives
+        // `mapped.path = "./data/<team>/<rest>.json"`, then strips the
+        // "./data/" prefix and indexes into __DEMO_DATA__. So the
+        // file at dist/data/norton/team.json must be stored under
+        // the key "norton/team.json" — exactly what the recursive
+        // walker produces here.
+        const raw = await fs.readFile(p, "utf8");
+        try {
+          dataBlob[key] = JSON.parse(raw);
+        } catch (err) {
+          throw new Error(`bad JSON at ${p}: ${err.message}`);
+        }
+      }
+    }
+  }
+  await gatherJson(dataDir);
+
+  // 2. Read the server-friendly bundle. We re-derive everything from
+  // dist/index.html so the standalone build inherits any future
+  // changes to the shim or template tokens automatically.
+  let html = await fs.readFile(path.join(DIST_DIR, "index.html"), "utf8");
+
+  // 3. Inline the logo images. Without this, double-clicking the
+  // standalone HTML works but the hero banner shows broken-image
+  // icons because the `<img src="img/norton-logo.png">` references
+  // are resolved against a non-existent sibling on the user's disk.
+  const imgDir = path.join(DIST_DIR, "img");
+  const imgEntries = await fs.readdir(imgDir).catch(() => []);
+  for (const name of imgEntries) {
+    const p = path.join(imgDir, name);
+    const buf = await fs.readFile(p);
+    const ext = path.extname(name).toLowerCase().slice(1);
+    const mime = ext === "png" ? "image/png" : ext === "svg" ? "image/svg+xml" : `image/${ext}`;
+    const dataUri = `data:${mime};base64,${buf.toString("base64")}`;
+    // Replace `img/<name>`, `./img/<name>`, `/img/<name>` references.
+    const patterns = [
+      new RegExp(`(["'(])\\.?/?img/${name.replace(/[.+]/g, "\\$&")}`, "g"),
+    ];
+    for (const re of patterns) {
+      html = html.replace(re, `$1${dataUri}`);
+    }
+  }
+
+  // 4. Inject window.__DEMO_DATA__ as the FIRST script in <head>,
+  // before the existing shim. Stringify with no pretty-printing —
+  // saves ~30% size and the browser doesn't care.
+  const dataScript =
+    `<script id="gp-demo-data">window.__DEMO_DATA__ = ` +
+    JSON.stringify(dataBlob).replace(/<\/script/gi, "<\\/script") +
+    `;</script>\n`;
+
+  const headOpenIdx = html.search(/<head[^>]*>/i);
+  const headTagEnd = html.indexOf(">", headOpenIdx) + 1;
+  html = html.slice(0, headTagEnd) + "\n" + dataScript + html.slice(headTagEnd);
+
+  // 5. Add a tiny offline-mode notice to the title for clarity.
+  html = html.replace(
+    /<title>([^<]*)<\/title>/i,
+    `<title>$1 · Standalone</title>`
+  );
+
+  const outPath = path.join(DIST_DIR, "gen-pulse-demo.html");
+  await fs.writeFile(outPath, html, "utf8");
+  return {
+    path: outPath,
+    sizeKb: (html.length / 1024).toFixed(0),
+    blobKeys: Object.keys(dataBlob).length,
+  };
+}
+
 async function main() {
   const args = parseArgs(process.argv);
 
@@ -331,6 +442,13 @@ async function main() {
   const imgCount = await copyImageAssets();
   console.log(`  ✓ index.html (${(html.length / 1024).toFixed(1)} kB)`);
   console.log(`  ✓ img/ (${imgCount} files)`);
+
+  // The standalone single-file build. Anyone can double-click this
+  // from the Finder and it works — no terminal, no server, no GitHub.
+  const standalone = await buildStandaloneHtml();
+  console.log(
+    `  ✓ gen-pulse-demo.html  (${standalone.sizeKb} kB, ${standalone.blobKeys} JSON blobs inlined)`
+  );
 
   // .nojekyll: GitHub Pages otherwise treats this as a Jekyll site
   // and silently drops files starting with `_` (e.g. _meta.json,

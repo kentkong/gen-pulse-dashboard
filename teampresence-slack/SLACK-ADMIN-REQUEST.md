@@ -4,9 +4,9 @@
 > RITM0213806 received both approvals on 2026-04-26:
 >
 > - **Petr Šilhan** (app owner) — "I have approved the application for
->   installation." (sent via Slack-side approval path.)
+> installation." (sent via Slack-side approval path.)
 > - **Rob Ryan** (workspace admin / senior approver) — "I approve the
->   request." (ServiceNow approver chain, ref `MSG7711702_TRc8EWEzUeCNfXTb9Psu`.)
+> request." (ServiceNow approver chain, ref `MSG7711702_TRc8EWEzUeCNfXTb9Psu`.)
 >
 > **Immediate next action (Kevin):** go to `api.slack.com/apps` →
 > **Gen Pulse** → **Install App** — the "Install to Workspace" button
@@ -29,25 +29,27 @@
 > **Completed on 2026-04-24 (Kevin):**
 >
 > - Created "Gen Pulse" as a "From scratch" app in the **Gen**
->   workspace (not "Gen External" — that's for partners).
+> workspace (not "Gen External" — that's for partners).
 > - Added `svc.slack.appadm` as a collaborator on the app.
 > - Replied to the admin with the App ID and workspace context.
 > - Configured bot-token scopes (see table below).
 > - Submitted **Request to Install** to the Gen workspace. First
->   attempt failed with a generic "Try again later" error — resolved
->   on the second attempt after the admin enabled install requests
->   on their side. Admin can now see the request.
+> attempt failed with a generic "Try again later" error — resolved
+> on the second attempt after the admin enabled install requests
+> on their side. Admin can now see the request.
 >
 > **App metadata (non-secret, safe to share in tickets):**
 >
-> | Field | Value |
-> | --- | --- |
-> | App Name | `Gen Pulse` |
-> | App ID | `A0AUY7JRG5T` |
-> | Dev workspace | `Gen` (Gen Digital Inc) |
-> | Created | 2026-04-24 |
-> | Collaborators | `Kevin Mold`, `svc.slack.appadm` |
+>
+> | Field            | Value                              |
+> | ---------------- | ---------------------------------- |
+> | App Name         | `Gen Pulse`                        |
+> | App ID           | `A0AUY7JRG5T`                      |
+> | Dev workspace    | `Gen` (Gen Digital Inc)            |
+> | Created          | 2026-04-24                         |
+> | Collaborators    | `Kevin Mold`, `svc.slack.appadm`   |
 > | Bot-token scopes | `users:read`, `users.profile:read` |
+>
 >
 > **Scope-count deviation from the original request — intentional:**
 > the original ticket named three scopes
@@ -108,6 +110,7 @@ Never paste tokens into chat / git / this repo. The activator reads them from st
 ### Step 3 — manual verification in the UI
 
 Open the dashboard, check Team Presence:
+
 - Green / away dots next to each of the 8 people match their live Slack state.
 - Profile photos switch from the local `/team/<slug>.png` fallbacks to real Slack avatars.
 - Changing your own Slack status to "🏖️ On vacation" flips your Gen Pulse card to "Vacation" within ~60 seconds.
