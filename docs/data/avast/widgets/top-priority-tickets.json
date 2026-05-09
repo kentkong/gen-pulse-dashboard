@@ -1,0 +1,153 @@
+{
+  "total": 9,
+  "priorities": [
+    "Highest",
+    "Critical",
+    "High"
+  ],
+  "status": "To Do",
+  "topN": 6,
+  "byPriority": [
+    {
+      "priority": "Critical",
+      "count": 2
+    },
+    {
+      "priority": "High",
+      "count": 7
+    }
+  ],
+  "tickets": [
+    {
+      "key": "DEMO-311",
+      "summary": "Fix render glitch in Outlook 2019",
+      "assignee": "Marley Olsen",
+      "assigneeKey": "iryna.botulinska",
+      "priority": "Critical",
+      "status": "To Do",
+      "statusCategory": "new",
+      "issueType": "Task",
+      "createdAt": "2026-05-08T08:14:18.577Z",
+      "updatedAt": "2026-05-09T13:26:18.577Z",
+      "ageDays": 1.3
+    },
+    {
+      "key": "DEMO-289",
+      "summary": "Add canary deploys to email service",
+      "assignee": "Marley Olsen",
+      "assigneeKey": "iryna.botulinska",
+      "priority": "Critical",
+      "status": "To Do",
+      "statusCategory": "new",
+      "issueType": "Incident",
+      "createdAt": "2026-05-05T10:38:18.577Z",
+      "updatedAt": "2026-05-09T10:26:18.577Z",
+      "ageDays": 4.2
+    },
+    {
+      "key": "DEMO-307",
+      "summary": "Reduce noisy Sentry alerts on send",
+      "assignee": "Rowan Nash",
+      "assigneeKey": "jan.bartoncik",
+      "priority": "High",
+      "status": "To Do",
+      "statusCategory": "new",
+      "issueType": "Story",
+      "createdAt": "2026-05-07T13:02:18.577Z",
+      "updatedAt": "2026-05-09T08:26:18.577Z",
+      "ageDays": 2.1
+    },
+    {
+      "key": "DEMO-304",
+      "summary": "Migrate template to MJML",
+      "assignee": "Harper Whitaker",
+      "assigneeKey": "victor.shapochkin",
+      "priority": "High",
+      "status": "To Do",
+      "statusCategory": "new",
+      "issueType": "Task",
+      "createdAt": "2026-05-07T17:50:18.577Z",
+      "updatedAt": "2026-05-08T15:26:18.577Z",
+      "ageDays": 1.9
+    },
+    {
+      "key": "DEMO-309",
+      "summary": "Reduce template build time on CI",
+      "assignee": "Jordan Abara",
+      "assigneeKey": "kristyna.simkova",
+      "priority": "High",
+      "status": "To Do",
+      "statusCategory": "new",
+      "issueType": "Task",
+      "createdAt": "2026-05-07T05:50:18.577Z",
+      "updatedAt": "2026-05-09T10:26:18.577Z",
+      "ageDays": 2.4
+    },
+    {
+      "key": "DEMO-302",
+      "summary": "Backfill bounce-suppression list",
+      "assignee": "Jordan Abara",
+      "assigneeKey": "kristyna.simkova",
+      "priority": "High",
+      "status": "To Do",
+      "statusCategory": "new",
+      "issueType": "Task",
+      "createdAt": "2026-05-06T01:02:18.577Z",
+      "updatedAt": "2026-05-07T15:26:18.577Z",
+      "ageDays": 3.6
+    }
+  ],
+  "truncated": 3,
+  "generatedAt": 1778340378742,
+  "timezone": "Europe/Prague",
+  "jql": "(project = EMAIL AND filter = 'Norton Email Kanban') AND priority in (\"Highest\", \"Critical\", \"High\") AND status = \"To Do\"",
+  "preview": true,
+  "project": "EMOPS",
+  "jqlSource": "JIRA_EMOPS_TOP_PRIORITY_JQL",
+  "filter": {
+    "widgetId": "top-priority-tickets",
+    "title": "Top priority tickets",
+    "jql": "project = EMOPS AND statusCategory != Done AND priority in (Highest, Critical, High)",
+    "source": "JIRA_EMOPS_TOP_PRIORITY_JQL",
+    "fallbackFrom": null,
+    "refreshSeconds": 300,
+    "project": "EMOPS",
+    "boardUrl": null,
+    "generatedAt": 1778340378742,
+    "chip": "EMOPS · status: To Do · top 6",
+    "parameters": [
+      {
+        "label": "Project",
+        "value": "EMOPS"
+      },
+      {
+        "label": "Status filter",
+        "value": "To Do"
+      },
+      {
+        "label": "Priorities shown",
+        "value": "Highest · Critical · High"
+      },
+      {
+        "label": "Max rows",
+        "value": "6"
+      },
+      {
+        "label": "Issue types",
+        "value": "(all)"
+      },
+      {
+        "label": "Labels",
+        "value": "(none)"
+      },
+      {
+        "label": "Assignee",
+        "value": "any"
+      },
+      {
+        "label": "Timezone",
+        "value": "Europe/Prague"
+      }
+    ]
+  }
+}

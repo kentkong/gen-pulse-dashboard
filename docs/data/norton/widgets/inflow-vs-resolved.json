@@ -1,0 +1,89 @@
+{
+  "weekLabel": "2026-W15",
+  "weekRange": "7 Apr – 13 Apr",
+  "created": 119,
+  "resolved": 124,
+  "net": 5,
+  "previousCreated": 122,
+  "previousResolved": 118,
+  "previousNet": -4,
+  "netDeltaAbs": 9,
+  "trendCreated": [
+    112,
+    118,
+    126,
+    121,
+    115,
+    130,
+    122,
+    119
+  ],
+  "trendResolved": [
+    98,
+    104,
+    120,
+    131,
+    117,
+    112,
+    118,
+    124
+  ],
+  "trendLabels": [
+    "2026-W08",
+    "2026-W09",
+    "2026-W10",
+    "2026-W11",
+    "2026-W12",
+    "2026-W13",
+    "2026-W14",
+    "2026-W15"
+  ],
+  "generatedAt": 1778340378729,
+  "timezone": "Europe/Prague",
+  "jql": "project = EMAIL AND type in (Task, Bug, Story)",
+  "preview": true,
+  "project": "EMOPS",
+  "jqlSource": "JIRA_EMOPS_THROUGHPUT_JQL",
+  "filter": {
+    "widgetId": "inflow-vs-resolved",
+    "title": "Inflow vs resolved",
+    "jql": "project = EMOPS AND issuetype in (Task, Story, Bug) AND statusCategory = Done",
+    "source": "JIRA_EMOPS_THROUGHPUT_JQL",
+    "fallbackFrom": "JIRA_EMOPS_INFLOW_JQL",
+    "refreshSeconds": 900,
+    "project": "EMOPS",
+    "boardUrl": null,
+    "generatedAt": 1778340378729,
+    "chip": "EMOPS · last 8 weeks · inflow vs resolved",
+    "parameters": [
+      {
+        "label": "Project",
+        "value": "EMOPS"
+      },
+      {
+        "label": "Date fields",
+        "value": "created (inflow) · resolved (resolved)"
+      },
+      {
+        "label": "Window",
+        "value": "Last 8 completed Mon–Sun weeks"
+      },
+      {
+        "label": "Issue types",
+        "value": "Task, Story, Bug"
+      },
+      {
+        "label": "Labels",
+        "value": "(none)"
+      },
+      {
+        "label": "Assignee",
+        "value": "any"
+      },
+      {
+        "label": "Timezone",
+        "value": "Europe/Prague"
+      }
+    ]
+  }
+}

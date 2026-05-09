@@ -1,0 +1,83 @@
+{
+  "generatedAt": 1778340378736,
+  "model": "slack+workday",
+  "source": "csv",
+  "windowDays": 7,
+  "today": [
+    {
+      "slackId": null,
+      "email": null,
+      "slug": "kristyna-simkova",
+      "startDate": "2026-05-07",
+      "endDate": "2026-05-12",
+      "type": "PTO",
+      "note": "Public holiday",
+      "member": {
+        "name": "Jordan A.",
+        "fullName": "Jordan Abara",
+        "avatarUrl": null,
+        "role": "Sr. Online Marketing Specialist",
+        "team": "Email Marketing",
+        "slug": "kristyna-simkova"
+      }
+    },
+    {
+      "slackId": null,
+      "email": null,
+      "slug": "jan-bartoncik",
+      "startDate": "2026-05-09",
+      "endDate": "2026-05-09",
+      "type": "Sick",
+      "note": "Conference",
+      "member": {
+        "name": "Rowan N.",
+        "fullName": "Rowan Nash",
+        "avatarUrl": null,
+        "role": "Sr. Online Marketing Specialist",
+        "team": "Email Marketing",
+        "slug": "jan-bartoncik"
+      }
+    }
+  ],
+  "upcoming": [
+    {
+      "slackId": null,
+      "email": null,
+      "slug": "petr-studeny",
+      "startDate": "2026-05-14",
+      "endDate": "2026-05-15",
+      "type": "Personal",
+      "note": "On call",
+      "member": {
+        "name": "Jamie U.",
+        "fullName": "Jamie Underwood",
+        "avatarUrl": null,
+        "role": "Sr. Online Marketing Specialist",
+        "team": "Email Marketing",
+        "slug": "petr-studeny"
+      }
+    },
+    {
+      "slackId": null,
+      "email": null,
+      "slug": "yanina-scholz",
+      "startDate": "2026-05-15",
+      "endDate": "2026-05-19",
+      "type": "PTO",
+      "note": "Out of office",
+      "member": {
+        "name": "Skylar E.",
+        "fullName": "Skylar Eriksen",
+        "avatarUrl": null,
+        "role": "Targeting Specialist",
+        "team": "Email Marketing",
+        "slug": "yanina-scholz"
+      }
+    }
+  ],
+  "totals": {
+    "today": 2,
+    "upcoming": 2
+  },
+  "preview": true
+}

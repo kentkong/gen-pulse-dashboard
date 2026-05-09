@@ -1,0 +1,73 @@
+{
+  "weekLabel": "2026-W15",
+  "weekRange": "7 Apr – 13 Apr",
+  "resolved": 124,
+  "previous": 118,
+  "deltaAbs": 6,
+  "deltaPct": 5.1,
+  "trend": [
+    98,
+    104,
+    120,
+    131,
+    117,
+    112,
+    118,
+    124
+  ],
+  "trendLabels": [
+    "2026-W08",
+    "2026-W09",
+    "2026-W10",
+    "2026-W11",
+    "2026-W12",
+    "2026-W13",
+    "2026-W14",
+    "2026-W15"
+  ],
+  "generatedAt": 1778340378738,
+  "timezone": "Europe/Prague",
+  "jql": "project = EMAIL AND statusCategory = Done AND resolved >= startOfWeek(-1) AND resolved < startOfWeek()",
+  "preview": true,
+  "project": "EMOPS",
+  "jqlSource": "JIRA_EMOPS_THROUGHPUT_JQL",
+  "filter": {
+    "widgetId": "weekly-throughput",
+    "title": "Weekly throughput",
+    "jql": "project = EMOPS AND issuetype in (Task, Story, Bug) AND statusCategory = Done",
+    "source": "JIRA_EMOPS_THROUGHPUT_JQL",
+    "fallbackFrom": null,
+    "refreshSeconds": 900,
+    "project": "EMOPS",
+    "boardUrl": null,
+    "generatedAt": 1778340378738,
+    "chip": "EMOPS · last 8 weeks · resolved by team",
+    "parameters": [
+      {
+        "label": "Project",
+        "value": "EMOPS"
+      },
+      {
+        "label": "Date field",
+        "value": "resolved"
+      },
+      {
+        "label": "Window",
+        "value": "Last 8 completed Mon–Sun weeks",
+        "hint": "Timezone: Europe/Prague"
+      },
+      {
+        "label": "Issue types",
+        "value": "Task, Story, Bug"
+      },
+      {
+        "label": "Labels",
+        "value": "(none)"
+      },
+      {
+        "label": "Assignee",
+        "value": "any"
+      }
+    ]
+  }
+}

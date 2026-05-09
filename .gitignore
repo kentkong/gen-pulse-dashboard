@@ -21,3 +21,11 @@ data/
 dist/
 build/
 .tmp/
+
+# GitHub Pages publishes docs/ — explicitly opt it back in. The
+# `data/` rule above would otherwise silently swallow docs/data/
+# (gitignore's `name/` form matches any directory of that name
+# anywhere in the tree, not just the repo root). Without this, the
+# Pages site renders blank because every fetch lands a 404.
+!docs/
+!docs/**

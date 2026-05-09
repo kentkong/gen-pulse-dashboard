@@ -1,0 +1,215 @@
+{
+  "brandName": "Gen Pulse",
+  "date": "2026-05-09",
+  "timezone": "Europe/Prague",
+  "generatedAt": 1778340378718,
+  "model": "slack+workday",
+  "models": {
+    "bot": false,
+    "slack": true,
+    "workday": true
+  },
+  "members": [
+    {
+      "id": "U006",
+      "name": "Reese D.",
+      "fullName": "Reese Davies",
+      "avatarUrl": null,
+      "initials": "RD",
+      "title": "Customer Success Specialist · Customer Success",
+      "role": "Customer Success Specialist",
+      "team": "Customer Success",
+      "tags": [
+        "CS"
+      ],
+      "checkin": null,
+      "presence": null,
+      "slackStatus": {
+        "bucket": "meeting",
+        "reason": "Doctor appt",
+        "line": "📅 Campaign review — 30m",
+        "emoji": ":spiral_calendar_pad:",
+        "text": "Campaign review — 30m",
+        "expiration": 1778342178,
+        "autoPresence": "active",
+        "source": "slack"
+      },
+      "workday": null
+    },
+    {
+      "id": "U008",
+      "name": "Indigo C.",
+      "fullName": "Indigo Costa",
+      "avatarUrl": null,
+      "initials": "IC",
+      "title": "Front-End Developer · Customer Success",
+      "role": "Front-End Developer",
+      "team": "Customer Success",
+      "tags": [
+        "CS"
+      ],
+      "checkin": null,
+      "presence": null,
+      "slackStatus": {
+        "bucket": "wfh",
+        "reason": "Heads-down today",
+        "line": "🏡 WFH — CS escalations queue",
+        "emoji": ":house_with_garden:",
+        "text": "WFH — CS escalations queue",
+        "expiration": 0,
+        "autoPresence": "active",
+        "source": "slack"
+      },
+      "workday": null
+    },
+    {
+      "id": "U001",
+      "name": "Marley O.",
+      "fullName": "Marley Olsen",
+      "avatarUrl": null,
+      "initials": "MO",
+      "title": "Principal Front-End Developer · Email Marketing",
+      "role": "Principal Front-End Developer",
+      "team": "Email Marketing",
+      "tags": [],
+      "checkin": null,
+      "presence": null,
+      "slackStatus": {
+        "bucket": "available",
+        "reason": "Doctor appt",
+        "line": null,
+        "emoji": "",
+        "text": "",
+        "expiration": 0,
+        "autoPresence": "active",
+        "source": "slack"
+      },
+      "workday": null
+    },
+    {
+      "id": "U002",
+      "name": "Harper W.",
+      "fullName": "Harper Whitaker",
+      "avatarUrl": null,
+      "initials": "HW",
+      "title": "Sr. Principal Software Engineer · Email Marketing",
+      "role": "Sr. Principal Software Engineer",
+      "team": "Email Marketing",
+      "tags": [],
+      "checkin": null,
+      "presence": null,
+      "slackStatus": {
+        "bucket": "wfh",
+        "reason": "Doctor appt",
+        "line": "🏠 WFH — Focus day on Q2 launch",
+        "emoji": ":house:",
+        "text": "WFH — Focus day on Q2 launch",
+        "expiration": 0,
+        "autoPresence": "active",
+        "source": "slack"
+      },
+      "workday": null
+    },
+    {
+      "id": "U007",
+      "name": "Skylar E.",
+      "fullName": "Skylar Eriksen",
+      "avatarUrl": null,
+      "initials": "SE",
+      "title": "Targeting Specialist · Email Marketing",
+      "role": "Targeting Specialist",
+      "team": "Email Marketing",
+      "tags": [],
+      "checkin": null,
+      "presence": null,
+      "slackStatus": {
+        "bucket": "unknown",
+        "reason": "Conference",
+        "line": null,
+        "emoji": "",
+        "text": "",
+        "expiration": 0,
+        "autoPresence": null,
+        "source": "slack"
+      },
+      "workday": null
+    },
+    {
+      "id": "U003",
+      "name": "Jamie U.",
+      "fullName": "Jamie Underwood",
+      "avatarUrl": null,
+      "initials": "JU",
+      "title": "Sr. Online Marketing Specialist · Email Marketing",
+      "role": "Sr. Online Marketing Specialist",
+      "team": "Email Marketing",
+      "tags": [],
+      "checkin": null,
+      "presence": null,
+      "slackStatus": {
+        "bucket": "away",
+        "reason": "Out of office",
+        "line": "🚆 Running late — train delay",
+        "emoji": ":train:",
+        "text": "Running late — train delay",
+        "expiration": 1778343978,
+        "autoPresence": "away",
+        "source": "slack"
+      },
+      "workday": null
+    },
+    {
+      "id": "U005",
+      "name": "Jordan A.",
+      "fullName": "Jordan Abara",
+      "avatarUrl": null,
+      "initials": "JA",
+      "title": "Sr. Online Marketing Specialist · Email Marketing",
+      "role": "Sr. Online Marketing Specialist",
+      "team": "Email Marketing",
+      "tags": [],
+      "checkin": null,
+      "presence": null,
+      "slackStatus": {
+        "bucket": "vacation",
+        "reason": "On call",
+        "line": "🏖️ Ibiza — back Monday",
+        "emoji": ":beach_with_umbrella:",
+        "text": "Ibiza — back Monday",
+        "expiration": 0,
+        "autoPresence": "away",
+        "source": "workday"
+      },
+      "workday": {
+        "type": "PTO",
+        "through": "2026-04-25"
+      }
+    },
+    {
+      "id": "U004",
+      "name": "Rowan N.",
+      "fullName": "Rowan Nash",
+      "avatarUrl": null,
+      "initials": "RN",
+      "title": "Sr. Online Marketing Specialist · Email Marketing",
+      "role": "Sr. Online Marketing Specialist",
+      "team": "Email Marketing",
+      "tags": [],
+      "checkin": null,
+      "presence": null,
+      "slackStatus": {
+        "bucket": "vacation",
+        "reason": "Annual leave",
+        "line": "🤒 Out sick",
+        "emoji": ":face_with_thermometer:",
+        "text": "Out sick",
+        "expiration": 0,
+        "autoPresence": "away",
+        "source": "slack"
+      },
+      "workday": null
+    }
+  ],
+  "rollcalls": [],
+  "preview": true
+}

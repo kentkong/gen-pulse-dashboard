@@ -1,0 +1,144 @@
+{
+  "total": 87,
+  "atRisk": 16,
+  "buckets": {
+    "breaching": 3,
+    "imminent": 5,
+    "warning": 8,
+    "ok": 71
+  },
+  "byPriority": [
+    {
+      "priority": "Critical",
+      "count": 4,
+      "atRisk": 3
+    },
+    {
+      "priority": "High",
+      "count": 18,
+      "atRisk": 7
+    },
+    {
+      "priority": "Medium",
+      "count": 41,
+      "atRisk": 5
+    },
+    {
+      "priority": "Low",
+      "count": 24,
+      "atRisk": 1
+    }
+  ],
+  "thresholds": {
+    "Critical": 1,
+    "High": 3,
+    "Medium": 7,
+    "Low": 14
+  },
+  "topRisks": [
+    {
+      "key": "DEMO-289",
+      "summary": "Add canary deploys to email service",
+      "assignee": "Jamie Underwood",
+      "priority": "Critical",
+      "status": "In Progress",
+      "ageDays": 4.2,
+      "thresholdDays": 1,
+      "overdueDays": 3.2,
+      "bucket": "breaching"
+    },
+    {
+      "key": "DEMO-272",
+      "summary": "Fix dark-mode preview in Litmus",
+      "assignee": "Marley Olsen",
+      "priority": "Critical",
+      "status": "To Do",
+      "ageDays": 2.1,
+      "thresholdDays": 1,
+      "overdueDays": 1.1,
+      "bucket": "breaching"
+    },
+    {
+      "key": "DEMO-268",
+      "summary": "Swap deprecated SDK in send-worker",
+      "assignee": "Harper Whitaker",
+      "priority": "High",
+      "status": "In Progress",
+      "ageDays": 3.4,
+      "thresholdDays": 3,
+      "overdueDays": 0.4,
+      "bucket": "breaching"
+    },
+    {
+      "key": "DEMO-275",
+      "summary": "Reduce template build time on CI",
+      "assignee": "Rowan Nash",
+      "priority": "High",
+      "status": "In Review",
+      "ageDays": 2.3,
+      "thresholdDays": 3,
+      "overdueDays": -0.7,
+      "bucket": "imminent"
+    },
+    {
+      "key": "DEMO-281",
+      "summary": "Improve unsubscribe flow accessibility",
+      "assignee": "Reese Davies",
+      "priority": "High",
+      "status": "In Progress",
+      "ageDays": 1.6,
+      "thresholdDays": 3,
+      "overdueDays": -1.4,
+      "bucket": "warning"
+    }
+  ],
+  "generatedAt": 1778340378730,
+  "timezone": "Europe/Prague",
+  "jql": "project = EMAIL AND statusCategory != Done",
+  "preview": true,
+  "project": "EMOPS",
+  "jqlSource": "JIRA_EMOPS_BACKLOG_JQL",
+  "filter": {
+    "widgetId": "sla-aging-risk",
+    "title": "SLA / aging risk",
+    "jql": "project = EMOPS AND statusCategory != Done",
+    "source": "JIRA_EMOPS_BACKLOG_JQL",
+    "fallbackFrom": "JIRA_EMOPS_SLA_JQL",
+    "refreshSeconds": 300,
+    "project": "EMOPS",
+    "boardUrl": null,
+    "generatedAt": 1778340378730,
+    "chip": "EMOPS · open tickets · SLA risk",
+    "parameters": [
+      {
+        "label": "Project",
+        "value": "EMOPS"
+      },
+      {
+        "label": "Scope",
+        "value": "Open tickets only (same pool as backlog)"
+      },
+      {
+        "label": "Thresholds (days)",
+        "value": "Highest: 1d · Critical: 2d · High: 5d · Medium: 14d · Low: 30d",
+        "hint": "Per-priority target age before a ticket is flagged breaching / imminent / warning"
+      },
+      {
+        "label": "Issue types",
+        "value": "(all)"
+      },
+      {
+        "label": "Labels",
+        "value": "(none)"
+      },
+      {
+        "label": "Assignee",
+        "value": "any"
+      },
+      {
+        "label": "Timezone",
+        "value": "Europe/Prague"
+      }
+    ]
+  }
+}

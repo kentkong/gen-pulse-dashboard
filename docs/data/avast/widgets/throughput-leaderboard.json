@@ -1,0 +1,192 @@
+{
+  "weekLabel": "2026-W15",
+  "weekRange": "7 Apr – 13 Apr",
+  "weeksOfTrend": 8,
+  "weekLabels": [
+    "2026-W08",
+    "2026-W09",
+    "2026-W10",
+    "2026-W11",
+    "2026-W12",
+    "2026-W13",
+    "2026-W14",
+    "2026-W15"
+  ],
+  "topN": 6,
+  "rows": [
+    {
+      "key": "iryna.botulinska",
+      "name": "Marley Olsen",
+      "avatarUrl": null,
+      "weekly": [
+        22,
+        24,
+        19,
+        25,
+        27,
+        23,
+        28,
+        31
+      ],
+      "total": 199,
+      "lastWeek": 31,
+      "prevWeek": 28,
+      "deltaAbs": 3
+    },
+    {
+      "key": "victor.shapochkin",
+      "name": "Harper Whitaker",
+      "avatarUrl": null,
+      "weekly": [
+        18,
+        17,
+        20,
+        23,
+        19,
+        22,
+        26,
+        27
+      ],
+      "total": 172,
+      "lastWeek": 27,
+      "prevWeek": 26,
+      "deltaAbs": 1
+    },
+    {
+      "key": "petr.studeny",
+      "name": "Jamie Underwood",
+      "avatarUrl": null,
+      "weekly": [
+        14,
+        16,
+        13,
+        18,
+        20,
+        19,
+        22,
+        24
+      ],
+      "total": 146,
+      "lastWeek": 24,
+      "prevWeek": 22,
+      "deltaAbs": 2
+    },
+    {
+      "key": "kristyna.simkova",
+      "name": "Jordan Abara",
+      "avatarUrl": null,
+      "weekly": [
+        11,
+        12,
+        15,
+        14,
+        13,
+        16,
+        17,
+        19
+      ],
+      "total": 117,
+      "lastWeek": 19,
+      "prevWeek": 17,
+      "deltaAbs": 2
+    },
+    {
+      "key": "jan.bartoncik",
+      "name": "Rowan Nash",
+      "avatarUrl": null,
+      "weekly": [
+        8,
+        10,
+        9,
+        13,
+        11,
+        14,
+        15,
+        14
+      ],
+      "total": 94,
+      "lastWeek": 14,
+      "prevWeek": 15,
+      "deltaAbs": -1
+    },
+    {
+      "key": "yanina.scholz",
+      "name": "Skylar Eriksen",
+      "avatarUrl": null,
+      "weekly": [
+        6,
+        7,
+        5,
+        9,
+        8,
+        10,
+        11,
+        9
+      ],
+      "total": 65,
+      "lastWeek": 9,
+      "prevWeek": 11,
+      "deltaAbs": -2
+    }
+  ],
+  "truncated": 0,
+  "contributorsCount": 6,
+  "totalLastWeek": 124,
+  "totalResolvedWindow": 793,
+  "generatedAt": 1778340378742,
+  "timezone": "Europe/Prague",
+  "jql": "(project = EMAIL AND resolution = Done) AND resolved >= \"2026-02-23\" AND resolved < \"2026-04-14\"",
+  "preview": true,
+  "project": "EMOPS",
+  "jqlSource": "JIRA_EMOPS_THROUGHPUT_JQL",
+  "filter": {
+    "widgetId": "throughput-leaderboard",
+    "title": "Team throughput leaderboard",
+    "jql": "project = EMOPS AND issuetype in (Task, Story, Bug) AND statusCategory = Done",
+    "source": "JIRA_EMOPS_THROUGHPUT_JQL",
+    "fallbackFrom": "JIRA_EMOPS_LEADERBOARD_JQL",
+    "refreshSeconds": 900,
+    "project": "EMOPS",
+    "boardUrl": null,
+    "generatedAt": 1778340378742,
+    "chip": "EMOPS · last 8 weeks · top 6",
+    "parameters": [
+      {
+        "label": "Project",
+        "value": "EMOPS"
+      },
+      {
+        "label": "Date field",
+        "value": "resolved"
+      },
+      {
+        "label": "Window",
+        "value": "Last 8 completed Mon–Sun weeks"
+      },
+      {
+        "label": "Ranking",
+        "value": "Resolved count per assignee (last week)"
+      },
+      {
+        "label": "Max rows",
+        "value": "6"
+      },
+      {
+        "label": "Issue types",
+        "value": "Task, Story, Bug"
+      },
+      {
+        "label": "Labels",
+        "value": "(none)"
+      },
+      {
+        "label": "Assignee scope",
+        "value": "any"
+      },
+      {
+        "label": "Timezone",
+        "value": "Europe/Prague"
+      }
+    ]
+  }
+}

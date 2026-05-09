@@ -1,0 +1,83 @@
+{
+  "lookbackDays": 30,
+  "sampleSize": 124,
+  "medianDays": 4.2,
+  "meanDays": 6.1,
+  "p95Days": 22.4,
+  "previousMedianDays": 5,
+  "deltaDays": -0.8,
+  "byPriority": [
+    {
+      "priority": "Critical",
+      "count": 5,
+      "medianDays": 1.2
+    },
+    {
+      "priority": "High",
+      "count": 28,
+      "medianDays": 3.4
+    },
+    {
+      "priority": "Medium",
+      "count": 61,
+      "medianDays": 5.1
+    },
+    {
+      "priority": "Low",
+      "count": 30,
+      "medianDays": 9.8
+    }
+  ],
+  "generatedAt": 1778340378739,
+  "timezone": "Europe/Prague",
+  "jql": "project = EMAIL AND statusCategory = Done AND resolved >= -30d",
+  "preview": true,
+  "project": "EMOPS",
+  "jqlSource": "JIRA_EMOPS_LIFECYCLE_JQL",
+  "filter": {
+    "widgetId": "ticket-lifecycle",
+    "title": "Ticket lifecycle",
+    "jql": "project = EMOPS AND statusCategory = Done AND resolved >= -30d",
+    "source": "JIRA_EMOPS_LIFECYCLE_JQL",
+    "fallbackFrom": null,
+    "refreshSeconds": 1800,
+    "project": "EMOPS",
+    "boardUrl": null,
+    "generatedAt": 1778340378739,
+    "chip": "EMOPS · last 30d · resolved",
+    "parameters": [
+      {
+        "label": "Project",
+        "value": "EMOPS"
+      },
+      {
+        "label": "Scope",
+        "value": "Tickets resolved in the last 30 days"
+      },
+      {
+        "label": "Metric",
+        "value": "Median age (created → resolved), by priority"
+      },
+      {
+        "label": "Comparison window",
+        "value": "Preceding 30 days"
+      },
+      {
+        "label": "Issue types",
+        "value": "(all)"
+      },
+      {
+        "label": "Labels",
+        "value": "(none)"
+      },
+      {
+        "label": "Assignee",
+        "value": "any"
+      },
+      {
+        "label": "Timezone",
+        "value": "Europe/Prague"
+      }
+    ]
+  }
+}
