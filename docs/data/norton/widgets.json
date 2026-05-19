@@ -1,0 +1,81 @@
+{
+  "widgets": [
+    {
+      "id": "weekly-throughput",
+      "title": "Norton EMAIL Reports — Weekly throughput",
+      "size": "2x1",
+      "dataEndpoint": "/api/widgets/weekly-throughput",
+      "refreshSeconds": 900
+    },
+    {
+      "id": "backlog-overview",
+      "title": "Norton Email — Backlog Overview",
+      "size": "1x1",
+      "dataEndpoint": "/api/widgets/backlog-overview",
+      "refreshSeconds": 900
+    },
+    {
+      "id": "ticket-lifecycle",
+      "title": "Norton Email — Average Ticket Lifecycle",
+      "size": "1x1",
+      "dataEndpoint": "/api/widgets/ticket-lifecycle",
+      "refreshSeconds": 1800
+    },
+    {
+      "id": "inflow-vs-resolved",
+      "title": "Norton Email — Inflow vs Resolved",
+      "size": "1x1",
+      "dataEndpoint": "/api/widgets/inflow-vs-resolved",
+      "refreshSeconds": 900
+    },
+    {
+      "id": "sla-aging-risk",
+      "title": "Norton Email — SLA / Aging Risk",
+      "size": "1x1",
+      "dataEndpoint": "/api/widgets/sla-aging-risk",
+      "refreshSeconds": 300
+    },
+    {
+      "id": "sprint-backlog",
+      "title": "Norton Email — CSM Sprint Backlog",
+      "size": "1x1",
+      "dataEndpoint": "/api/widgets/sprint-backlog",
+      "refreshSeconds": 300
+    },
+    {
+      "id": "reopen-rate",
+      "title": "Norton Email — Reopen / Escalation Rate",
+      "size": "1x1",
+      "dataEndpoint": "/api/widgets/reopen-rate",
+      "refreshSeconds": 900
+    },
+    {
+      "id": "top-priority-tickets",
+      "title": "Norton Email — Top Priority Tickets",
+      "size": "3x1",
+      "dataEndpoint": "/api/widgets/top-priority-tickets",
+      "refreshSeconds": 300
+    },
+    {
+      "id": "throughput-leaderboard",
+      "title": "Norton Email — Team Throughput Leaderboard",
+      "size": "3x1",
+      "dataEndpoint": "/api/widgets/throughput-leaderboard",
+      "refreshSeconds": 900
+    },
+    {
+      "id": "kanban-board",
+      "title": "Norton Email — Kanban Snapshot",
+      "size": "3x1",
+      "dataEndpoint": "/api/widgets/kanban-board",
+      "refreshSeconds": 180
+    },
+    {
+      "id": "team-presence",
+      "title": "Team presence",
+      "size": "3x2",
+      "dataEndpoint": "/api/team",
+      "refreshSeconds": 30
+    }
+  ]
+}

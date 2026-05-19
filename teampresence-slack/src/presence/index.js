@@ -176,6 +176,25 @@ export async function listUpcomingAbsences({
     bySlackId.set(sid, ident);
   }
 
+  // Build slug → live Slack identity so we can prefer the Slack-CDN
+  // avatar (public, cacheable) over the static roster PNG. The roster
+  // avatars live behind the dashboard key, so when the absence widget
+  // renders `<img src="/team/<slug>.png">` unauthenticated it 401s and
+  // shows a broken icon — exactly what the Workday widget screenshot
+  // surfaced. Using the same CDN URL the roster grid already uses keeps
+  // the two surfaces visually consistent.
+  const identityBySlug = new Map();
+  for (const m of roster) {
+    if (!m.slug) continue;
+    for (const sid of m.slackIds ?? []) {
+      const ident = identitiesBySlackId.get(sid);
+      if (ident?.avatarUrl) {
+        identityBySlug.set(m.slug, ident);
+        break;
+      }
+    }
+  }
+
   const rows = await workdayProvider.listUpcomingAbsences(days);
   const out = [];
   for (const row of rows) {
@@ -185,6 +204,10 @@ export async function listUpcomingAbsences({
       (row.slug && bySlug.get(row.slug)) ||
       null;
     if (!member) continue;
+    const liveIdent =
+      (row.slackId && identitiesBySlackId.get(row.slackId)) ||
+      (member.slug && identityBySlug.get(member.slug)) ||
+      null;
     out.push({
       slackId: row.slackId,
       email: row.email,
@@ -194,9 +217,12 @@ export async function listUpcomingAbsences({
       type: row.type,
       note: row.note,
       member: {
+        // Keep the roster's short-form name (e.g. "Jan B.") — it's the
+        // deliberate display style for the widget. We only borrow the
+        // live Slack avatar, not the display name.
         name: member.displayName || member.name || member.fullName,
         fullName: member.fullName || member.name,
-        avatarUrl: member.avatarUrl ?? null,
+        avatarUrl: liveIdent?.avatarUrl ?? member.avatarUrl ?? null,
         role: member.role ?? null,
         team: member.team ?? null,
         slug: member.slug ?? null,

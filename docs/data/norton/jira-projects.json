@@ -1,0 +1,21 @@
+{
+  "projects": [
+    {
+      "key": "EMOPS",
+      "label": "EMOPS (current)",
+      "isDefault": true
+    },
+    {
+      "key": "EMAILCO",
+      "label": "EMAILCO (legacy)",
+      "isDefault": false
+    },
+    {
+      "key": "all",
+      "label": "Both",
+      "isDefault": false
+    }
+  ],
+  "defaultProject": "EMOPS",
+  "allProjectKey": "all"
+}

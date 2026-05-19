@@ -1,0 +1,122 @@
+{
+  "generatedAt": "2026-05-09T15:26:18.805Z",
+  "fakeIdentities": [
+    {
+      "fakeName": "Riley Lambert",
+      "fakeSlug": "riley-lambert",
+      "fakeInitials": "RL",
+      "fakeEmail": "riley.lambert@example.com",
+      "fakeSlackId": "U_DEMO_B5B8EA42"
+    },
+    {
+      "fakeName": "Reese Davies",
+      "fakeSlug": "reese-davies",
+      "fakeInitials": "RD",
+      "fakeEmail": "reese.davies@example.com",
+      "fakeSlackId": "U_DEMO_518BE5BA"
+    },
+    {
+      "fakeName": "Dana Xie",
+      "fakeSlug": "dana-xie",
+      "fakeInitials": "DX",
+      "fakeEmail": "dana.xie@example.com",
+      "fakeSlackId": "U_DEMO_7F895B16"
+    },
+    {
+      "fakeName": "Drew Mercer",
+      "fakeSlug": "drew-mercer",
+      "fakeInitials": "DM",
+      "fakeEmail": "drew.mercer@example.com",
+      "fakeSlackId": "U_DEMO_C90DF911"
+    },
+    {
+      "fakeName": "Marley Olsen",
+      "fakeSlug": "marley-olsen",
+      "fakeInitials": "MO",
+      "fakeEmail": "marley.olsen@example.com",
+      "fakeSlackId": "U_DEMO_2B7BA7FB"
+    },
+    {
+      "fakeName": "Wren Greco",
+      "fakeSlug": "wren-greco",
+      "fakeInitials": "WG",
+      "fakeEmail": "wren.greco@example.com",
+      "fakeSlackId": "U_DEMO_180A791D"
+    },
+    {
+      "fakeName": "Rowan Nash",
+      "fakeSlug": "rowan-nash",
+      "fakeInitials": "RN",
+      "fakeEmail": "rowan.nash@example.com",
+      "fakeSlackId": "U_DEMO_36A4BA64"
+    },
+    {
+      "fakeName": "Jordan Abara",
+      "fakeSlug": "jordan-abara",
+      "fakeInitials": "JA",
+      "fakeEmail": "jordan.abara@example.com",
+      "fakeSlackId": "U_DEMO_C3D91F4F"
+    },
+    {
+      "fakeName": "Logan Ellis",
+      "fakeSlug": "logan-ellis",
+      "fakeInitials": "LE",
+      "fakeEmail": "logan.ellis@example.com",
+      "fakeSlackId": "U_DEMO_D735FAE9"
+    },
+    {
+      "fakeName": "Hayden Tate",
+      "fakeSlug": "hayden-tate",
+      "fakeInitials": "HT",
+      "fakeEmail": "hayden.tate@example.com",
+      "fakeSlackId": "U_DEMO_00C6136A"
+    },
+    {
+      "fakeName": "Jamie Underwood",
+      "fakeSlug": "jamie-underwood",
+      "fakeInitials": "JU",
+      "fakeEmail": "jamie.underwood@example.com",
+      "fakeSlackId": "U_DEMO_EF7EFA99"
+    },
+    {
+      "fakeName": "Arden Bennett",
+      "fakeSlug": "arden-bennett",
+      "fakeInitials": "AB",
+      "fakeEmail": "arden.bennett@example.com",
+      "fakeSlackId": "U_DEMO_8E4BC6C0"
+    },
+    {
+      "fakeName": "Harper Whitaker",
+      "fakeSlug": "harper-whitaker",
+      "fakeInitials": "HW",
+      "fakeEmail": "harper.whitaker@example.com",
+      "fakeSlackId": "U_DEMO_860716C3"
+    },
+    {
+      "fakeName": "Morgan Yates",
+      "fakeSlug": "morgan-yates",
+      "fakeInitials": "MY",
+      "fakeEmail": "morgan.yates@example.com",
+      "fakeSlackId": "U_DEMO_8FF2314F"
+    },
+    {
+      "fakeName": "Indigo Costa",
+      "fakeSlug": "indigo-costa",
+      "fakeInitials": "IC",
+      "fakeEmail": "indigo.costa@example.com",
+      "fakeSlackId": "U_DEMO_CCECB001"
+    },
+    {
+      "fakeName": "Skylar Eriksen",
+      "fakeSlug": "skylar-eriksen",
+      "fakeInitials": "SE",
+      "fakeEmail": "skylar.eriksen@example.com",
+      "fakeSlackId": "U_DEMO_32F987CB"
+    }
+  ],
+  "counts": {
+    "processed": 30,
+    "leaks": 0,
+    "totalFiles": 31
+  }
+}

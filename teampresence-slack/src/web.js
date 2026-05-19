@@ -29,10 +29,22 @@ import {
   defaultProjectKey,
   resolveJql,
   resolveProjectScalar,
+  applyTeamScope,
   isValidProjectKey,
   ALL_PROJECT_KEY,
+  DEFAULT_TEAM_KEY,
+  AVAST_TEAM_KEY,
+  TEAM_KEYS,
+  normaliseTeamKey,
 } from "./jira-projects.js";
-import { TEAM, findBySlackId, initialsFor } from "./team.js";
+import {
+  TEAM,
+  TEAMS,
+  getRoster,
+  findBySlackId,
+  findByName,
+  initialsFor,
+} from "./team.js";
 import {
   filterForWeeklyThroughput,
   filterForBacklogOverview,
@@ -61,6 +73,7 @@ import {
   completeMockLogin,
 } from "./oidc.js";
 import { readTunnelState, buildShareLinks } from "./demoShare.js";
+import { weatherServiceFromEnv } from "./weather.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.join(__dirname, "..", "public");
@@ -113,6 +126,19 @@ export function registerWebRoutes({
   }
 
   const dashboardKey = (process.env.DASHBOARD_KEY ?? "").trim();
+
+  // Team-aware brand copy: Norton uses the default BRAND_NAME env
+  // var, AVAST uses BRAND_NAME_AVAST when set. Falling back to the
+  // Norton brand if the AVAST override is empty guarantees the UI
+  // never renders a blank hero chip — callers can identify an
+  // unconfigured AVAST brand by comparing against `brandName`.
+  function brandNameForTeam(teamKey) {
+    if (teamKey === AVAST_TEAM_KEY) {
+      const avast = (process.env.BRAND_NAME_AVAST ?? "").trim();
+      return avast || brandName;
+    }
+    return brandName;
+  }
   /* ---------------------------------------------------------------- *
    * Central authenticator.
    *
@@ -235,6 +261,19 @@ export function registerWebRoutes({
       `[presence] Workday provider: ${workdayPresenceProvider.kind ?? "unknown"}`
     );
   }
+
+  /* ---------------------------------------------------------------- *
+   * Weather widget — small hero-chip provider.
+   *
+   * Optional. Opts in when WEATHER_LAT + WEATHER_LON are set in the
+   * env. See src/weather.js for the cache / soft-fail behaviour.
+   * ---------------------------------------------------------------- */
+  const weatherService = weatherServiceFromEnv(process.env);
+  if (weatherService) {
+    console.log(
+      `[weather] enabled for "${weatherService.location}" via ${weatherService.kind}`
+    );
+  }
   /* ---------------------------------------------------------------- *
    * Jira multi-project wiring.
    *
@@ -279,10 +318,17 @@ export function registerWebRoutes({
   //   back to the hardcoded default ("To Do"). We therefore check
   //   for key presence and only apply `fallback` when the key isn't
   //   defined at any level.
-  function perProjectScalar(projectKey, suffix, fallback) {
-    const r = resolveProjectScalar(process.env, projectKey, suffix);
+  function perProjectScalar(projectKey, suffix, fallback, teamKey = null) {
+    const r = resolveProjectScalar(process.env, projectKey, suffix, teamKey);
     const proj = String(projectKey || "").toUpperCase();
+    const team = String(teamKey || "").toUpperCase();
+    const isTeamOverlay = team && team !== DEFAULT_TEAM_KEY.toUpperCase();
     const candidateKeys = [
+      isTeamOverlay && proj && proj !== "ALL"
+        ? `JIRA_${team}_${proj}_${suffix}`
+        : null,
+      isTeamOverlay && proj === "ALL" ? `JIRA_${team}_ALL_${suffix}` : null,
+      isTeamOverlay ? `JIRA_${team}_${suffix}` : null,
       proj && proj !== "ALL" ? `JIRA_${proj}_${suffix}` : null,
       proj === "ALL" ? `JIRA_ALL_${suffix}` : null,
       `JIRA_${suffix}`,
@@ -293,13 +339,13 @@ export function registerWebRoutes({
     const value = keySetExplicitly ? r.value : fallback;
     return { value, source: r.source };
   }
-  function perProjectList(projectKey, suffix, fallback) {
-    const r = resolveProjectScalar(process.env, projectKey, suffix);
+  function perProjectList(projectKey, suffix, fallback, teamKey = null) {
+    const r = resolveProjectScalar(process.env, projectKey, suffix, teamKey);
     const list = parseCsv(r.value);
     return { value: list.length > 0 ? list : fallback, source: r.source };
   }
-  function perProjectNumber(projectKey, suffix, fallback) {
-    const r = resolveProjectScalar(process.env, projectKey, suffix);
+  function perProjectNumber(projectKey, suffix, fallback, teamKey = null) {
+    const r = resolveProjectScalar(process.env, projectKey, suffix, teamKey);
     const n = Number(r.value);
     return {
       value: Number.isFinite(n) && n > 0 ? n : fallback,
@@ -332,6 +378,37 @@ export function registerWebRoutes({
   }
 
   /**
+   * Normalise the caller-supplied team selection.
+   *
+   * Source order:
+   *   1. ?team=avast|norton  (URL query — authoritative, enables
+   *      link-sharing + cache-busting when switching)
+   *   2. `gp_team=…` cookie  (sticky after a user clicks the
+   *      switcher — survives refresh / deeplinks without ?team)
+   *   3. DEFAULT_TEAM_KEY      ("norton") if neither is set or if
+   *      the input is unrecognised (preserves prior behaviour for
+   *      every existing bookmark / saved link)
+   *
+   * Returns { key, source } so diagnostics can tell whether the
+   * team came from the URL or was sticky from a previous session.
+   */
+  function normaliseTeam(req) {
+    const raw = (req.query?.team ?? "").toString().trim().toLowerCase();
+    if (raw && TEAM_KEYS.includes(raw)) {
+      return { key: raw, source: "query" };
+    }
+    const cookieHeader = String(req.headers?.cookie ?? "");
+    const cookieMatch = /(?:^|;\s*)gp_team=([^;]+)/.exec(cookieHeader);
+    const cookieVal = cookieMatch
+      ? decodeURIComponent(cookieMatch[1]).trim().toLowerCase()
+      : "";
+    if (cookieVal && TEAM_KEYS.includes(cookieVal)) {
+      return { key: cookieVal, source: "cookie" };
+    }
+    return { key: DEFAULT_TEAM_KEY, source: "default" };
+  }
+
+  /**
    * Project-aware cached builder.
    *
    * Each widget getter now maintains a Map<projectKey,
@@ -344,10 +421,14 @@ export function registerWebRoutes({
    * columns) can pull them via resolveProjectScalar.
    */
   function makeCachedBuilder({ ttlMs, buildFn, widgetKey, reasonNoJql }) {
-    const caches = new Map(); // projectKey|"" → { payload, fetchedAt }
-    const getter = async function ({ force = false, project } = {}) {
-      const key = project ?? "";
-      const entry = caches.get(key);
+    const caches = new Map(); // "project|team" → { payload, fetchedAt }
+    const getter = async function ({
+      force = false,
+      project,
+      team = DEFAULT_TEAM_KEY,
+    } = {}) {
+      const cacheKey = `${project ?? ""}|${team ?? DEFAULT_TEAM_KEY}`;
+      const entry = caches.get(cacheKey);
       if (
         !force &&
         entry &&
@@ -357,15 +438,16 @@ export function registerWebRoutes({
         return entry.payload;
       }
       const jira = jiraFromEnv();
-      const { jql, source, fallbackFrom } = resolveJql(
+      const { jql: baseJql, source, fallbackFrom } = resolveJql(
         process.env,
         project,
         widgetKey
       );
-      if (!jira || !jql) {
+      if (!jira || !baseJql) {
         return {
           unavailable: true,
           project: project ?? null,
+          team: team ?? null,
           reason: !jira
             ? "JIRA_BASE_URL / JIRA_TOKEN not set"
             : `${source} not set`,
@@ -374,14 +456,27 @@ export function registerWebRoutes({
           generatedAt: Date.now(),
         };
       }
-      const payload = await buildFn({ jira, jql, project });
+      // Layer the team-scope filter (Norton Email EXCLUDE_* or
+      // AVAST Freemium INCLUDE_ASSIGNEES) onto the resolved JQL so
+      // every widget shows only the selected team's work. Driven
+      // by JIRA_<PROJECT>_* and JIRA_<TEAM>_* env vars; a no-op
+      // when those are unset.
+      const { jql, applied: teamScopeApplied } = applyTeamScope(
+        baseJql,
+        process.env,
+        project,
+        { teamKey: team }
+      );
+      const payload = await buildFn({ jira, jql, project, team });
       const withMeta = {
         ...payload,
         project: project ?? null,
+        team: team ?? null,
         jqlSource: source,
         jqlFallbackFrom: fallbackFrom,
+        teamScopeApplied,
       };
-      caches.set(key, { payload: withMeta, fetchedAt: Date.now() });
+      caches.set(cacheKey, { payload: withMeta, fetchedAt: Date.now() });
       return withMeta;
     };
     getter.ttlMs = ttlMs;
@@ -453,10 +548,22 @@ export function registerWebRoutes({
     widgetKey: "LIFECYCLE",
     buildFn: ({ jira, jql, project }) => {
       const o = lifecycleOptsFor(project);
+      // The "previous period" JQL comes from its own env var
+      // (LIFECYCLE_PREV_JQL) and is NOT routed through
+      // applyTeamScope() by makeCachedBuilder — that wrapper only
+      // scopes the primary JQL. Without this, the current period
+      // would be team-scoped (Norton EMAIL only) while the previous
+      // period leaks in cross-team tickets, producing a misleading
+      // delta. Apply the same exclusion + INCLUDE_BUSINESS_TEAMS
+      // scope explicitly here so both halves of the comparison are
+      // measured against the identical population.
+      const jqlPreviousScoped = o.jqlPrevious
+        ? applyTeamScope(o.jqlPrevious, process.env, project).jql
+        : undefined;
       return buildTicketLifecycle({
         jira,
         jql,
-        jqlPrevious: o.jqlPrevious || undefined,
+        jqlPrevious: jqlPreviousScoped,
         lookbackDays: o.lookbackDays,
         timezone,
       });
@@ -540,14 +647,55 @@ export function registerWebRoutes({
   const getThroughputLeaderboard = makeCachedBuilder({
     ttlMs: MEDIUM_TTL_MS,
     widgetKey: "LEADERBOARD",
-    buildFn: ({ jira, jql, project }) => {
+    buildFn: async ({ jira, jql, project, team }) => {
+      const teamKey = team || DEFAULT_TEAM_KEY;
       const o = leaderboardOptsFor(project);
-      return buildThroughputLeaderboard({
+      const data = await buildThroughputLeaderboard({
         jira,
         jql,
         topN: o.limit,
         timezone,
       });
+      // Avatar swap: Jira returns absolute URLs on the corporate Jira
+      // host (jira.corp.nortonlifelock.com) which a phone on cellular
+      // — or any non-VPN visitor — cannot reach. The <img> falls back
+      // to onerror=this.remove(), leaving an empty circle on Alan's
+      // phone. Remap each row by name:
+      //   1. First try the team-scoped roster's baked-in avatarUrl
+      //      (Norton has /team/<slug>.png portraits committed to the
+      //      repo — served locally, network-independent).
+      //   2. For teams without baked-in portraits (AVAST), fall back
+      //      to the Slack avatar we've already resolved for the same
+      //      person via Team Presence. identityCache is populated
+      //      lazily; if a row's person hasn't been touched yet we
+      //      fetch on demand so the leaderboard doesn't render 8
+      //      blank circles for 15 minutes while Team Presence
+      //      eventually warms the cache.
+      // Names not found in any roster get null'd so the
+      // gradient+initials placeholder kicks in instead of a broken
+      // Jira corp URL.
+      if (data && Array.isArray(data.rows)) {
+        for (const row of data.rows) {
+          const match = findByName(row?.name, teamKey);
+          let avatar = match?.avatarUrl ?? null;
+          if (!avatar && match?.slackIds?.length) {
+            for (const sid of match.slackIds) {
+              try {
+                const identity = await loadIdentity(sid);
+                if (identity?.avatarUrl) {
+                  avatar = identity.avatarUrl;
+                  break;
+                }
+              } catch {
+                // Best-effort Slack lookup; if it fails we fall
+                // through to the initials placeholder.
+              }
+            }
+          }
+          row.avatarUrl = avatar;
+        }
+      }
+      return data;
     },
   });
 
@@ -565,7 +713,15 @@ export function registerWebRoutes({
   }
 
   router.get("/", (req, res, next) => {
-    if (!authorized(req, dashboardKey)) {
+    // When OIDC (or mock-OIDC) is active, the dashboard HTML itself
+    // is public on purpose: the in-page JS polls /api/me and renders
+    // either the Sign-in banner or the signed-in user pill. Gating
+    // the static HTML behind shared-key would prevent a signed-out
+    // visitor from ever reaching the Sign-in button — that's a
+    // chicken-and-egg the OIDC banner CSS (data-sign-in-mode="true")
+    // was designed to handle. Route-level authn still enforces the
+    // session: every /api/* endpoint goes through currentAuthenticator.
+    if (!oidcConfig && !authorized(req, dashboardKey)) {
       res.status(401).type("text/plain").send("Unauthorized — append ?key=…");
       return;
     }
@@ -574,7 +730,44 @@ export function registerWebRoutes({
         next(err);
         return;
       }
-      const rendered = html.replaceAll("{{BRAND_NAME}}", brandName);
+      // Team is resolved per-request so ?team=avast (or a sticky
+      // gp_team cookie) flips the brand copy at the HTML layer —
+      // this matters because the marketing chip + page <title> are
+      // both static substitutions, so a stale Norton cache on a
+      // freshly-switched AVAST session would visibly mismatch.
+      const { key: team } = normaliseTeam(req);
+      const teamBrandName =
+        team === AVAST_TEAM_KEY
+          ? (process.env.BRAND_NAME_AVAST ?? "AVAST EMAIL Freemium").trim() ||
+            brandName
+          : brandName;
+      // UI's data-team convention: the dashboard HTML has always
+      // used "email-norton" as the default team slug (marketing
+      // artefact that predates the server-side team dimension).
+      // Keep that alias here so the existing CSS gates + localStorage
+      // semantics keep working unchanged.
+      const bodyTeamAttr = team === AVAST_TEAM_KEY ? "avast" : "email-norton";
+      let rendered = html
+        .replaceAll("{{BRAND_NAME}}", teamBrandName)
+        .replaceAll("{{TEAM_KEY}}", team)
+        .replaceAll("{{BODY_TEAM_ATTR}}", bodyTeamAttr)
+        .replaceAll("{{TEAM_LABEL}}", team === AVAST_TEAM_KEY ? "AVAST Freemium" : "Norton Email");
+      // Persist the selection for follow-up requests (deep links,
+      // /api/* calls fired from page JS) so only the first nav
+      // needs ?team=… in the URL. httpOnly=false: the client-side
+      // JS inspects the cookie to keep the UI state in sync after
+      // a refresh.
+      if (req.query?.team) {
+        res.cookie?.("gp_team", team, {
+          httpOnly: false,
+          sameSite: "lax",
+          maxAge: 30 * 24 * 60 * 60 * 1000, // 30 days
+          path: "/",
+        }) || res.setHeader(
+          "Set-Cookie",
+          `gp_team=${encodeURIComponent(team)}; Path=/; Max-Age=${30 * 24 * 60 * 60}; SameSite=Lax`
+        );
+      }
       // Disable caching on the dashboard HTML so UI changes
       // (new widgets, new overlays, copy tweaks) land on refresh
       // instead of silently persisting as stale desktop cache.
@@ -676,11 +869,23 @@ export function registerWebRoutes({
     });
   });
 
+  /* ---------------------------------------------------------------- *
+   * /team/:file — roster portrait photos.
+   *
+   * Same rationale as /img/:file below: browsers don't forward the
+   * shared-key `?key=` query when fetching <img src> URLs, so leaving
+   * this auth-gated meant any visitor on a network that *can* reach
+   * the public tunnel but *can't* reach the original Jira host (i.e.
+   * any phone on cellular) saw broken/empty avatars on the
+   * Throughput Leaderboard. The photos are not secrets — they're
+   * the same images the corp directory exposes — and the dashboard
+   * already shows everyone's names + roles publicly to anyone with
+   * the share link, so dropping auth on the *image bytes* leaks no
+   * additional information. Strict filename allowlist + path
+   * traversal guard keep the surface area to "files we put in
+   * public/team/".
+   * ---------------------------------------------------------------- */
   router.get("/team/:file", (req, res) => {
-    if (!authorized(req, dashboardKey)) {
-      res.status(401).type("text/plain").send("Unauthorized");
-      return;
-    }
     const file = req.params.file;
     if (!/^[\w.\-]+\.(png|jpg|jpeg|webp)$/i.test(file)) {
       res.status(404).type("text/plain").send("Not found");
@@ -706,11 +911,50 @@ export function registerWebRoutes({
     });
   });
 
+  /* ---------------------------------------------------------------- *
+   * /img/:file — static branding assets (logos, badges, decorations).
+   *
+   * These are intentionally UNAUTH'd: they're shipped with the
+   * product, contain no user data, and need to load from inside an
+   * <img> tag where browsers won't forward the `?key=` shared-key
+   * query string. Strict allowlist on the filename + path-traversal
+   * guard keeps the surface area to "files we put in public/img/".
+   * ---------------------------------------------------------------- */
+  router.get("/img/:file", (req, res) => {
+    const file = req.params.file;
+    if (!/^[\w.\-]+\.(png|jpg|jpeg|webp|svg)$/i.test(file)) {
+      res.status(404).type("text/plain").send("Not found");
+      return;
+    }
+    const abs = path.resolve(PUBLIC_DIR, "img", file);
+    if (!abs.startsWith(path.join(PUBLIC_DIR, "img") + path.sep)) {
+      res.status(403).type("text/plain").send("Forbidden");
+      return;
+    }
+    fs.readFile(abs, (err, buf) => {
+      if (err) {
+        res.status(404).type("text/plain").send("Not found");
+        return;
+      }
+      const ext = path.extname(abs).toLowerCase();
+      const mime =
+        ext === ".png" ? "image/png"
+        : ext === ".webp" ? "image/webp"
+        : ext === ".svg" ? "image/svg+xml"
+        : "image/jpeg";
+      // Long cache: branding assets are immutable per deploy. If we
+      // ever swap a file in place, append ?v=N at the call site.
+      res.setHeader("cache-control", "public, max-age=86400, immutable");
+      res.type(mime).send(buf);
+    });
+  });
+
   router.get("/api/team", async (req, res) => {
     if (!authorized(req, dashboardKey)) {
       res.status(401).json({ error: "unauthorized" });
       return;
     }
+    const { key: team } = normaliseTeam(req);
     try {
       // New presence models route through src/presence/*. Legacy bot
       // mode keeps the SQLite check-in + rollcall flow exactly as
@@ -724,13 +968,13 @@ export function registerWebRoutes({
         (presenceUsesSlack && slackPresenceProvider) ||
         (presenceUsesWorkday && workdayPresenceProvider)
       ) {
-        const payload = await buildTeamPayloadFromProviders();
-        res.json(payload);
+        const payload = await buildTeamPayloadFromProviders(team);
+        res.json({ ...payload, team });
         return;
       }
 
-      const payload = await buildTeamPayloadFromBot();
-      res.json(payload);
+      const payload = await buildTeamPayloadFromBot(team);
+      res.json({ ...payload, team });
     } catch (err) {
       console.error("[web] /api/team failed:", err);
       res.status(500).json({ error: "internal" });
@@ -780,10 +1024,19 @@ export function registerWebRoutes({
         if (payload?.payload) identitiesBySlackId.set(uid, payload.payload);
       }
 
+      // Scope the absence list to the currently-selected team — without
+      // this the "Out today" briefing strip surfaces Norton people on
+      // the AVAST view (and vice versa) because listUpcomingAbsences
+      // name-matches Workday records against whatever roster we hand
+      // it. We want each team's briefing to reflect only that team's
+      // people, mirroring the Team Presence grid right below.
+      const { key: teamKey } = normaliseTeam(req);
+      const scopedRoster = getRoster(teamKey);
+
       const all = await listUpcomingAbsences({
         workdayProvider: workdayPresenceProvider,
         days,
-        roster: TEAM,
+        roster: scopedRoster,
         identitiesBySlackId,
       });
 
@@ -795,6 +1048,7 @@ export function registerWebRoutes({
 
       res.json({
         generatedAt: Date.now(),
+        team: teamKey,
         model: presenceModel,
         source: workdayPresenceProvider.kind ?? "none",
         windowDays: days,
@@ -813,21 +1067,29 @@ export function registerWebRoutes({
    * implementation — see git history for the rationale behind each
    * field. Invoked only when PRESENCE_MODEL=bot (the default).
    * ---------------------------------------------------------------- */
-  async function buildTeamPayloadFromBot() {
+  async function buildTeamPayloadFromBot(teamKey = DEFAULT_TEAM_KEY) {
+    const isDefaultTeam = teamKey === DEFAULT_TEAM_KEY;
     const date = todayInTz();
     const checkins = listCheckinsForDate(db, date);
     const checkinByUser = new Map(checkins.map((c) => [c.userId, c]));
 
     const thirtyDaysAgo = Date.now() - 30 * MS_PER_DAY;
-    const knownIds = listAllKnownUserIds(db, thirtyDaysAgo);
-    const memberIds = Array.from(new Set([...seedMemberIds, ...knownIds]));
+    // Bot-mode "known" users come from SQLite activity — that's a
+    // cross-team signal, so we only layer it in for the default
+    // (Norton) team. AVAST starts from its roster only.
+    const knownIds = isDefaultTeam
+      ? listAllKnownUserIds(db, thirtyDaysAgo)
+      : [];
+    const memberIds = Array.from(
+      new Set([...(isDefaultTeam ? seedMemberIds : []), ...knownIds])
+    );
 
     const members = await Promise.all(
       memberIds.map(async (userId) => {
         const presence = getPresence(db, userId);
         const checkin = checkinByUser.get(userId) ?? null;
         const identity = await loadIdentity(userId);
-        const rosterEntry = findBySlackId(userId);
+        const rosterEntry = findBySlackId(userId, teamKey);
         const name = identity?.displayName || userId;
         return {
           id: userId,
@@ -858,7 +1120,7 @@ export function registerWebRoutes({
     );
 
     const seenNames = new Set(members.map((m) => m.name.toLowerCase()));
-    for (const fallback of rosterFallbackMembers()) {
+    for (const fallback of rosterFallbackMembers(teamKey)) {
       if (!seenNames.has(fallback.name.toLowerCase())) {
         members.push(fallback);
       }
@@ -883,7 +1145,7 @@ export function registerWebRoutes({
     });
 
     return {
-      brandName,
+      brandName: brandNameForTeam(teamKey),
       date,
       timezone,
       generatedAt: Date.now(),
@@ -915,17 +1177,28 @@ export function registerWebRoutes({
    * running off providers) so the UI's existing code paths degrade to
    * "use the new slackStatus field instead" without extra branching.
    * ---------------------------------------------------------------- */
-  async function buildTeamPayloadFromProviders() {
+  async function buildTeamPayloadFromProviders(teamKey = DEFAULT_TEAM_KEY) {
     const date = todayInTz();
+    const activeRoster = getRoster(teamKey);
+    const isDefaultTeam = teamKey === DEFAULT_TEAM_KEY;
 
     // Seed: start from the explicit roster (source of truth) plus any
     // TEAM_MEMBER_IDS override. We intentionally do NOT pull from the
     // "recently interacted with the bot" table — in slack mode we
     // want the roster to be complete from day one, not dependent on
     // past bot use.
-    const rosterIds = TEAM.flatMap((m) => m.slackIds ?? []);
+    //
+    // For non-default teams (e.g. AVAST) we don't inject seedMemberIds
+    // because that env var enumerates Norton team Slack ids — mixing
+    // them in would contaminate the AVAST view with Norton members.
+    const rosterIds = activeRoster.flatMap((m) => m.slackIds ?? []);
     const memberIds = Array.from(
-      new Set([...seedMemberIds, ...rosterIds].filter(Boolean))
+      new Set(
+        [
+          ...(isDefaultTeam ? seedMemberIds : []),
+          ...rosterIds,
+        ].filter(Boolean)
+      )
     );
 
     // Build identity first so we have email (needed for Workday CSV
@@ -945,7 +1218,7 @@ export function registerWebRoutes({
     // (works even before anyone's Slack id is wired up in team.js).
     const slugByUserId = new Map();
     for (const uid of memberIds) {
-      const entry = findBySlackId(uid);
+      const entry = findBySlackId(uid, teamKey);
       if (entry?.slug) slugByUserId.set(uid, entry.slug);
     }
 
@@ -977,13 +1250,17 @@ export function registerWebRoutes({
     // active absences once and index by slug so the fallback loop can
     // attach a Vacation badge without double-fetching.
     const activeWorkdayBySlug = new Map();
-    if (workdayPresenceProvider) {
+    if (workdayPresenceProvider && isDefaultTeam) {
+      // Workday CSV is scoped to the Norton team today — overlaying
+      // it onto the AVAST roster would match nothing (no shared
+      // slugs) and burn an HR fetch per tab. When AVAST gets its own
+      // absence feed we'll make this team-aware.
       try {
         const todayY = todayInTz();
         const activeRows = await listUpcomingAbsences({
           workdayProvider: workdayPresenceProvider,
           days: 1,
-          roster: TEAM,
+          roster: activeRoster,
         });
         for (const r of activeRows) {
           if (!r.slug) continue;
@@ -998,7 +1275,7 @@ export function registerWebRoutes({
 
     const members = memberIds.map((userId) => {
       const identity = identityById.get(userId) ?? null;
-      const rosterEntry = findBySlackId(userId);
+      const rosterEntry = findBySlackId(userId, teamKey);
       const presence = presenceByUser.get(userId) ?? null;
       const name = identity?.displayName || rosterEntry?.displayName || userId;
       return {
@@ -1047,7 +1324,7 @@ export function registerWebRoutes({
     // appended as read-only rows (no status) so the card list stays
     // complete.
     const seenNames = new Set(members.map((m) => m.name.toLowerCase()));
-    for (const fallback of rosterFallbackMembers()) {
+    for (const fallback of rosterFallbackMembers(teamKey)) {
       if (!seenNames.has(fallback.name.toLowerCase())) {
         // If the CSV says this person is out today, overlay Vacation
         // even though we don't have a Slack id for them yet. This is
@@ -1087,7 +1364,7 @@ export function registerWebRoutes({
     members.sort((a, b) => a.name.localeCompare(b.name));
 
     return {
-      brandName,
+      brandName: brandNameForTeam(teamKey),
       date,
       timezone,
       generatedAt: Date.now(),
@@ -1164,12 +1441,12 @@ export function registerWebRoutes({
     return payload;
   }
 
-  function rosterFallbackMembers() {
+  function rosterFallbackMembers(teamKey = DEFAULT_TEAM_KEY) {
     // Seed /api/team with every roster entry that isn't yet mapped to a
     // live Slack id — so the UI shows the real team even before people
     // start interacting with the bot.
-    return TEAM
-      .filter((m) => m.slackIds.length === 0)
+    return getRoster(teamKey)
+      .filter((m) => (m.slackIds ?? []).length === 0)
       .map((m) => ({
         id: `roster:${m.slug}`,
         // Carry the slug through so the Workday overlay can match
@@ -1307,6 +1584,36 @@ export function registerWebRoutes({
     });
   });
 
+  router.get("/api/weather", async (req, res) => {
+    if (!authorized(req, dashboardKey)) {
+      res.status(401).json({ error: "unauthorized" });
+      return;
+    }
+    if (!weatherService) {
+      // Return 200 with {enabled:false} rather than 404 so the client
+      // can just hide the chip without logging a network error.
+      res.set("Cache-Control", "no-store");
+      res.json({ enabled: false });
+      return;
+    }
+    try {
+      const reading = await weatherService.getCurrent();
+      if (!reading) {
+        res.set("Cache-Control", "no-store");
+        res.json({ enabled: true, available: false });
+        return;
+      }
+      // 5-min browser cache — half the server TTL — so tabs left
+      // open don't hammer the endpoint, but the UI still picks up
+      // fresh data within one refresh cycle of a real change.
+      res.set("Cache-Control", "public, max-age=300");
+      res.json({ enabled: true, available: true, ...reading });
+    } catch (err) {
+      console.warn("[weather] route error:", err?.message ?? err);
+      res.status(200).json({ enabled: true, available: false });
+    }
+  });
+
   router.get("/api/widgets", (req, res) => {
     if (!authorized(req, dashboardKey)) {
       res.status(401).json({ error: "unauthorized" });
@@ -1357,15 +1664,17 @@ export function registerWebRoutes({
         res.status(400).json({ error: projectError });
         return;
       }
+      const { key: team } = normaliseTeam(req);
       try {
         const payload = await getter({
           force: req.query?.force === "1",
           project,
+          team,
         });
         let filter = null;
         if (buildFilterMeta && !payload?.unavailable) {
           try {
-            filter = buildFilterMeta(payload, project);
+            filter = buildFilterMeta(payload, project, team);
             if (filter && filtersAreProvisional) {
               filter = { ...filter, provisional: true };
             }
@@ -1373,7 +1682,7 @@ export function registerWebRoutes({
             console.warn(`[web] filter meta failed for ${id}:`, err?.message);
           }
         }
-        res.json(filter ? { ...payload, filter } : payload);
+        res.json(filter ? { ...payload, filter, team } : { ...payload, team });
       } catch (err) {
         console.error(`[web] ${id} failed:`, err);
         res.status(500).json({
@@ -1405,6 +1714,7 @@ export function registerWebRoutes({
       timezone,
       generatedAt: p?.generatedAt,
       project: p?.project,
+      weeksOfTrend: p?.weeksOfTrend,
     })
   );
   registerWidgetRoute("backlog-overview", getBacklog, (p) =>

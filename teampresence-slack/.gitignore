@@ -1,4 +1,19 @@
 node_modules/
 .env
+.env.*
+.env.*.bak
 data/
 *.log
+
+# Demo / portfolio static-bundle workflow.
+#   tmp/snapshot-raw  — UNSANITIZED captures of /api/* responses. Contains
+#                       real names, real Slack IDs, real Jira keys, real
+#                       Workday absence reasons. NEVER commit. Gitignoring
+#                       defensively so a typo in a script can't leak.
+#   dist/             — sanitized static bundle. Built by scripts/build-demo.mjs
+#                       and pushed to the public `demo` branch via worktree.
+#                       Living on `main` would just create churn diffs every
+#                       time someone re-runs the build, so we keep it out
+#                       of the main branch entirely.
+tmp/
+dist/

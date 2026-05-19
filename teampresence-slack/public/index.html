@@ -451,6 +451,121 @@
       }
 
       /* --------------------------------------------------------------
+         Hero weather chip — a small, tasteful "now at <city>" pill
+         pinned to the top of .sn-hero-right, above the
+         last-updated/theme/refresh controls row.
+
+         Design:
+         - Token-driven (--text / --border / --gen-blue) so it
+           inherits the same look as the Top Priority pills and the
+           briefing stat boxes. No standalone palette.
+         - Icon is a 14px stroked SVG (line weight matches the refresh
+           icon). Temp is the visual anchor; condition + freshness
+           live in the title tooltip so the chip stays one line.
+         - Click toggles °C ↔ °F (remembered in sessionStorage).
+         - Hidden by default (`hidden`) — the JS unhides it only
+           after a successful fetch so a misconfigured or unreachable
+           Open-Meteo never leaves a blank placeholder in the hero.
+         -------------------------------------------------------------- */
+      .sn-weather {
+        display: inline-flex;
+        align-items: center;
+        gap: 0.5rem;
+        padding: 0.38rem 0.7rem;
+        border-radius: 999px;
+        background: color-mix(in srgb, var(--surface) 82%, transparent);
+        border: 1px solid var(--border);
+        color: var(--text);
+        font-size: 0.8rem;
+        font-weight: 600;
+        line-height: 1;
+        cursor: pointer;
+        transition:
+          border-color 140ms ease,
+          background 140ms ease,
+          transform 120ms ease;
+        box-shadow: 0 1px 2px rgba(15, 18, 40, 0.04);
+      }
+      .sn-weather[hidden] {
+        display: none !important;
+      }
+      .sn-weather:hover {
+        border-color: var(--gen-blue);
+        background: color-mix(in srgb, var(--surface) 92%, var(--gen-blue) 8%);
+      }
+      .sn-weather:active {
+        transform: translateY(1px);
+      }
+      .sn-weather:focus-visible {
+        outline: 2px solid var(--gen-blue);
+        outline-offset: 3px;
+      }
+      .sn-weather-icon {
+        display: inline-flex;
+        width: 1.1rem;
+        height: 1.1rem;
+        color: var(--gen-blue);
+        flex: none;
+      }
+      .sn-weather-icon svg {
+        width: 100%;
+        height: 100%;
+      }
+      .sn-weather-temp {
+        letter-spacing: 0.01em;
+      }
+      .sn-weather-sep {
+        opacity: 0.45;
+        font-weight: 400;
+        padding: 0 0.05rem;
+      }
+      .sn-weather-loc {
+        font-weight: 500;
+        opacity: 0.8;
+        letter-spacing: 0.015em;
+      }
+      /* Stale reading — served from the soft-fail cache because
+         Open-Meteo was unreachable on the last tick. Mute the colour
+         slightly so it's not confused with a fresh reading. */
+      .sn-weather[data-stale="true"] {
+        opacity: 0.65;
+      }
+      /* Dark-mode — swap the accent colour for the amber we use
+         elsewhere for active-state chips, and bump contrast. */
+      html.theme-dark .sn-weather,
+      html:not(.theme-light) .sn-weather {
+        background: color-mix(in srgb, var(--surface) 75%, transparent);
+        border-color: rgba(255, 255, 255, 0.12);
+        color: #e5e7f5;
+      }
+      html.theme-dark .sn-weather-icon,
+      html:not(.theme-light) .sn-weather-icon {
+        color: var(--status-amber, #ffb86b);
+      }
+      html.theme-dark .sn-weather:hover,
+      html:not(.theme-light) .sn-weather:hover {
+        border-color: var(--status-amber, #ffb86b);
+        background: color-mix(
+          in srgb,
+          var(--surface) 85%,
+          var(--status-amber, #ffb86b) 10%
+        );
+      }
+      /* Phone — keep the chip compact; hide the location label on
+         very narrow viewports so the temp + icon still fit alongside
+         the control buttons without wrapping. */
+      @media (max-width: 420px) {
+        .sn-weather {
+          padding: 0.32rem 0.6rem;
+          font-size: 0.76rem;
+        }
+        .sn-weather-sep,
+        .sn-weather-loc {
+          display: none;
+        }
+      }
+
+      /* --------------------------------------------------------------
          Quick-links row — corporate nav styling that matches Gen
          Central's top bar: UPPERCASE labels, bold weight, generous
          horizontal spacing, no pills/borders. Hover draws a thin
@@ -1247,6 +1362,50 @@
         object-fit: cover;
         display: block;
       }
+
+      /* ------------------------------------------------------------------
+       * Slack-style presence dot — green when the Slack client reports
+       * active, amber when away. Layered over the avatar's bottom-right
+       * corner so it never gets clipped by `overflow: hidden` on
+       * .sn-member-avatar (which we need to keep, otherwise photos
+       * wouldn't crop into a circle).
+       *
+       * The dot is INDEPENDENT of the bucket ring around the avatar:
+       *   - Ring color  = "where they are" / status bucket
+       *                   (WFH = blue, Meeting = indigo, Vacation = navy…)
+       *   - Dot color   = "right now, are they at their desk?"
+       *                   (green = active, amber = idle/away)
+       * Without this two-signal layout, setting a Slack status like
+       * ":house: Working from home" hid the green/amber availability dot
+       * entirely — operators couldn't tell at a glance whether a WFH
+       * teammate was online or just left their laptop.
+       * ------------------------------------------------------------------ */
+      .sn-member-avatar-wrap {
+        position: relative;
+        display: inline-flex;
+        flex: none;
+        line-height: 0;
+      }
+      .sn-presence-dot {
+        position: absolute;
+        right: -1px;
+        bottom: -1px;
+        width: 0.65rem;
+        height: 0.65rem;
+        border-radius: 999px;
+        box-shadow:
+          0 0 0 2px var(--surface),
+          0 1px 2px rgba(8, 16, 58, 0.35);
+        background: transparent;
+        pointer-events: none;
+        transition: background-color 120ms ease;
+      }
+      .sn-presence-dot[data-presence="active"] {
+        background: var(--slack-green, #2bac76);
+      }
+      .sn-presence-dot[data-presence="away"] {
+        background: var(--status-amber, #c88f00);
+      }
       .sn-member-name-row {
         display: flex;
         align-items: center;
@@ -1330,6 +1489,60 @@
         flex-wrap: wrap;
         align-items: center;
         gap: 0.65rem;
+      }
+
+      /* ---------------------------------------------------------------
+         Team brand logo — Norton or Avast wordmark pinned to the top-
+         right of the hero banner, on the same horizontal line as the
+         "Gen Pulse" wordmark on the left. Switched purely via CSS
+         against `body[data-team]`, which the server stamps at render
+         time (see /api/team template substitution). Absolutely
+         positioned so it never pushes controls around or disrupts
+         the `.sn-hero-right` flex column.
+
+         Sizing is intentionally restrained: the Gen wordmark leads,
+         the team brand is a supporting accent that just answers
+         "which team am I looking at?" at a glance. Scales down on
+         phones so it never crowds the title.
+         --------------------------------------------------------------- */
+      .sn-hero-team-brand {
+        position: absolute;
+        top: 1.35rem;
+        right: 0;
+        display: flex;
+        align-items: center;
+        justify-content: flex-end;
+        pointer-events: none;
+        z-index: 1;
+        height: 48px;
+      }
+      .sn-hero-team-brand-img {
+        display: none;
+        height: 100%;
+        width: auto;
+        max-width: 210px;
+        object-fit: contain;
+        /* Tiny lift on dark mode so the Norton yellow reads as
+           crisp wordmark rather than washed-out tint. */
+        filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.08));
+      }
+      html.theme-dark .sn-hero-team-brand-img {
+        filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
+      }
+      body[data-team="email-norton"] .sn-hero-team-brand-norton {
+        display: block;
+      }
+      body[data-team="avast"] .sn-hero-team-brand-avast {
+        display: block;
+      }
+      @media (max-width: 780px) {
+        .sn-hero-team-brand {
+          top: 0.75rem;
+          height: 30px;
+        }
+        .sn-hero-team-brand-img {
+          max-width: 140px;
+        }
       }
       .sn-hero-lead {
         color: var(--gen-blue);
@@ -2096,6 +2309,17 @@
         width: 1.55rem;
         height: 1.55rem;
       }
+      /* Last-place ÚP badge — sized between bronze and rank-4+ slot.
+         Subtle desaturate on hover so the row-hover lift still reads
+         as a "row" interaction rather than a badge interaction. */
+      .sn-lb-row.rank-last .sn-lb-trophy-last {
+        width: 1.55rem;
+        height: 1.55rem;
+        opacity: 0.85;
+      }
+      .sn-lb-row.rank-last:hover .sn-lb-trophy-last {
+        opacity: 1;
+      }
       .sn-lb-sub {
         font-size: 0.72rem;
         color: var(--text-muted, #6b7280);
@@ -2641,6 +2865,56 @@
         flex-direction: column;
         gap: 0.25rem;
         align-items: flex-start;
+      }
+
+      /* Slack-status cell.
+       *
+       * Slack's API returns the emoji as a colon-shortcode
+       * (`:house_with_garden:`) — useless to a human reader. The JS
+       * looks the shortcode up in SLACK_EMOJI_MAP and renders the
+       * unicode glyph here; the original shortcode is preserved on
+       * the `title` attribute so power users can still see it on
+       * hover. The text is allowed to wrap onto a second line so
+       * statuses like "Out of Office • Outlook Calendar" don't get
+       * clipped on narrower viewports. */
+      .sn-slack-status {
+        display: inline-flex;
+        align-items: flex-start;
+        gap: 0.4rem;
+        max-width: 32ch;
+        line-height: 1.35;
+      }
+      .sn-slack-status-emoji {
+        font-size: 1.05rem;
+        line-height: 1.2;
+        flex: 0 0 auto;
+        margin-top: 0.05rem;
+        font-family: "Apple Color Emoji", "Segoe UI Emoji",
+          "Noto Color Emoji", "Twemoji Mozilla", "Segoe UI Symbol",
+          system-ui, sans-serif;
+        font-feature-settings: normal;
+      }
+      .sn-slack-status-emoji[data-fallback="true"] {
+        /* Custom workspace emoji we don't have a glyph for: render a
+           neutral dot in the muted brand colour instead of a tofu box. */
+        color: var(--muted-fg);
+        font-size: 0.8rem;
+        margin-top: 0.25rem;
+      }
+      .sn-slack-status-text {
+        white-space: normal;
+        overflow-wrap: anywhere;
+        color: var(--muted-fg);
+      }
+      .sn-slack-status-empty {
+        color: var(--muted-fg);
+        font-style: italic;
+      }
+      /* On narrow viewports we already collapse the table to a
+         stacked card layout via data-label. Within those cards the
+         status line gets the full row width — no need to truncate. */
+      @media (max-width: 760px) {
+        .sn-slack-status { max-width: 100%; }
       }
 
       /* Source chip — very small badge showing which provider
@@ -3395,6 +3669,112 @@
       }
       .tone-muted td:first-child {
         box-shadow: inset 3px 0 0 var(--border);
+      }
+
+      /* Bucket-aware row tints for the Team Presence table.
+       *
+       * The legacy `tone-amber/blue/red/muted` rules above paint a
+       * 3px left edge only — useful in dense tables but easy to miss
+       * when scanning a longer roster. The provider-mode (Slack +
+       * Workday) presence model has six well-defined buckets, so we
+       * give each one its own row treatment: same Slack-style left
+       * stripe AS WELL AS a soft full-row background tint that
+       * matches the bucket's pill colour. Result: a manager can scan
+       * the Team Presence table and group members by status at a
+       * glance, exactly the way Slack's own member list does in the
+       * sidebar.
+       *
+       * Tints are intentionally low-contrast (5–8% saturation) so
+       * row text remains the dominant visual element — the goal is
+       * "subtle scanability", not "rainbow table". `color-mix(...
+       * transparent)` keeps the tints theme-aware: the same rule
+       * works in light AND dark mode because the percentage applies
+       * over whatever colour the variable is currently resolving to.
+       *
+       * KEEP IN SYNC with BUCKET_TONES in the JS — same string keys.
+       */
+      .tone-bucket-available td {
+        background: color-mix(in srgb, var(--status-green) 6%, transparent);
+      }
+      .tone-bucket-available td:first-child {
+        box-shadow: inset 3px 0 0 var(--status-green);
+      }
+      .tone-bucket-wfh td {
+        background: color-mix(in srgb, var(--status-blue) 6%, transparent);
+      }
+      .tone-bucket-wfh td:first-child {
+        box-shadow: inset 3px 0 0 var(--status-blue);
+      }
+      .tone-bucket-meeting td {
+        background: color-mix(in srgb, #6366f1 7%, transparent);
+      }
+      .tone-bucket-meeting td:first-child {
+        box-shadow: inset 3px 0 0 #6366f1;
+      }
+      .tone-bucket-away td {
+        background: color-mix(in srgb, var(--gen-yellow) 9%, transparent);
+      }
+      .tone-bucket-away td:first-child {
+        box-shadow: inset 3px 0 0 var(--slack-yellow);
+      }
+      .tone-bucket-vacation td {
+        background: color-mix(in srgb, #8b5cf6 7%, transparent);
+      }
+      .tone-bucket-vacation td:first-child {
+        box-shadow: inset 3px 0 0 #8b5cf6;
+      }
+      .tone-bucket-unknown {
+        color: var(--muted-fg);
+      }
+      .tone-bucket-unknown td {
+        background: color-mix(in srgb, var(--muted-fg) 4%, transparent);
+      }
+      .tone-bucket-unknown td:first-child {
+        box-shadow: inset 3px 0 0 var(--border);
+      }
+      /* Dark theme nudges: the green/blue/yellow base values are
+       * brighter on dark, so the same 6–9% mix would over-saturate
+       * the row. Knock each tint down by ~2 percentage points so
+       * they read as "tinted" rather than "highlighted". */
+      html.theme-dark .tone-bucket-available td {
+        background: color-mix(in srgb, var(--status-green) 4%, transparent);
+      }
+      html.theme-dark .tone-bucket-wfh td {
+        background: color-mix(in srgb, var(--status-blue) 5%, transparent);
+      }
+      html.theme-dark .tone-bucket-meeting td {
+        background: color-mix(in srgb, #818cf8 5%, transparent);
+      }
+      html.theme-dark .tone-bucket-away td {
+        background: color-mix(in srgb, var(--gen-yellow) 6%, transparent);
+      }
+      html.theme-dark .tone-bucket-vacation td {
+        background: color-mix(in srgb, #a78bfa 5%, transparent);
+      }
+      html.theme-dark .tone-bucket-unknown td {
+        background: color-mix(in srgb, var(--muted-fg) 6%, transparent);
+      }
+      /* Hover should still feel interactive — pull a touch more
+       * saturation per bucket so the row visibly reacts under the
+       * cursor without changing hue. Each rule roughly doubles the
+       * resting-state opacity. */
+      .tone-bucket-available:hover td {
+        background: color-mix(in srgb, var(--status-green) 12%, transparent);
+      }
+      .tone-bucket-wfh:hover td {
+        background: color-mix(in srgb, var(--status-blue) 12%, transparent);
+      }
+      .tone-bucket-meeting:hover td {
+        background: color-mix(in srgb, #6366f1 13%, transparent);
+      }
+      .tone-bucket-away:hover td {
+        background: color-mix(in srgb, var(--gen-yellow) 16%, transparent);
+      }
+      .tone-bucket-vacation:hover td {
+        background: color-mix(in srgb, #8b5cf6 13%, transparent);
+      }
+      .tone-bucket-unknown:hover td {
+        background: color-mix(in srgb, var(--muted-fg) 8%, transparent);
       }
 
       .sn-code {
@@ -4536,6 +4916,25 @@
         #widget-weekly-throughput .min-w-\[240px\] {
           min-width: 0;
         }
+        /* Headline row (value + delta-pill + SP): on narrow screens,
+           the three items collide because the parent flex row has
+           no `flex-wrap`. Allow it to wrap so the SP figure drops
+           cleanly to its own line below the value+delta when the
+           viewport can't fit them inline. Without this you see the
+           "+77.8% vs prev week" pill text overlapping with
+           "· 113 SP delivered" on phones (caught during a real
+           QR-code phone test). */
+        #widget-weekly-throughput .sn-card > div:first-child > div:first-child > .flex.items-end {
+          flex-wrap: wrap;
+          row-gap: 0.35rem;
+        }
+        /* When SP wraps to a second line, give it the full row so it
+           isn't visually grouped against the delta pill anymore. */
+        #widget-weekly-throughput #wt-sp {
+          flex-basis: 100%;
+          margin-bottom: 0;
+          margin-top: 0.15rem;
+        }
         /* Sparkline SVG: make sure it never dictates a min-width.  */
         #wt-spark {
           width: 100%;
@@ -5066,10 +5465,17 @@
       .sn-team-coming-soon {
         display: none;
       }
-      body[data-team]:not([data-team="email-norton"]) main > *:not(.sn-team-coming-soon) {
+      /* Live teams render full widget content. Non-live teams (still
+         in the "pilot" state) hide all widgets and show the
+         coming-soon overlay instead. AVAST went live 28-Apr-2026 —
+         its scope/roster/brand are wired end-to-end through the
+         server's team dimension, so it no longer triggers this
+         overlay. To promote another team (IPM, Mobile, …) later,
+         add its data-team value to the :not() chain below. */
+      body[data-team]:not([data-team="email-norton"]):not([data-team="avast"]) main > *:not(.sn-team-coming-soon) {
         display: none !important;
       }
-      body[data-team]:not([data-team="email-norton"]) .sn-team-coming-soon {
+      body[data-team]:not([data-team="email-norton"]):not([data-team="avast"]) .sn-team-coming-soon {
         display: flex;
         min-height: 60vh;
         align-items: center;
@@ -5882,7 +6288,7 @@
       }
     </style>
   </head>
-  <body class="min-h-screen">
+  <body class="min-h-screen" data-team="{{BODY_TEAM_ATTR}}">
     <nav class="sn-topnav" aria-label="Primary">
       <div class="sn-topnav-inner">
         <a class="sn-topnav-brand" href="/" aria-label="Gen Pulse home">
@@ -6546,6 +6952,26 @@
       </nav>
 
       <header class="sn-hero flex flex-wrap items-end justify-between gap-x-6 gap-y-8">
+        <!--
+          Team brand logo — Norton or Avast, switched by body[data-team].
+          Absolutely positioned at the top-right of the hero so it sits
+          on the same horizontal line as the "Gen Pulse" wordmark on
+          the left. aria-hidden because the wordmark is decorative:
+          the active team is already communicated textually by the
+          "VIEWING TEAM" chip in the topnav.
+        -->
+        <div class="sn-hero-team-brand" aria-hidden="true">
+          <img
+            class="sn-hero-team-brand-img sn-hero-team-brand-norton"
+            src="/img/norton-logo.png"
+            alt="Norton"
+          />
+          <img
+            class="sn-hero-team-brand-img sn-hero-team-brand-avast"
+            src="/img/avast-logo.png"
+            alt="Avast"
+          />
+        </div>
         <div class="min-w-0">
           <h1 class="sn-hero-title" aria-label="Gen Pulse">
             <span class="gen-logo" aria-hidden="true">
@@ -6582,6 +7008,28 @@
           <p id="subhead" class="sn-hero-subhead sn-muted text-sm">Loading…</p>
         </div>
         <div class="sn-hero-right">
+          <!--
+            Hero weather chip — optional "now at <city>" pill, kept
+            above the controls row so it reads as ambient context,
+            not a control. Hidden on boot; the JS (see
+            initHeroWeather) fetches /api/weather and unhides it on
+            the first successful reading. When WEATHER_LAT / LON are
+            unset on the server the endpoint returns {enabled:false}
+            and the chip stays hidden — no visual placeholder.
+          -->
+          <button
+            id="hero-weather"
+            class="sn-weather"
+            type="button"
+            hidden
+            aria-live="polite"
+            title="Weather"
+          >
+            <span class="sn-weather-icon" aria-hidden="true"></span>
+            <span class="sn-weather-temp">—</span>
+            <span class="sn-weather-sep" aria-hidden="true">·</span>
+            <span class="sn-weather-loc"></span>
+          </button>
           <!--
             Status + controls — right-aligned in the hero so the trio
             (last-updated · theme toggle · refresh) sits directly
@@ -6692,7 +7140,17 @@
               <div class="mt-3 flex items-end gap-3">
                 <div id="wt-value" class="sn-kpi-value" style="font-size:2.6rem;line-height:1;">–</div>
                 <span id="wt-delta" class="sn-pill sn-pill-muted mb-1">–</span>
+                <span id="wt-sp"
+                      class="sn-muted"
+                      style="font-size:0.85rem;font-weight:600;line-height:1;margin-bottom:0.35rem;display:none;"
+                      aria-label="Story points delivered last week"></span>
               </div>
+              <!-- Self-describing subtitle so newcomers (Alan!) can read
+                   the big number without asking what it counts. Kept short
+                   so it never wraps below the sparkline on mobile. -->
+              <div id="wt-subtitle"
+                   class="sn-muted mt-1 text-xs"
+                   style="font-weight:500;letter-spacing:0.01em;"></div>
               <div id="wt-note" class="sn-muted mt-2 text-xs"></div>
             </div>
             <div class="flex-1 min-w-[240px] max-w-[420px]">
@@ -6838,9 +7296,9 @@
               Planning view →
             </a>
           </div>
-          <div class="sn-muted text-xs mt-1">
+          <div class="sn-muted text-xs mt-1" id="sb-subtitle">
             How much is queued up and what's the shape — the team's current
-            To Do column on board 101032.
+            next-up lane on board 101032.
           </div>
 
           <div class="sn-donut-row mt-4">
@@ -7196,13 +7654,21 @@
         vacation: "sn-pill sn-pill-blue",
         unknown: "sn-pill sn-pill-muted",
       };
+      // Provider-mode row tones. Keep these in sync with the
+      // `.tone-bucket-*` CSS rules — the strings here ARE the class
+      // names appended to each <tr>. We split each bucket onto its
+      // own colour rather than reusing the legacy `tone-blue` /
+      // `tone-amber` set so a manager can tell "WFH" from "Meeting"
+      // (both blue/indigo families) and "Away" from "Vacation" (both
+      // out-of-office) at a glance instead of having to read the
+      // pill in the Today column.
       const BUCKET_TONES = {
-        available: "",
-        wfh: "",
-        meeting: "tone-blue",
-        away: "tone-amber",
-        vacation: "tone-blue",
-        unknown: "tone-muted",
+        available: "tone-bucket-available",
+        wfh: "tone-bucket-wfh",
+        meeting: "tone-bucket-meeting",
+        away: "tone-bucket-away",
+        vacation: "tone-bucket-vacation",
+        unknown: "tone-bucket-unknown",
       };
       // Maps a bucket → the KPI column it counts towards. Keeping the
       // KPI strip backwards-compatible with bot mode means we fold
@@ -7226,6 +7692,164 @@
         bot: { label: "via bot", cls: "sn-src sn-src-muted" },
       };
 
+      /* ------------------------------------------------------------------ *
+       * Slack-status emoji rendering.
+       *
+       * Slack's users.profile.get returns the status emoji as a
+       * colon-shortcode (`:house_with_garden:`, `:no_entry:`). That's
+       * what Slack's own clients render — they ship a translation
+       * table client-side. We do the same: a curated map of the
+       * Slack-default shortcodes our team is statistically likely
+       * to use (the "default 700" set). Workspace-custom shortcodes
+       * (e.g. `:gen-logo:`) won't be in the map and fall back to a
+       * neutral dot — which is honest, since the actual custom PNG
+       * lives in Slack's CDN behind auth and we can't fetch it.
+       *
+       * Maintenance note: this is intentionally a hand-curated subset
+       * rather than the full 1500-entry emoji-data table. Pulling in
+       * an npm-style emoji lib would balloon the bundle by ~200KB
+       * for a feature where 95% of real usage hits 20 shortcodes.
+       * Add to the map as new statuses appear in your team — there's
+       * a one-liner script in scripts/list-slack-status-emoji.mjs to
+       * sample what's actively in use.
+       * ------------------------------------------------------------------ */
+      const SLACK_EMOJI_MAP = {
+        // Working location / WFH
+        "house_with_garden": "🏡",
+        "house": "🏠",
+        "office": "🏢",
+        "desktop_computer": "🖥️",
+        "computer": "💻",
+        "headphones": "🎧",
+        "speech_balloon": "💬",
+        "calendar": "📅",
+        "spiral_calendar_pad": "🗓️",
+        "date": "📅",
+        "clock1": "🕐", "clock2": "🕑", "clock3": "🕒", "clock4": "🕓",
+        "clock5": "🕔", "clock6": "🕕", "clock7": "🕖", "clock8": "🕗",
+        "clock9": "🕘", "clock10": "🕙", "clock11": "🕚", "clock12": "🕛",
+        // Meeting / focus
+        "phone": "📞",
+        "telephone_receiver": "📞",
+        "movie_camera": "🎥",
+        "video_camera": "📹",
+        "mute": "🔇",
+        "speaker": "🔈",
+        "loud_sound": "🔊",
+        "no_bell": "🔕",
+        "zipper_mouth_face": "🤐",
+        "thinking_face": "🤔",
+        "brain": "🧠",
+        "books": "📚",
+        "memo": "📝",
+        "spiral_note_pad": "🗒️",
+        "dart": "🎯",
+        "rocket": "🚀",
+        // Out of office / vacation
+        "no_entry": "⛔",
+        "no_entry_sign": "🚫",
+        "palm_tree": "🌴",
+        "beach_with_umbrella": "🏖️",
+        "ocean": "🌊",
+        "mountain": "⛰️",
+        "tent": "⛺",
+        "airplane": "✈️",
+        "small_airplane": "🛩️",
+        "luggage": "🧳",
+        "world_map": "🗺️",
+        "earth_americas": "🌎",
+        "earth_africa": "🌍",
+        "earth_asia": "🌏",
+        // Health
+        "face_with_thermometer": "🤒",
+        "mask": "😷",
+        "face_with_head_bandage": "🤕",
+        "sneezing_face": "🤧",
+        "pill": "💊",
+        "syringe": "💉",
+        "stethoscope": "🩺",
+        "hospital": "🏥",
+        "zzz": "💤",
+        "sleeping": "😴",
+        "tired_face": "😩",
+        // Lunch / break
+        "coffee": "☕",
+        "tea": "🍵",
+        "fork_and_knife": "🍴",
+        "knife_fork_plate": "🍽️",
+        "hamburger": "🍔",
+        "pizza": "🍕",
+        "sandwich": "🥪",
+        "salad": "🥗",
+        "bento": "🍱",
+        // Status / mood
+        "warning": "⚠️",
+        "rotating_light": "🚨",
+        "fire": "🔥",
+        "tada": "🎉",
+        "raised_hands": "🙌",
+        "muscle": "💪",
+        "wave": "👋",
+        "+1": "👍", "thumbsup": "👍",
+        "-1": "👎", "thumbsdown": "👎",
+        "white_check_mark": "✅",
+        "heavy_check_mark": "✔️",
+        "x": "❌",
+        "heart": "❤️",
+        // Status dots — Slack ships these as defaults
+        "red_circle": "🔴",
+        "large_orange_circle": "🟠",
+        "large_yellow_circle": "🟡",
+        "large_green_circle": "🟢",
+        "large_blue_circle": "🔵",
+        "large_purple_circle": "🟣",
+        "black_circle": "⚫",
+        "white_circle": "⚪",
+        // Travel / commute
+        "car": "🚗",
+        "blue_car": "🚙",
+        "bus": "🚌",
+        "train2": "🚆",
+        "train": "🚊",
+        "metro": "🚇",
+        "bike": "🚲",
+        "walking": "🚶",
+        // Misc-but-common
+        "eyes": "👀",
+        "mag": "🔍",
+        "wrench": "🔧",
+        "hammer": "🔨",
+        "construction": "🚧",
+        "lock": "🔒",
+        "unlock": "🔓",
+        "bell": "🔔",
+        "star": "⭐",
+        "sparkles": "✨",
+      };
+
+      /**
+       * Render an HTML fragment for a Slack status emoji shortcode.
+       *
+       * @param {string} shortcode  e.g. ":house_with_garden:" or "house_with_garden"
+       * @returns {string} <span> markup. Empty string when the input is empty
+       *                   so the caller can chain it into a template without
+       *                   guarding for undefined.
+       */
+      function slackEmojiHtml(shortcode) {
+        const code = String(shortcode ?? "").trim().replace(/^:|:$/g, "");
+        if (!code) return "";
+        const glyph = SLACK_EMOJI_MAP[code.toLowerCase()];
+        if (glyph) {
+          // Real glyph; the title preserves the original shortcode
+          // for power users who want to know exactly what was set.
+          return `<span class="sn-slack-status-emoji" aria-hidden="true" title=":${esc(code)}:">${glyph}</span>`;
+        }
+        // Workspace-custom emoji we don't have a glyph for.
+        // Render a neutral dot so the row still aligns; show the
+        // shortcode on hover so it isn't lost.
+        return `<span class="sn-slack-status-emoji" data-fallback="true" aria-hidden="true" title=":${esc(code)}: (custom workspace emoji)">●</span>`;
+      }
+
       const API_KEY = new URLSearchParams(location.search).get("key");
       /* ------------------------------------------------------------ *
        * apiUrl() — central URL builder for every fetch on the page.
@@ -7248,6 +7872,27 @@
        * ------------------------------------------------------------ */
       const JIRA_SCOPED_PATHS = /^\/api\/widgets\/(weekly-throughput|backlog-overview|ticket-lifecycle|inflow-vs-resolved|sla-aging-risk|kanban-board|top-priority-tickets|sprint-backlog|reopen-rate|throughput-leaderboard)\b/;
 
+      // Resolve the active team ONCE per apiUrl() call, preferring:
+      //   (1) body dataset (set server-side from ?team= / cookie at
+      //       page render) — authoritative for the lifetime of the tab
+      //   (2) localStorage (falls back for programmatic callers on
+      //       pages that somehow lack the body attribute)
+      //   (3) "norton" (implicit default — matches server behaviour)
+      // We translate the UI slug "email-norton" → server slug
+      // "norton" so the server's normaliseTeam() accepts it.
+      function currentServerTeam() {
+        let uiTeam =
+          (document.body && document.body.dataset.team) || "";
+        if (!uiTeam) {
+          try { uiTeam = localStorage.getItem("gen-pulse-team") || ""; }
+          catch (e) { uiTeam = ""; }
+        }
+        uiTeam = String(uiTeam).toLowerCase();
+        if (uiTeam === "avast") return "avast";
+        if (uiTeam === "email-norton" || uiTeam === "norton") return "norton";
+        return "norton";
+      }
+
       const apiUrl = (p) => {
         let base = p ?? "/api/team";
         if (
@@ -7257,6 +7902,18 @@
           base = `${base}${base.includes("?") ? "&" : "?"}project=${encodeURIComponent(
             window.__activeProject
           )}`;
+        }
+        // Append team to every API URL when it's non-default. The
+        // server also honours the gp_team cookie so this is
+        // redundant in the happy path — but cookies get stripped by
+        // some corporate proxies, and carrying team in the query
+        // makes every request self-describing in DevTools too.
+        const team = currentServerTeam();
+        if (team && team !== "norton") {
+          const sep = base.includes("?") ? "&" : "?";
+          if (!/[?&]team=/.test(base)) {
+            base = `${base}${sep}team=${encodeURIComponent(team)}`;
+          }
         }
         // When the user clicks the hero "Refresh" button, the handler
         // sets __forceNextFetch=true for the duration of that load()
@@ -7385,17 +8042,53 @@
         const bucketAttr = m.slackStatus
           ? `data-bucket="${esc(m.slackStatus.bucket || "unknown")}"`
           : legacyBucketAttr(m);
-        if (m.avatarUrl) {
-          return `
-            <span class="sn-member-avatar" ${bucketAttr} aria-hidden="true">
+
+        // Slack-style availability dot. We surface this independently
+        // of the ring/bucket because operators told us they couldn't
+        // tell whether a "Working from home" teammate was actually at
+        // their desk or had stepped away — Slack's own UI shows both,
+        // and so do we now. Vacation overrides everything else, so we
+        // suppress the dot in that case to avoid sending mixed signals.
+        const ap = m.slackStatus?.autoPresence;
+        const bucket = m.slackStatus?.bucket;
+        const showDot =
+          (ap === "active" || ap === "away") &&
+          bucket !== "vacation" &&
+          bucket !== "unknown";
+        const dotLabel = ap === "active" ? "Online" : "Away";
+        const dotHtml = showDot
+          ? `<span class="sn-presence-dot" data-presence="${esc(ap)}" role="img" aria-label="${esc(dotLabel)}" title="${esc(dotLabel)}"></span>`
+          : "";
+
+        // Fallback handler: if the avatar URL fails to load (corporate
+        // proxy blocking secure.gravatar.com, revoked Slack URL, etc.),
+        // swap the broken <img> for the person's initials rendered
+        // onto the avatar chip. Earlier revisions inlined
+        // JSON.stringify(initials) directly into the attribute, which
+        // (a) breaks HTML quoting when the string is rendered inside
+        // a double-quoted attribute and (b) calls this.remove()
+        // before reading this.parentNode — which becomes null once
+        // the img is detached. Both bugs made the fallback silently
+        // fail, so people whose Gravatar/Slack URL 404'd showed as
+        // a blank chip instead of their initials.
+        //
+        // Fix: stash the initials in a data-attribute (entity-safe
+        // via esc()) and capture the parent before removing.
+        const avatarInner = m.avatarUrl
+          ? `<span class="sn-member-avatar" ${bucketAttr} aria-hidden="true">
               <img src="${esc(m.avatarUrl)}" alt="" loading="lazy"
-                   onerror="this.remove();this.parentNode.textContent=${JSON.stringify(initials)};">
-            </span>`;
-        }
-        return `
-          <span class="sn-member-avatar" ${bucketAttr}
+                   data-initials="${esc(initials)}"
+                   onerror="const p=this.parentNode;this.remove();if(p)p.textContent=this.dataset.initials||'';">
+            </span>`
+          : `<span class="sn-member-avatar" ${bucketAttr}
                 style="background:${memberGradient(m.id || m.name)};"
                 aria-hidden="true">${esc(initials)}</span>`;
+
+        // Wrap only when there's a dot to position — keeps the legacy
+        // bot-mode markup byte-for-byte identical, so no other layouts
+        // shift unexpectedly.
+        if (!dotHtml) return avatarInner;
+        return `<span class="sn-member-avatar-wrap">${avatarInner}${dotHtml}</span>`;
       }
 
       // Map the legacy bot-mode checkin/presence state to a ring
@@ -7506,16 +8199,46 @@
               const bucketHtml = `<span class="${pillCls}" title="${esc(st.reason ?? "")}">${esc(label)}</span>`;
               const srcHtml = `<span class="${src.cls}" title="${esc(st.reason ?? "")}">${esc(src.label)}</span>`;
 
-              // Status line: raw Slack "emoji + text" when set, or
-              // the Workday vacation reason ("PTO through Friday")
-              // when Workday is authoritative.
-              const statusLine = st.line
-                ? esc(st.line)
-                : m.workday
-                ? `${esc(m.workday.type || "PTO")} through ${esc(m.workday.through)}`
-                : (m.slackStatus.bucket === "unknown"
-                    ? "no Slack status set"
-                    : "—");
+              // Status cell — three branches in priority order:
+              //
+              //   1. Slack status set        → render emoji-glyph + text
+              //                                with the original shortcode
+              //                                preserved on hover.
+              //   2. Workday is authoritative → "PTO through 2026-04-30"
+              //                                (no Slack status was set,
+              //                                but Workday says they're
+              //                                out — the Workday note IS
+              //                                the status here).
+              //   3. Bucket = unknown        → "no Slack status set"
+              //                                rendered in muted italics.
+              //   4. Anything else           → em-dash placeholder.
+              //
+              // The full original "emoji + text" is mirrored to the
+              // <td>'s `title` so users on a desktop browser can hover
+              // to see exactly what Slack reports, even if our emoji
+              // map misses a workspace-custom shortcode.
+              let statusCellHtml;
+              let statusCellTitle = "";
+              if (st.emoji || st.text) {
+                const emojiHtml = slackEmojiHtml(st.emoji);
+                const textHtml = st.text
+                  ? `<span class="sn-slack-status-text">${esc(st.text)}</span>`
+                  : "";
+                statusCellHtml = `<div class="sn-slack-status">${emojiHtml}${textHtml}</div>`;
+                // Full original — emoji shortcode + text — on hover.
+                // Lets a user see ":house_with_garden: WFH" verbatim
+                // when our glyph table is missing an entry, and is a
+                // useful at-a-glance for keyboard-only users.
+                statusCellTitle = [st.emoji, st.text].filter(Boolean).join(" ");
+              } else if (m.workday) {
+                const wType = m.workday.type || "PTO";
+                statusCellHtml = `<span class="sn-slack-status-text">${esc(wType)} through ${esc(m.workday.through)}</span>`;
+                statusCellTitle = `${wType} through ${m.workday.through} (Workday)`;
+              } else if (m.slackStatus.bucket === "unknown") {
+                statusCellHtml = `<span class="sn-slack-status-empty">no Slack status set</span>`;
+              } else {
+                statusCellHtml = `<span class="sn-muted">—</span>`;
+              }
 
               // Until: Slack status_expiration OR Workday.through
               const until = m.workday?.through
@@ -7538,7 +8261,7 @@
                     </div>
                   </td>
                   <td data-label="Today"><div class="sn-status-stack">${bucketHtml}${srcHtml}</div></td>
-                  <td class="sn-muted" data-label="Status">${statusLine}</td>
+                  <td data-label="Slack status"${statusCellTitle ? ` title="${esc(statusCellTitle)}"` : ""}>${statusCellHtml}</td>
                   <td data-label="Until">${until}</td>
                 </tr>`;
             }
@@ -7709,6 +8432,8 @@
         const weekEl = document.getElementById("wt-week");
         const valEl = document.getElementById("wt-value");
         const delEl = document.getElementById("wt-delta");
+        const spEl = document.getElementById("wt-sp");
+        const subEl = document.getElementById("wt-subtitle");
         const noteEl = document.getElementById("wt-note");
         const spark = document.getElementById("wt-spark");
         const labels = document.getElementById("wt-trend-labels");
@@ -7718,6 +8443,8 @@
           valEl.textContent = "–";
           delEl.className = "sn-pill sn-pill-muted mb-1";
           delEl.textContent = "set up Jira";
+          if (spEl) spEl.style.display = "none";
+          if (subEl) subEl.textContent = "";
           noteEl.textContent = data?.reason
             ? data.reason
             : "Set JIRA_BASE_URL, JIRA_TOKEN and JIRA_THROUGHPUT_JQL.";
@@ -7741,6 +8468,49 @@
         const arrow =
           data.deltaAbs > 0 ? "\u25B2" : data.deltaAbs < 0 ? "\u25BC" : "\u2022";
         delEl.textContent = `${arrow} ${sign}${data.deltaAbs} (${pctLabel})`;
+
+        // SP secondary line — mirrors the grey "SP Delivered" bar on
+        // Jira's native gadget so Alan can compare apples-to-apples.
+        // Hidden if the env var isn't pinned or the team simply didn't
+        // size anything (avoids a misleading "0 SP" pill).
+        if (spEl) {
+          const spVal = Number(data.resolvedSP ?? 0);
+          if (data.storyPointsEnabled && spVal > 0) {
+            const sized = data.sizedCoveragePct ?? 0;
+            spEl.textContent = `· ${spVal} SP delivered`;
+            spEl.title = `${sized}% of last week's tickets had story points sized`;
+            spEl.style.display = "";
+          } else {
+            spEl.style.display = "none";
+          }
+        }
+
+        // Self-describing subtitle. Picks the right wording based on
+        // whether SP is available — never claims SP figures we don't
+        // have, and never hides the headline ticket count.
+        if (subEl) {
+          const N = data.weeksOfTrend ?? 12;
+          // Pull the project list straight from the JQL the server
+          // echoes back — handles `project = EMOPS`, `project in
+          // (EMOPS, EMAILCO)`, or no clause at all. Defaulting to the
+          // user's two known projects keeps the subtitle non-empty
+          // even if the JQL writer ever omits the project clause.
+          let proj = "EMOPS + EMAILCO";
+          const jql = String(data.jql ?? "");
+          const inMatch = /project\s+in\s*\(([^)]+)\)/i.exec(jql);
+          const eqMatch = /project\s*=\s*([A-Z][A-Z0-9_]*)/i.exec(jql);
+          if (inMatch) {
+            proj = inMatch[1]
+              .split(",")
+              .map((s) => s.trim().replace(/['"]/g, ""))
+              .filter(Boolean)
+              .join(" + ");
+          } else if (eqMatch) {
+            proj = eqMatch[1];
+          }
+          subEl.textContent =
+            `Bugs, investigations & requests resolved last week · ${proj} · trend over ${N} wk`;
+        }
 
         noteEl.textContent =
           `Previous week: ${data.previous} resolved · ` +
@@ -8493,7 +9263,20 @@
         const ageEl = document.getElementById("sb-age-val");
         const noteEl = document.getElementById("sb-note");
         const linkEl = document.getElementById("sb-board-link");
+        const subtitleEl = document.getElementById("sb-subtitle");
         if (!svg || !numEl || !legendEl || !noteEl) return;
+
+        // Mirror the *actual* JQL status filter into the subtitle so the
+        // exec reading the card knows which Jira lane this number comes
+        // from. The widget previously hard-coded "To Do" but EMOPS/EMAILCO
+        // workflows don't have that status name — caught during the
+        // pre-demo accuracy review on 2026-04-27.
+        if (subtitleEl && data && !data.unavailable) {
+          const lane = data.status || "next-up";
+          subtitleEl.textContent =
+            `How much is queued up and what's the shape — the team's current ` +
+            `“${lane}” lane on board 101032.`;
+        }
 
         if (data?.unavailable) {
           renderDonut(svg, []);
@@ -8856,6 +9639,30 @@
           </span>`;
       }
 
+      /* ---- Last-place badge ----------------------------------------- *
+       * In-joke for the Czech-heavy team: the Úřad práce ČR (Czech
+       * labour office) ÚP monogram. The wordmark "ÚŘAD PRÁCE" is
+       * intentionally cropped out so we ship only the mark — keeps
+       * row alignment matched to the bronze trophy slot and avoids
+       * stamping a state agency's full logotype into product UI.
+       * Only renders when there is a clear "last place" — i.e. > 3
+       * rows visible AND rank === totalRows. The aria-label stays
+       * neutral so the joke is silent for screen-reader users (no
+       * "you're going to the labour office" announcements at standup). */
+      function lbLastPlaceSvg(rank, totalRows) {
+        if (totalRows <= 3) return "";
+        if (rank !== totalRows) return "";
+        return `
+          <span class="sn-lb-trophy sn-lb-trophy-last"
+                role="img" aria-label="Bottom of the table — keep going!"
+                title="Bottom of the leaderboard">
+            <img src="/img/up-badge-mono.png" alt=""
+                 draggable="false"
+                 style="width:100%;height:100%;object-fit:contain;display:block;"
+                 onerror="this.remove()" />
+          </span>`;
+      }
+
       function renderThroughputLeaderboard(data) {
         const list = document.getElementById("lb-list");
         const note = document.getElementById("lb-note");
@@ -8874,8 +9681,21 @@
         }
 
         const rows = Array.isArray(data?.rows) ? data.rows : [];
+        // totalLastWeek now includes unassigned so the header reconciles
+        // with Weekly Throughput (same week, same count). The ranked
+        // rows below show only assigned work — the unassigned slice
+        // surfaces in the footer note for transparency.
+        // Story-points are appended to the headline when they're
+        // configured AND the team actually uses them; otherwise the
+        // SP segment is hidden so we don't display a misleading "0 SP".
+        const spEnabled = Boolean(data?.storyPointsEnabled);
+        const spLastWeek = data?.totalSPLastWeek ?? 0;
+        const spSegment =
+          spEnabled && (spLastWeek > 0 || (data?.totalSPWindow ?? 0) > 0)
+            ? ` · ${spLastWeek} SP`
+            : "";
         totalsEl.textContent =
-          `${data?.totalLastWeek ?? 0} resolved · ${data?.contributorsCount ?? rows.length} contributors`;
+          `${data?.totalLastWeek ?? 0} resolved${spSegment} · ${data?.contributorsCount ?? rows.length} contributors`;
         weekEl.textContent = data?.weekLabel ?? "";
 
         if (rows.length === 0) {
@@ -8886,10 +9706,17 @@
           return;
         }
 
+        const totalRows = rows.length;
         list.innerHTML = rows
           .map((r, i) => {
             const rank = i + 1;
-            const rankClass = rank <= 3 ? ` rank-${rank}` : "";
+            // Build the rank class: top-3 medals, plus a "rank-last"
+            // marker when there are >3 contributors (the marker is
+            // skipped on tiny boards so we don't shame someone who's
+            // actually 3rd-of-3).
+            let rankClass = "";
+            if (rank <= 3) rankClass = ` rank-${rank}`;
+            if (totalRows > 3 && rank === totalRows) rankClass += " rank-last";
             const hue = lbAvatarHue(r.name);
             const avatar = r.avatarUrl
               ? `<img src="${esc(r.avatarUrl)}" alt="" onerror="this.remove()" />`
@@ -8909,8 +9736,23 @@
               deltaText = `${deltaAbs} vs prev week`;
             }
 
+            const rowSP = Number(r.totalSP ?? 0);
+            const rowSPLast = Number(r.lastWeekSP ?? 0);
+            const spInline =
+              spEnabled && (rowSP > 0 || rowSPLast > 0)
+                ? ` · ${rowSP} SP`
+                : "";
             const totalLine =
-              `${r.total ?? 0} over ${data?.weeksOfTrend ?? 8} wks`;
+              `${r.total ?? 0} over ${data?.weeksOfTrend ?? 8} wks${spInline}`;
+
+            // Anchor "last wk" tile to tickets (canonical metric); the
+            // SP figure is shown as a smaller secondary line so the
+            // grey-bar number from Jira's native chart is visible
+            // without it competing with the ticket count.
+            const spTile =
+              spEnabled && (rowSPLast > 0 || rowSP > 0)
+                ? `<span class="sn-lb-count-sp" style="display:block;font-size:0.65rem;color:var(--sn-muted, #94a3b8);font-weight:500;line-height:1;margin-top:2px;">${rowSPLast} SP</span>`
+                : "";
 
             return `
               <div class="sn-lb-row${rankClass}" role="group" aria-label="${esc(r.name)} — rank ${rank}">
@@ -8924,12 +9766,13 @@
                       <span style="margin-left:0.4rem;">· ${esc(totalLine)}</span>
                     </span>
                   </span>
-                  ${lbTrophySvg(rank)}
+                  ${lbTrophySvg(rank)}${lbLastPlaceSvg(rank, totalRows)}
                 </span>
                 ${lbSparklineSvg(r.weekly ?? [])}
                 <span class="sn-lb-count">
                   ${r.lastWeek ?? 0}
                   <span class="sn-lb-count-suffix">last wk</span>
+                  ${spTile}
                 </span>
               </div>`;
           })
@@ -8939,9 +9782,30 @@
           (data?.truncated ?? 0) > 0
             ? `+${data.truncated} more contributors · `
             : "";
+        // Surface unassigned resolutions alongside the window total so
+        // operators can see *why* this widget's week total matches
+        // Weekly Throughput — the gap between "people resolved X" and
+        // "team resolved Y" is always the unassigned count, and hiding
+        // it makes the two widgets look inconsistent.
+        const unassignedWin = data?.unassignedInWindow ?? 0;
+        const unassignedWk = data?.unassignedLastWeek ?? 0;
+        const unassignedLine =
+          unassignedWin > 0 || unassignedWk > 0
+            ? `incl. ${unassignedWk} unassigned last wk / ${unassignedWin} over window · `
+            : "";
+        // SP-delivered totals across the same window — matches Jira's
+        // native "SP Delivered" series. We also surface coverage so
+        // operators can tell at a glance whether the SP figure is
+        // representative ("36% sized" = many tickets ship without SP).
+        const totalSPWin = data?.totalSPWindow ?? 0;
+        const sizedPct = data?.sizedCoveragePct ?? 0;
+        const spLine =
+          spEnabled && (totalSPWin > 0 || (data?.totalSPLastWeek ?? 0) > 0)
+            ? `${totalSPWin} SP delivered (${sizedPct}% sized) · `
+            : "";
         note.textContent =
           `${moreLine}${data?.totalResolvedWindow ?? 0} resolved across the full ${data?.weeksOfTrend ?? 8}-week window · ` +
-          `tz ${data?.timezone ?? ""} · updated ${fmtTime(data?.generatedAt)}`;
+          `${spLine}${unassignedLine}tz ${data?.timezone ?? ""} · updated ${fmtTime(data?.generatedAt)}`;
       }
 
       async function loadThroughputLeaderboard() {
@@ -9877,45 +10741,14 @@
         }
 
         function showAuthBanner(me) {
+          // The topnav user-chip already swaps into a "Sign in with Microsoft"
+          // CTA whenever /api/me returns `signedIn:false`, so this larger
+          // pre-auth banner is redundant in production. We keep the element
+          // in the DOM (other code still references bannerEl/bannerCta) but
+          // never surface it - one sign-in affordance is enough.
           if (!bannerEl) return;
-          if (bannerDismissedThisTab) return;
-          // Only show when OIDC is on the server but this browser has
-          // no session. Anything else (shared-key-only install, real
-          // signed-in session) -> leave banner hidden.
-          const showIt =
-            me &&
-            me.signedIn === false &&
-            typeof me.loginUrl === "string" &&
-            me.loginUrl.length > 0;
-          if (!showIt) {
-            bannerEl.removeAttribute("data-state");
-            bannerEl.setAttribute("hidden", "");
-            return;
-          }
-          // Tune the copy for real-OIDC vs mock-OIDC so a demo viewer
-          // knows why they're looking at a demo sign-in form.
-          if (me.mock === true) {
-            if (bannerTitle) bannerTitle.textContent = "Demo mode active";
-            if (bannerSub) {
-              bannerSub.textContent =
-                "Azure SSO is pending IT approval (RITM0213874). Sign in with a test identity to preview the authenticated experience.";
-            }
-          } else {
-            if (bannerTitle) bannerTitle.textContent = "You're in read-only mode";
-            if (bannerSub) {
-              bannerSub.textContent =
-                "Sign in with your Gen Digital account to unlock personalized insights.";
-            }
-          }
-          if (bannerCta) {
-            const back = window.location.pathname + window.location.search;
-            bannerCta.setAttribute(
-              "href",
-              me.loginUrl + "?return_to=" + encodeURIComponent(back)
-            );
-          }
-          bannerEl.removeAttribute("hidden");
-          bannerEl.setAttribute("data-state", "visible");
+          bannerEl.removeAttribute("data-state");
+          bannerEl.setAttribute("hidden", "");
         }
 
         // Session badge on the chip - three variants, driven by /api/me.
@@ -10375,6 +11208,147 @@
         });
       })();
 
+      /* ================================================================
+       * Hero weather chip — initHeroWeather
+       *
+       * Paints the small "<icon> <temp> · <city>" pill in the hero
+       * from GET /api/weather (Open-Meteo via src/weather.js on the
+       * server).
+       *
+       * Behaviour:
+       *   - Hidden by default (markup has `hidden`). Unhidden only on
+       *     the first successful fetch.
+       *   - Backend returns {enabled:false} when WEATHER_LAT / LON
+       *     aren't configured → chip stays hidden, quietly.
+       *   - Refetches every 15 minutes. Server-side cache is 10 min,
+       *     browser cache 5 min, so this mostly hits warm caches.
+       *   - Click toggles °C ↔ °F, stored in sessionStorage so the
+       *     choice persists within the browser tab without polluting
+       *     localStorage.
+       *   - `data-stale="true"` is set when the backend had to serve
+       *     a soft-fail fallback; the CSS dims the chip slightly so
+       *     that's visually communicated without a second line.
+       * ================================================================ */
+      (function initHeroWeather() {
+        const chip = document.getElementById("hero-weather");
+        if (!chip) return;
+
+        const iconSlot = chip.querySelector(".sn-weather-icon");
+        const tempSlot = chip.querySelector(".sn-weather-temp");
+        const locSlot = chip.querySelector(".sn-weather-loc");
+
+        // Persist the unit preference per tab (not per profile) so
+        // Alan flipping to °F in the demo doesn't stick for the team.
+        const UNIT_STORAGE_KEY = "gen-pulse-weather-unit";
+        let unitPref = null;
+        try {
+          unitPref = sessionStorage.getItem(UNIT_STORAGE_KEY);
+        } catch (_) {
+          unitPref = null;
+        }
+
+        // SVG icon set — kept tiny and matched to the refresh icon's
+        // stroke weight (2px). The server returns one of these
+        // identifiers via the WMO weather-code interpreter in
+        // src/weather.js.
+        const ICONS = {
+          sun: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4 12H2M22 12h-2M5 5l1.4 1.4M17.6 17.6L19 19M5 19l1.4-1.4M17.6 6.4L19 5"/></svg>`,
+          moon: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>`,
+          "sun-cloud": `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M8 6a4 4 0 0 1 7.3 2.3"/><path d="M3 8h1M7 3v1M12 3l.5 1M16 6l1-1"/><path d="M7 18h11a3.5 3.5 0 0 0 0-7 5 5 0 0 0-9.6-1.2A3.5 3.5 0 0 0 7 18z"/></svg>`,
+          cloud: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 18h11a4 4 0 0 0 0-8 6 6 0 0 0-11.5-1.5A3.5 3.5 0 0 0 6 18z"/></svg>`,
+          fog: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 10h12M4 14h16M6 18h12"/></svg>`,
+          drizzle: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 14h11a4 4 0 0 0 0-8 6 6 0 0 0-11.5-1.5A3.5 3.5 0 0 0 6 14z"/><path d="M9 18v2M13 18v2M17 18v2"/></svg>`,
+          rain: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13h11a4 4 0 0 0 0-8 6 6 0 0 0-11.5-1.5A3.5 3.5 0 0 0 6 13z"/><path d="M8 17l-1 3M12 17l-1 3M16 17l-1 3"/></svg>`,
+          shower: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12h11a4 4 0 0 0 0-8 6 6 0 0 0-11.5-1.5A3.5 3.5 0 0 0 6 12z"/><path d="M9 16l-2 5M14 16l-2 5M18 16l-1 3"/></svg>`,
+          snow: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 13h11a4 4 0 0 0 0-8 6 6 0 0 0-11.5-1.5A3.5 3.5 0 0 0 6 13z"/><path d="M9 17v4M9 19h-1.5M9 19h1.5M13 17v4M13 19h-1.5M13 19h1.5M17 17v4M17 19h-1.5M17 19h1.5"/></svg>`,
+          thunder: `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 12h11a4 4 0 0 0 0-8 6 6 0 0 0-11.5-1.5A3.5 3.5 0 0 0 6 12z"/><path d="M13 14l-3 5h3l-1 4 4-6h-3l1-3z"/></svg>`,
+        };
+
+        let latestReading = null;
+
+        function iconSvg(name) {
+          return ICONS[name] || ICONS.cloud;
+        }
+
+        function formatTemp(reading, unit) {
+          if (!reading) return "—";
+          if (unit === "imperial") {
+            if (typeof reading.tempF === "number") return `${reading.tempF}°F`;
+          } else {
+            if (typeof reading.tempC === "number") {
+              return `${Math.round(reading.tempC)}°C`;
+            }
+          }
+          return "—";
+        }
+
+        function formatTooltip(reading) {
+          if (!reading) return "Weather";
+          const parts = [];
+          if (reading.condition) parts.push(reading.condition);
+          if (reading.location) parts.push(`in ${reading.location}`);
+          const base = parts.join(" ");
+          if (reading.stale) return `${base} · (last known reading)`;
+          const age = reading.fetchedAt
+            ? new Date(reading.fetchedAt).toLocaleTimeString([], {
+                hour: "2-digit",
+                minute: "2-digit",
+              })
+            : null;
+          return age ? `${base} · as of ${age}` : base;
+        }
+
+        function render(reading) {
+          if (!reading) {
+            chip.hidden = true;
+            return;
+          }
+          latestReading = reading;
+          const unit = unitPref || reading.units || "metric";
+          if (iconSlot) iconSlot.innerHTML = iconSvg(reading.icon);
+          if (tempSlot) tempSlot.textContent = formatTemp(reading, unit);
+          if (locSlot) locSlot.textContent = reading.location || "";
+          chip.title = formatTooltip(reading);
+          chip.dataset.stale = reading.stale ? "true" : "false";
+          chip.hidden = false;
+        }
+
+        async function fetchWeather() {
+          try {
+            const res = await fetch(apiUrl("/api/weather"), {
+              cache: "no-store",
+              credentials: "same-origin",
+            });
+            if (!res.ok) return;
+            const body = await res.json();
+            if (!body?.enabled || body.available === false) {
+              chip.hidden = true;
+              return;
+            }
+            render(body);
+          } catch (_) {
+            // Network hiccup — leave the last good reading on screen
+            // if we have one, otherwise stay hidden.
+          }
+        }
+
+        chip.addEventListener("click", () => {
+          if (!latestReading) return;
+          const current =
+            unitPref || latestReading.units || "metric";
+          const next = current === "imperial" ? "metric" : "imperial";
+          unitPref = next;
+          try {
+            sessionStorage.setItem(UNIT_STORAGE_KEY, next);
+          } catch (_) {}
+          render(latestReading);
+        });
+
+        fetchWeather();
+        const handle = setInterval(fetchWeather, 15 * 60 * 1000);
+        window.addEventListener("beforeunload", () => clearInterval(handle));
+      })();
+
       // Team switcher — toggles the dropdown of CSM teams this Pulse
       // instance can be pointed at (EMAIL-NORTON / IPM / MOBILE /
       // AVAST). Selection is persisted in localStorage so reloads
@@ -10562,6 +11536,17 @@
           }
         }
 
+        // Teams that have a real server-side scope wired up. Clicking
+        // one of these triggers a full page navigation to `?team=…`
+        // so every widget re-runs with the new Jira scope + roster
+        // instead of just re-painting brand text locally.
+        const LIVE_TEAMS = new Set(["email-norton", "avast"]);
+
+        // Map the UI's data-team values onto the server's
+        // normaliseTeam() expectation. "email-norton" is the dashboard's
+        // long-standing slug; the server knows it as just "norton".
+        const SERVER_TEAM = { "email-norton": "norton", "avast": "avast" };
+
         function select(opt) {
           opts.forEach((o) => {
             o.classList.toggle("is-selected", o === opt);
@@ -10603,6 +11588,24 @@
               },
             })
           );
+
+          // Live teams: reload with ?team=<server-slug> so the server
+          // re-scopes every API endpoint (Jira team-scope, roster,
+          // brand copy) for the new team. A client-only brand rewrite
+          // isn't enough because the widgets are fed by /api/widgets/*
+          // which the server scopes by the request's team dimension.
+          const uiTeam = opt.dataset.team;
+          const serverTeam = SERVER_TEAM[uiTeam];
+          if (LIVE_TEAMS.has(uiTeam) && serverTeam) {
+            const currentUrl = new URL(window.location.href);
+            const currentTeam = (
+              currentUrl.searchParams.get("team") || ""
+            ).toLowerCase();
+            if (currentTeam !== serverTeam) {
+              currentUrl.searchParams.set("team", serverTeam);
+              window.location.assign(currentUrl.toString());
+            }
+          }
         }
 
         // Rewrite the visible brand prefix inside each widget's
@@ -10659,28 +11662,56 @@
           opt.addEventListener("click", () => select(opt));
         });
 
-        // Marketing / deep-link helpers.
+        // Deep-link helpers.
         //   ?team=<slug>              - preselects that team on load.
-        //                               Gated to EMAIL-NORTON only — any
-        //                               other slug (ipm/mobile/avast) is
-        //                               ignored so a shared URL can never
-        //                               open the dashboard on a non-live
-        //                               team's "coming soon" page.
+        //                               Accepts any LIVE team (see
+        //                               LIVE_TEAMS set above). Non-live
+        //                               teams (ipm/mobile) are ignored
+        //                               so a shared URL can never open
+        //                               the dashboard on a coming-soon
+        //                               page.
         //   ?open-team-switcher=1     - pops the dropdown on load so we
         //                               can screenshot the open state.
+        // The server also accepts `norton` as an alias for
+        // `email-norton`; we map both forms here so either works.
+        const UI_TEAM = { "email-norton": "email-norton", norton: "email-norton", avast: "avast" };
+        let selectedFromUrl = false;
         try {
           const teamMatch = /[?&]team=([\w-]+)/.exec(
             window.location.search || ""
           );
           if (teamMatch) {
             const wanted = teamMatch[1].toLowerCase();
-            if (wanted === "email-norton") {
-              const opt = opts.find(
-                (o) =>
-                  o.dataset.team === wanted ||
-                  (o.dataset.slug || "").toLowerCase() === wanted
-              );
-              if (opt) select(opt);
+            const uiTeam = UI_TEAM[wanted];
+            if (uiTeam && LIVE_TEAMS.has(uiTeam)) {
+              const opt = opts.find((o) => o.dataset.team === uiTeam);
+              if (opt && !opt.classList.contains("is-selected")) {
+                // Paint the switcher UI to match — but DO NOT call
+                // `select()`, because that would re-trigger a page
+                // reload loop (we're already on the right URL).
+                opts.forEach((o) => {
+                  o.classList.toggle("is-selected", o === opt);
+                  o.setAttribute(
+                    "aria-selected",
+                    o === opt ? "true" : "false"
+                  );
+                  o.setAttribute("tabindex", o === opt ? "0" : "-1");
+                });
+                const slug = opt.dataset.slug || opt.dataset.team;
+                const brand = opt.dataset.brand || slug;
+                const accent = opt.dataset.accent || "#2b4fff";
+                currentLabel.textContent = slug;
+                if (currentDot) {
+                  currentDot.style.background = accent;
+                  currentDot.style.boxShadow =
+                    "0 0 0 3px " +
+                    "color-mix(in srgb, " + accent + " 18%, transparent)";
+                }
+                document.body.dataset.team = opt.dataset.team;
+                try { localStorage.setItem(KEY, opt.dataset.team); } catch (e) {}
+                rewriteBrand(brand, slug);
+              }
+              selectedFromUrl = true;
             }
           }
           if (/[?&]open-team-switcher=1\b/.test(window.location.search || "")) {
@@ -10690,23 +11721,36 @@
           }
         } catch (e) {}
 
-        // Landing always anchors on EMAIL-NORTON.
-        //
-        // The `select()` helper writes localStorage unconditionally so
-        // the switcher still "remembers" the last click within a
-        // session (useful during the live demo when we click IPM,
-        // show the coming-soon card, then come back). But the LANDING
-        // page must never boot into a non-live team — so on every
-        // fresh page load we clear any saved non-EMAIL-NORTON value
-        // and don't call `select()` here at all. EMAIL-NORTON is the
-        // default `is-selected` option in the HTML, so zero extra
-        // work is needed to land there.
-        try {
-          const saved = localStorage.getItem(KEY);
-          if (saved && saved !== "email-norton") {
-            localStorage.removeItem(KEY);
-          }
-        } catch (e) {}
+        // When the URL doesn't pin a team, fall back to the saved
+        // localStorage value IF it's a live team — otherwise default
+        // to EMAIL-NORTON (the HTML has it preselected, so this is
+        // only needed to clear stale non-live values).
+        if (!selectedFromUrl) {
+          try {
+            const saved = localStorage.getItem(KEY);
+            if (saved && !LIVE_TEAMS.has(saved)) {
+              localStorage.removeItem(KEY);
+            } else if (saved && saved !== "email-norton") {
+              const opt = opts.find((o) => o.dataset.team === saved);
+              if (opt) {
+                // Paint only — no reload. Matches the URL case above.
+                opts.forEach((o) => {
+                  o.classList.toggle("is-selected", o === opt);
+                  o.setAttribute(
+                    "aria-selected",
+                    o === opt ? "true" : "false"
+                  );
+                  o.setAttribute("tabindex", o === opt ? "0" : "-1");
+                });
+                document.body.dataset.team = opt.dataset.team;
+                const slug = opt.dataset.slug || opt.dataset.team;
+                const brand = opt.dataset.brand || slug;
+                currentLabel.textContent = slug;
+                rewriteBrand(brand, slug);
+              }
+            }
+          } catch (e) {}
+        }
       })();
 
       /* -----------------------------------------------------------------

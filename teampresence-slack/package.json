@@ -9,7 +9,12 @@
     "start": "node src/index.js",
     "dev": "node --watch src/index.js",
     "demo": "bash scripts/demo-start.sh",
-    "tunnel": "bash scripts/tunnel-watchdog.sh"
+    "tunnel": "bash scripts/tunnel-watchdog.sh",
+    "demo:snapshot": "node scripts/build-demo-snapshot.mjs",
+    "demo:sanitize": "node scripts/sanitize-demo.mjs",
+    "demo:build": "node scripts/build-demo.mjs --mock",
+    "demo:build:live": "node scripts/build-demo.mjs",
+    "demo:serve": "node scripts/serve-demo.mjs"
   },
   "engines": {
     "node": ">=20"

@@ -122,32 +122,64 @@ Covered in `WORKDAY.md`.
 
 Forward `SLACK-ADMIN-REQUEST.md` to your Slack workspace admin. Expected turnaround: 1–5 business days.
 
-**In flight (as of 2026-04-20):**
+**In flight (as of 2026-04-26 PM):**
 
 | Item | Status | Reference |
 | --- | --- | --- |
-| ServiceNow Slack-app workspace-install ticket | **Filed, awaiting Slack admin** | **RITM0213806** |
-| `SLACK_BOT_TOKEN` / `SLACK_SIGNING_SECRET` in `.env` | Blocked on above | `./scripts/set-slack-tokens.sh` |
-| Roster `slackIds: []` populated in `src/team.js` | Blocked on above | `users.list` curl below |
-| `PRESENCE_MODEL=slack+workday` flipped | Blocked on above | Step 3d |
+| ServiceNow Slack-app workspace-install ticket | ✅ **APPROVED 2026-04-26** — Petr Šilhan (owner) + Rob Ryan (admin, ref `MSG7711702_TRc8EWEzUeCNfXTb9Psu`) | **RITM0213806** |
+| Gen Pulse app created on api.slack.com (Gen workspace) | ✅ 2026-04-24 — App ID `A0AUY7JRG5T` | `SLACK-ADMIN-REQUEST.md` |
+| `svc.slack.appadm` added as collaborator on the app | ✅ 2026-04-24 | api.slack.com → Gen Pulse → Collaborators |
+| App ID + collaborator confirmation sent to admin | ✅ 2026-04-24 | RITM0213806 thread |
+| Bot scopes configured on the app (`users:read`, `users.profile:read`) | ✅ 2026-04-24 — two scopes (modern v2 apps bundle presence into `users:read`) | api.slack.com → Gen Pulse → OAuth & Permissions |
+| Install request submitted to the Gen workspace | ✅ 2026-04-24 — second attempt succeeded after admin enabled install requests | api.slack.com → Gen Pulse → Install App |
+| Install request approved by workspace admin | ✅ 2026-04-26 — both Petr and Rob signed off | RITM0213806 thread |
+| **Retrieve `SLACK_BOT_TOKEN` + `SLACK_SIGNING_SECRET` from api.slack.com** | **⏳ Kevin's next action — unblocks Team Presence** | Step 3b below |
+| `.env` populated + `data/slack-overrides.json` generated + `PRESENCE_MODEL=slack+workday` flipped | Blocked on token retrieval | `./scripts/activate-slack.sh` |
 
-### 3b. Once approved [it → you]
+### 3b. One-shot activator — the fast path [you]
 
-They will give you three values — `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, and optionally `SLACK_APP_TOKEN`. Put them into `.env`.
-
-### 3c. Match Slack user IDs to the roster [you]
-
-Each roster entry in `src/team.js` has an empty `slackIds: []` array. Populate it with each person's Slack user ID (format `U0...`). You can get these by running (once Slack is connected):
+Once the admin hands over tokens, **run this single command** and you're done:
 ```
-curl -sS -H "Authorization: Bearer $SLACK_BOT_TOKEN" \
-  https://slack.com/api/users.list | jq '.members[] | {id, name: .profile.real_name}'
+./scripts/activate-slack.sh
+```
+It will prompt (hidden input) for `SLACK_BOT_TOKEN`, `SLACK_SIGNING_SECRET`, and `SLACK_APP_TOKEN` (optional), then in one pass:
+1. Hit `auth.test` to verify the bot token works **before touching anything**.
+2. Back up `.env` to `.env.<timestamp>.bak`.
+3. Write all three tokens + flip `PRESENCE_MODEL=slack+workday` in `.env`.
+4. Call `scripts/map-slack-users.mjs --write` — fetches `users.list`, matches by name against the roster in `src/team.js`, writes the slug → Slack-ID mapping to `data/slack-overrides.json` (gitignored).
+5. Restart the server on :3000 and smoke-test `/api/team`.
+
+Non-interactive form (for CI or scripted runs):
+```
+./scripts/activate-slack.sh --yes \
+  --bot-token xoxb-... \
+  --signing-secret ... \
+  --app-token xapp-...          # optional
 ```
 
-### 3d. Flip the feature flag [you / ops]
-
-In `.env`:
+Dry-run first if you want to eyeball the proposed mapping without touching anything:
 ```
-PRESENCE_MODEL=slack+workday   # or just slack if no Workday yet
+./scripts/activate-slack.sh --dry-run --bot-token xoxb-...
+```
+
+Exit codes: `0` ok, `1` bad args, `2` `auth.test` failed (wrong/revoked token), `3` 0 roster matches (wrong workspace), `4` server didn't come up on :3000.
+
+### 3c. If you ever want to do it by hand (skip 3b) [you]
+
+Put the three values into `.env`:
+```
+SLACK_BOT_TOKEN=xoxb-...
+SLACK_SIGNING_SECRET=...
+SLACK_APP_TOKEN=xapp-...         # optional, Socket Mode
+PRESENCE_MODEL=slack+workday
+```
+And populate `data/slack-overrides.json` with slug → Slack IDs:
+```json
+{ "jan-bartoncik": ["U0123..."], "iryna-botulinska": ["U0456..."], ... }
+```
+You can generate the right shape with:
+```
+node scripts/map-slack-users.mjs --write     # needs $SLACK_BOT_TOKEN in env
 ```
 Restart the server.
 
@@ -178,18 +210,106 @@ PUBLIC_URL=https://gen-pulse.corp.gendigital.net
 
 Swap the current `DASHBOARD_KEY` gate for Azure AD SSO. See `USER-ACCOUNT-PLAN.md` for the concrete design and `AZURE-AD-ADMIN-REQUEST.md` for the app-registration spec that was sent to the identity team.
 
-**In flight (as of 2026-04-20):**
+**In flight (as of 2026-04-26 PM):**
 
 | Item | Status | Reference |
 | --- | --- | --- |
-| MyApps / ServiceNow app-registration ticket | **In progress — CMDB validation complete (2026-04-24), awaiting CMDB record creation (ETA today / Mon 2026-04-27), then identity-team execution** | **RITM0213874** |
-| CMDB validation intake (from Jaanvi, CMDB team) | ✅ Complete — reply accepted 2026-04-24. No further info required. | Thread on RITM0213874 |
-| Senior manager + director sign-off to proceed | Pending — identity team asked to hold execution until Kevin emails the go-ahead | — |
-| OIDC_* credentials populated in `.env` | Blocked on above | `./scripts/set-oidc-credentials.sh` |
+| MyApps / ServiceNow app-registration ticket | **⚠️ CMDB done — Identity-team handoff needs verification** (see below) | **RITM0213874** |
+| CMDB validation intake (from Jaanvi, CMDB team) | ✅ Complete 2026-04-26 — *"Application created in CMDB as requested. No further action required from CMDB team. Closing the ticket."* | RITM0213874 thread |
+| **Verify whether RITM0213874 is fully closed or still open to Identity** | **⏳ Kevin's next action** — open ticket in ServiceNow; see `AZURE-AD-ADMIN-REQUEST.md` status banner for the decision tree | ServiceNow |
+| Senior manager + director sign-off to proceed | Pending — always was a separate gate; email still needs to go out | — |
+| OIDC_* credentials populated in `.env` | Blocked on Identity-team execution + sign-off | `./scripts/set-oidc-credentials.sh` |
 | Four security-group Object IDs for role mapping | Blocked on above | `OIDC_ROLE_MAP_*` env vars |
 | First successful `/auth/login` round-trip | Blocked on above | `curl -s $PUBLIC_URL/auth/status` |
 
 When **RITM0213874** resolves, follow the 3-step activation path documented in `AZURE-AD-ADMIN-REQUEST.md` → "When the credentials arrive — 3-step activation". Do not paste credentials anywhere except through `./scripts/set-oidc-credentials.sh`.
+
+---
+
+### 4e. Production hosting — GCP Cloud Run [you]
+
+Status: **RITM0214505 approved 28-Apr-2026.** NEMO GCP project access is granted. Everything below is scripted by `scripts/gcp-deploy.sh` — the long commentary here is for the *first* deploy only; subsequent deploys are one command.
+
+**Prerequisites (one-time, on your laptop):**
+
+1. Install the `gcloud` CLI. Easiest:
+   ```bash
+   brew install --cask google-cloud-sdk
+   ```
+2. Authenticate:
+   ```bash
+   gcloud auth login
+   gcloud auth application-default login
+   ```
+3. Confirm you can see the NEMO project (substitute the real id from the approval email):
+   ```bash
+   gcloud projects describe <PROJECT_ID>
+   ```
+   If this 403s, your IAM binding hasn't propagated yet — wait 5–10 min and retry.
+
+**First deploy:**
+
+```bash
+cd teampresence-slack
+scripts/gcp-deploy.sh --project-id <PROJECT_ID>
+```
+
+That single command does everything in order:
+
+| # | Step | What it does | Where to look if it breaks |
+|---|---|---|---|
+| 1 | **Verify prereqs** | `gcloud`, `.env`, project access, required APIs | stderr of the script |
+| 2 | **Enable APIs** | artifactregistry, run, secretmanager, iam, cloudbuild | `gcloud services list` |
+| 3 | **Artifact Registry repo** | creates `gen-pulse` docker repo in europe-west3 | `gcloud artifacts repositories list` |
+| 4 | **Runtime service account** | creates `gen-pulse-run@<proj>.iam.gserviceaccount.com` + binds `secretmanager.secretAccessor` and `logging.logWriter` | `gcloud iam service-accounts list` |
+| 5 | **Push secrets** | 6 secrets from `.env` → Secret Manager (idempotent, skips unchanged) | `gcloud secrets list --filter=labels.app=gen-pulse` |
+| 6 | **Split `.env`** | non-secrets → tmp YAML, secrets → Secret Manager bindings | tmp file path in script output |
+| 7 | **Build image** | Cloud Build (default) or local Docker (`--use-local-docker`) | `gcloud builds list --limit=5` |
+| 8 | **Deploy Cloud Run revision** | binds env-vars + secrets, starts on port 8080 | `gcloud run services describe gen-pulse --region=europe-west3` |
+| 9 | **Post-deploy URL pin** | updates `OIDC_REDIRECT_URI` + `PUBLIC_URL` to the real `run.app` URL | `gcloud run revisions list --service=gen-pulse` |
+| 10 | **Smoke-test `/healthz`** | curl returns 200 | deploy fails loud here, nothing is "half-deployed" |
+
+Expected total: **5–8 minutes**, first run.
+
+✅ **Success test:** the script prints the `run.app` URL, `/healthz` returns 200, and opening the URL shows the dashboard landing page with the "Sign in with Microsoft" chip.
+
+**The single manual step after the first deploy:** add the Cloud Run URL to Azure AD as a redirect URI. Go to the Azure portal → App registrations → **Gen Pulse (EMAIL NORTON pilot)** (App ID `072e713c-bef3-4b71-90fc-a54bb392f854`) → Authentication → Add platform → Web → Redirect URI: `<run.app URL>/auth/callback`. Save. Takes 60 seconds, no new ticket needed.
+
+**Subsequent deploys:**
+
+```bash
+# Code-only change (skip re-pushing identical secrets):
+scripts/gcp-deploy.sh --project-id <PROJECT_ID> --skip-secrets
+
+# Secret rotation only (e.g. Azure AD client_secret renewed):
+scripts/gcp-secrets-push.sh --project-id <PROJECT_ID>
+# Then either a full deploy, or:
+gcloud run services update-traffic gen-pulse --to-latest \
+  --project=<PROJECT_ID> --region=europe-west3
+```
+
+**Troubleshooting:**
+
+| Symptom | Command to diagnose | Usual fix |
+|---|---|---|
+| `permission denied` on gcloud | `gcloud auth list` | Run `gcloud auth login` again; confirm the right Gen Digital account is active. |
+| Cloud Build step 3+ min with no output | `gcloud builds list --limit=1 --format='value(status,logUrl)'` | Normal — `npm ci` compiles better-sqlite3 from source. Use `--machine-type=e2-highcpu-8` if it ever blows past 10 min (already the script default). |
+| `/healthz` returns 503 after deploy | `gcloud run services logs tail gen-pulse --region=europe-west3` | Check for missing secret binding — `gcloud secrets versions list gen-pulse-<name>` should have ≥1 ENABLED version. |
+| `/auth/login` 500s with `AADSTS50011` | Azure AD app registration | You haven't added the `run.app` URL as a redirect URI yet (the post-deploy manual step above). |
+| Image push 403s | `gcloud auth configure-docker europe-west3-docker.pkg.dev` | Re-run that command; refreshes `~/.docker/config.json`. |
+
+**Cost expectation:** Cloud Run with min-instances=0 and our 8-person traffic pattern costs roughly **$3–8/month** — the free tier covers almost all of it. Secret Manager is free under 10K accesses/month; Artifact Registry is ~$0.10/month for the single 180 MB image. No action needed on billing alerts unless we open the app up significantly wider.
+
+**Rollback:**
+
+Cloud Run keeps every past revision. To roll back to the previous version:
+```bash
+gcloud run services update-traffic gen-pulse \
+  --project=<PROJECT_ID> --region=europe-west3 \
+  --to-revisions=gen-pulse-00002-abc=100   # pick the revision you want live
+```
+
+Zero-downtime, zero risk — no image rebuild, no config reload, just a traffic flip.
 
 ---
 

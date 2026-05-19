@@ -164,6 +164,56 @@ export function rolesFromGroups(groups, roleMap) {
 }
 
 /**
+ * Email-based role overrides.
+ *
+ * Azure group→role mapping is the "right" way to grant roles, but it
+ * requires IT to create and attach an AD group to every role tier
+ * (member / manager / director / admin). That's a multi-day cycle we
+ * don't want to burn for onboarding two executives (e.g. the team's
+ * sponsor and manager).
+ *
+ * This escape hatch lets an operator pin specific *emails* to roles
+ * straight from .env, no AD-group ticket required:
+ *
+ *   OIDC_ROLE_EMAIL_OVERRIDES=alan.rogoyski@gendigital.com=director,jan.preiss@gendigital.com=manager
+ *
+ * Semantics:
+ *   - Overrides are *additive* to roles derived from AD groups — a
+ *     user who already has "manager" from a group AND "director" from
+ *     this env var ends up with both. That way the override never
+ *     takes anything away, which avoids privilege-regression bugs.
+ *   - Matching is case-insensitive. Whitespace around each entry is
+ *     tolerated.
+ *   - Accepts either a plain email or multiple roles for one email
+ *     separated by '+': alan.rogoyski@gendigital.com=director+admin
+ *
+ * Returns `Map<lowercased-email, string[]>`.
+ */
+export function parseEmailRoleOverrides(env) {
+  const raw = (env.OIDC_ROLE_EMAIL_OVERRIDES ?? "").trim();
+  const out = new Map();
+  if (!raw) return out;
+  for (const entry of raw.split(",")) {
+    const [lhs, rhs] = entry.split("=").map((s) => (s ?? "").trim());
+    if (!lhs || !rhs) continue;
+    const email = lhs.toLowerCase();
+    const roles = rhs
+      .split("+")
+      .map((r) => r.trim())
+      .filter(Boolean);
+    if (roles.length === 0) continue;
+    const existing = out.get(email) ?? [];
+    out.set(email, Array.from(new Set([...existing, ...roles])));
+  }
+  return out;
+}
+
+export function rolesForEmail(email, overrides) {
+  if (!email || !overrides?.size) return [];
+  return overrides.get(String(email).toLowerCase()) ?? [];
+}
+
+/**
  * Initialise an OIDC client from env vars. Safe to call even when
  * nothing is configured — returns `{ ready: false, reason }` so the
  * caller can decide what to do (almost always: boot anyway, use
@@ -216,6 +266,7 @@ export async function initOidcFromEnv(env = process.env) {
   }
 
   const roleMap = parseRoleMap(env);
+  const emailRoleOverrides = parseEmailRoleOverrides(env);
   const sessionTtlMinutes = Number(env.OIDC_SESSION_TTL_MINUTES ?? 480); // 8h
   const sessionCookieName = (env.OIDC_SESSION_COOKIE ?? "gp_session").trim();
   const allowSharedKeyFallback =
@@ -224,6 +275,12 @@ export async function initOidcFromEnv(env = process.env) {
   // Secure cookies would be stripped. Auto-detect from the redirect URI
   // scheme so admins don't have to remember another knob.
   const secureCookies = redirectUri.startsWith("https://");
+  // `domain_hint` tells Azure to skip the "Work or school account / Personal
+  // account" picker and jump straight into the tenant's sign-in page. This
+  // is what users actually want — the personal-account option is a relic of
+  // Azure's app-reg "Supported account types" default and always fails for
+  // Gen-internal apps anyway.
+  const domainHint = (env.OIDC_DOMAIN_HINT ?? "gendigital.com").trim();
 
   return {
     ready: true,
@@ -234,8 +291,10 @@ export async function initOidcFromEnv(env = process.env) {
     sessionCookieName,
     sessionTtlSeconds: Math.max(60, Math.floor(sessionTtlMinutes * 60)),
     roleMap,
+    emailRoleOverrides,
     allowSharedKeyFallback,
     secureCookies,
+    domainHint,
     issuerUrl: issuerUrl.href,
   };
 }
@@ -648,7 +707,12 @@ export async function startLoginRedirect(oidc, req, res) {
     })
   );
 
-  const authUrl = buildAuthorizationUrl(oidc.config, {
+  // Only include `prompt=` when it's explicitly requested — Azure AD v2.0
+  // returns AADSTS90023 ("Unsupported 'prompt' value") if the key is
+  // present with an empty/undefined value, which is how openid-client
+  // serialises `prompt: undefined`. Conditional spread keeps the
+  // parameter off the wire entirely in the common case.
+  const authParams = {
     redirect_uri: oidc.redirectUri,
     scope: "openid profile email",
     state,
@@ -657,8 +721,18 @@ export async function startLoginRedirect(oidc, req, res) {
     code_challenge_method: "S256",
     // Gen Digital users are single-tenant; `login_hint` omitted — let
     // Azure pick the right account if the user is multi-tenant signed in.
-    prompt: req.query?.prompt === "select_account" ? "select_account" : undefined,
-  });
+  };
+  if (req.query?.prompt === "select_account") {
+    authParams.prompt = "select_account";
+  }
+  // Skip the "Work or school account / Personal account" chooser by
+  // telling Azure this request is for a specific work domain. Without
+  // this, Azure's account picker offers both, and the personal option
+  // would always fail for a tenant-restricted app like Gen Pulse.
+  if (oidc.domainHint) {
+    authParams.domain_hint = oidc.domainHint;
+  }
+  const authUrl = buildAuthorizationUrl(oidc.config, authParams);
 
   res.statusCode = 302;
   res.setHeader("location", authUrl.href);
@@ -699,7 +773,63 @@ export async function finishLoginCallback(oidc, req, res) {
 
   const claims = tokens.claims() ?? {};
   const groups = Array.isArray(claims.groups) ? claims.groups : [];
-  const roles = rolesFromGroups(groups, oidc.roleMap);
+  const groupRoles = rolesFromGroups(groups, oidc.roleMap);
+  // Email-based overrides kick in on TOP of group-derived roles. See
+  // parseEmailRoleOverrides() for the rationale — short version: lets
+  // us onboard specific execs without waiting for IT to create AD
+  // groups per role tier. Pulls from either `email` or `preferred_
+  // username` claim, whichever Azure emits for this tenant.
+  const claimEmail = String(
+    claims.email ?? claims.preferred_username ?? ""
+  ).toLowerCase();
+  const overrideRoles = rolesForEmail(claimEmail, oidc.emailRoleOverrides);
+  const roles = Array.from(new Set([...groupRoles, ...overrideRoles]));
+  if (overrideRoles.length > 0) {
+    console.log(
+      `[auth] email role-override applied for ${claimEmail}: ` +
+        `+[${overrideRoles.join(", ")}] (group roles=[${groupRoles.join(", ") || "—"}])`
+    );
+  }
+
+  // ---- Azure AD specific gotchas worth surfacing in the boot log ---
+  //
+  // (1) "Groups overage": when a user belongs to more than ~150 groups
+  //     Azure stops emitting `groups` and instead emits a hint at
+  //     `_claim_names.groups` pointing to the Graph endpoint where the
+  //     full list lives. We don't follow that pointer (it would require
+  //     an additional Graph permission and a network round-trip per
+  //     login) — but we MUST tell the operator, otherwise a director
+  //     who's in many AD groups will silently get zero roles and
+  //     blame Gen Pulse instead of their AD bloat.
+  //
+  // (2) Role-map configured but produced no roles: by far the most
+  //     common "SSO works but I'm not an admin" support ticket. Almost
+  //     always means the GUID in the env var doesn't match the user's
+  //     actual group membership (typo, swapped tenant, group renamed).
+  //     We can't auto-fix it — but we can make sure the diagnosis is
+  //     a single grep away.
+  const overage =
+    groups.length === 0 &&
+    claims._claim_names &&
+    typeof claims._claim_names === "object" &&
+    "groups" in claims._claim_names;
+  if (overage) {
+    console.warn(
+      `[auth] Azure groups-overage for sub=${claims.oid ?? claims.sub}: ` +
+        `user is in too many groups for the id_token (${
+          claims._claim_sources?.[claims._claim_names.groups]?.endpoint ?? "<no endpoint>"
+        }). Roles will be empty until we wire Graph fallback. ` +
+        `Workaround: ask AD owners to scope the app to a single group claim.`
+    );
+  } else if (oidc.roleMap?.size && groups.length > 0 && roles.length === 0) {
+    console.warn(
+      `[auth] role-map configured but produced no roles for sub=${
+        claims.oid ?? claims.sub
+      }: ${groups.length} groups arrived in the id_token but none matched ` +
+        `OIDC_ROLE_MAP_*. Verify GUIDs against this user's actual AD groups: ` +
+        `[${groups.slice(0, 5).join(", ")}${groups.length > 5 ? `, …+${groups.length - 5}` : ""}]`
+    );
+  }
 
   const now = Math.floor(Date.now() / 1000);
   // Session cookie — everything we need to answer "who is this?"

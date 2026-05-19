@@ -1,0 +1,92 @@
+{
+  "total": 28,
+  "status": "To Do",
+  "byPriority": [
+    {
+      "priority": "Critical",
+      "count": 2
+    },
+    {
+      "priority": "High",
+      "count": 7
+    },
+    {
+      "priority": "Medium",
+      "count": 13
+    },
+    {
+      "priority": "Low",
+      "count": 6
+    }
+  ],
+  "byAssignee": [
+    {
+      "name": "Marley Olsen",
+      "count": 6
+    },
+    {
+      "name": "Harper Whitaker",
+      "count": 5
+    },
+    {
+      "name": "Jordan Abara",
+      "count": 4
+    },
+    {
+      "name": "Reese Davies",
+      "count": 3
+    }
+  ],
+  "unassigned": 4,
+  "medianAgeDays": 2.4,
+  "oldestAgeDays": 11.2,
+  "boardUrl": "https://demo.example.com/secure/RapidBoard.jspa",
+  "generatedAt": 1778340378731,
+  "timezone": "Europe/Prague",
+  "jql": "(project = EMAIL AND filter = 'Norton Email Kanban') AND status = \"To Do\"",
+  "preview": true,
+  "project": "EMOPS",
+  "jqlSource": "JIRA_EMOPS_SPRINT_BACKLOG_JQL",
+  "filter": {
+    "widgetId": "sprint-backlog",
+    "title": "Sprint backlog",
+    "jql": "project = EMOPS AND Sprint in openSprints() AND status = \"To Do\"",
+    "source": "JIRA_EMOPS_SPRINT_BACKLOG_JQL",
+    "fallbackFrom": null,
+    "refreshSeconds": 300,
+    "project": "EMOPS",
+    "boardUrl": "https://demo.example.com/jira/software/c/projects/EMAIL/boards/42",
+    "generatedAt": 1778340378731,
+    "chip": "EMOPS · status: To Do · pipeline",
+    "parameters": [
+      {
+        "label": "Project",
+        "value": "EMOPS"
+      },
+      {
+        "label": "Status filter",
+        "value": "To Do"
+      },
+      {
+        "label": "Issue types",
+        "value": "(all)"
+      },
+      {
+        "label": "Labels",
+        "value": "(none)"
+      },
+      {
+        "label": "Assignee",
+        "value": "any"
+      },
+      {
+        "label": "Board URL",
+        "value": "https://demo.example.com/jira/software/c/projects/EMAIL/boards/42"
+      },
+      {
+        "label": "Timezone",
+        "value": "Europe/Prague"
+      }
+    ]
+  }
+}

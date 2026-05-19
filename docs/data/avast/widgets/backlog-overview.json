@@ -1,0 +1,81 @@
+{
+  "total": 87,
+  "previous": 84,
+  "deltaAbs": 3,
+  "deltaPct": 3.6,
+  "byPriority": [
+    {
+      "priority": "Critical",
+      "count": 4
+    },
+    {
+      "priority": "High",
+      "count": 18
+    },
+    {
+      "priority": "Medium",
+      "count": 41
+    },
+    {
+      "priority": "Low",
+      "count": 24
+    }
+  ],
+  "byAge": {
+    "new": 12,
+    "recent": 31,
+    "aging": 28,
+    "stale": 16
+  },
+  "newThisWeek": 14,
+  "resolvedThisWeek": 11,
+  "generatedAt": 1778340378739,
+  "timezone": "Europe/Prague",
+  "jql": "project = EMAIL AND statusCategory != Done",
+  "preview": true,
+  "project": "EMOPS",
+  "jqlSource": "JIRA_EMOPS_BACKLOG_JQL",
+  "filter": {
+    "widgetId": "backlog-overview",
+    "title": "Backlog overview",
+    "jql": "project = EMOPS AND statusCategory != Done",
+    "source": "JIRA_EMOPS_BACKLOG_JQL",
+    "fallbackFrom": null,
+    "refreshSeconds": 900,
+    "project": "EMOPS",
+    "boardUrl": null,
+    "generatedAt": 1778340378739,
+    "chip": "EMOPS · snapshot · open",
+    "parameters": [
+      {
+        "label": "Project",
+        "value": "EMOPS"
+      },
+      {
+        "label": "Scope",
+        "value": "Currently open (status category != Done)",
+        "hint": "Compared with 7-day-ago snapshot for delta"
+      },
+      {
+        "label": "Age buckets",
+        "value": "≤7d · 7–30d · 30–90d · 90d+"
+      },
+      {
+        "label": "Issue types",
+        "value": "(all)"
+      },
+      {
+        "label": "Labels",
+        "value": "(none)"
+      },
+      {
+        "label": "Assignee",
+        "value": "any"
+      },
+      {
+        "label": "Timezone",
+        "value": "Europe/Prague"
+      }
+    ]
+  }
+}

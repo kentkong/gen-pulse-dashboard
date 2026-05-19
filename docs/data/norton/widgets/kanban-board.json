@@ -1,0 +1,307 @@
+{
+  "total": 23,
+  "maxPerColumn": 6,
+  "boardUrl": "https://demo.example.com/secure/RapidBoard.jspa",
+  "columns": [
+    {
+      "name": "To Do",
+      "statusCategory": "new",
+      "total": 7,
+      "truncated": 1,
+      "tickets": [
+        {
+          "key": "DEMO-311",
+          "summary": "Fix render glitch in Outlook 2019",
+          "assignee": "Marley Olsen",
+          "priority": "High",
+          "status": "To Do",
+          "statusCategory": "new",
+          "issueType": "Task",
+          "updatedAt": "2026-05-09T13:26:18.577Z"
+        },
+        {
+          "key": "DEMO-309",
+          "summary": "Reduce template build time on CI",
+          "assignee": "Jordan Abara",
+          "priority": "Medium",
+          "status": "To Do",
+          "statusCategory": "new",
+          "issueType": "Task",
+          "updatedAt": "2026-05-09T10:26:18.577Z"
+        },
+        {
+          "key": "DEMO-307",
+          "summary": "Reduce noisy Sentry alerts on send",
+          "assignee": "Rowan Nash",
+          "priority": "High",
+          "status": "To Do",
+          "statusCategory": "new",
+          "issueType": "Story",
+          "updatedAt": "2026-05-09T08:26:18.577Z"
+        },
+        {
+          "key": "DEMO-304",
+          "summary": "Migrate template to MJML",
+          "assignee": "Harper Whitaker",
+          "priority": "Medium",
+          "status": "To Do",
+          "statusCategory": "new",
+          "issueType": "Task",
+          "updatedAt": "2026-05-08T15:26:18.577Z"
+        },
+        {
+          "key": "DEMO-299",
+          "summary": "Add metrics for click-through rate",
+          "assignee": "Reese Davies",
+          "priority": "Low",
+          "status": "To Do",
+          "statusCategory": "new",
+          "issueType": "Task",
+          "updatedAt": "2026-05-07T15:26:18.577Z"
+        },
+        {
+          "key": "DEMO-297",
+          "summary": "Investigate flaky e2e suite for templates",
+          "assignee": "Skylar Eriksen",
+          "priority": "Low",
+          "status": "To Do",
+          "statusCategory": "new",
+          "issueType": "Task",
+          "updatedAt": "2026-05-06T15:26:18.577Z"
+        }
+      ]
+    },
+    {
+      "name": "In Progress",
+      "statusCategory": "indeterminate",
+      "total": 6,
+      "truncated": 0,
+      "tickets": [
+        {
+          "key": "DEMO-315",
+          "summary": "Decompose monolithic targeting query",
+          "assignee": "Jamie Underwood",
+          "priority": "Critical",
+          "status": "In Progress",
+          "statusCategory": "indeterminate",
+          "issueType": "Incident",
+          "updatedAt": "2026-05-09T14:56:18.577Z"
+        },
+        {
+          "key": "DEMO-314",
+          "summary": "Migrate template to MJML",
+          "assignee": "Marley Olsen",
+          "priority": "High",
+          "status": "In Progress",
+          "statusCategory": "indeterminate",
+          "issueType": "Story",
+          "updatedAt": "2026-05-09T14:26:18.577Z"
+        },
+        {
+          "key": "DEMO-312",
+          "summary": "Add metrics for click-through rate",
+          "assignee": "Harper Whitaker",
+          "priority": "Medium",
+          "status": "In Progress",
+          "statusCategory": "indeterminate",
+          "issueType": "Task",
+          "updatedAt": "2026-05-09T12:26:18.577Z"
+        },
+        {
+          "key": "DEMO-308",
+          "summary": "Swap deprecated SDK in send-worker",
+          "assignee": "Rowan Nash",
+          "priority": "Medium",
+          "status": "In Progress",
+          "statusCategory": "indeterminate",
+          "issueType": "Task",
+          "updatedAt": "2026-05-09T09:26:18.577Z"
+        },
+        {
+          "key": "DEMO-306",
+          "summary": "Schedule rollout of new footer system",
+          "assignee": "Reese Davies",
+          "priority": "High",
+          "status": "In Progress",
+          "statusCategory": "indeterminate",
+          "issueType": "Task",
+          "updatedAt": "2026-05-08T15:26:18.577Z"
+        },
+        {
+          "key": "DEMO-302",
+          "summary": "Backfill bounce-suppression list",
+          "assignee": "Jordan Abara",
+          "priority": "Medium",
+          "status": "In Progress",
+          "statusCategory": "indeterminate",
+          "issueType": "Task",
+          "updatedAt": "2026-05-07T15:26:18.577Z"
+        }
+      ]
+    },
+    {
+      "name": "In Review",
+      "statusCategory": "indeterminate",
+      "total": 5,
+      "truncated": 0,
+      "tickets": [
+        {
+          "key": "DEMO-305",
+          "summary": "Standardise UTM params across channels",
+          "assignee": "Skylar Eriksen",
+          "priority": "High",
+          "status": "In Review",
+          "statusCategory": "indeterminate",
+          "issueType": "Task",
+          "updatedAt": "2026-05-09T13:56:18.577Z"
+        },
+        {
+          "key": "DEMO-303",
+          "summary": "Investigate flaky e2e suite for templates",
+          "assignee": "Marley Olsen",
+          "priority": "High",
+          "status": "In Review",
+          "statusCategory": "indeterminate",
+          "issueType": "Task",
+          "updatedAt": "2026-05-09T11:26:18.577Z"
+        },
+        {
+          "key": "DEMO-301",
+          "summary": "Swap deprecated SDK in send-worker",
+          "assignee": "Harper Whitaker",
+          "priority": "Medium",
+          "status": "In Review",
+          "statusCategory": "indeterminate",
+          "issueType": "Story",
+          "updatedAt": "2026-05-09T07:26:18.577Z"
+        },
+        {
+          "key": "DEMO-298",
+          "summary": "Swap deprecated SDK in send-worker",
+          "assignee": "Reese Davies",
+          "priority": "Medium",
+          "status": "In Review",
+          "statusCategory": "indeterminate",
+          "issueType": "Task",
+          "updatedAt": "2026-05-08T15:26:18.577Z"
+        },
+        {
+          "key": "DEMO-295",
+          "summary": "Decompose monolithic targeting query",
+          "assignee": "Jordan Abara",
+          "priority": "Low",
+          "status": "In Review",
+          "statusCategory": "indeterminate",
+          "issueType": "Task",
+          "updatedAt": "2026-05-07T15:26:18.577Z"
+        }
+      ]
+    },
+    {
+      "name": "Done",
+      "statusCategory": "done",
+      "total": 5,
+      "truncated": 0,
+      "tickets": [
+        {
+          "key": "DEMO-293",
+          "summary": "Refactor segmentation rule engine",
+          "assignee": "Jamie Underwood",
+          "priority": "High",
+          "status": "Done",
+          "statusCategory": "done",
+          "issueType": "Task",
+          "updatedAt": "2026-05-09T03:26:18.577Z"
+        },
+        {
+          "key": "DEMO-290",
+          "summary": "Swap deprecated SDK in send-worker",
+          "assignee": "Harper Whitaker",
+          "priority": "Medium",
+          "status": "Done",
+          "statusCategory": "done",
+          "issueType": "Task",
+          "updatedAt": "2026-05-08T15:26:18.577Z"
+        },
+        {
+          "key": "DEMO-287",
+          "summary": "Refresh email branding tokens",
+          "assignee": "Reese Davies",
+          "priority": "Medium",
+          "status": "Done",
+          "statusCategory": "done",
+          "issueType": "Task",
+          "updatedAt": "2026-05-07T15:26:18.577Z"
+        },
+        {
+          "key": "DEMO-284",
+          "summary": "Refresh email branding tokens",
+          "assignee": "Rowan Nash",
+          "priority": "Medium",
+          "status": "Done",
+          "statusCategory": "done",
+          "issueType": "Story",
+          "updatedAt": "2026-05-06T15:26:18.577Z"
+        },
+        {
+          "key": "DEMO-280",
+          "summary": "Refresh email branding tokens",
+          "assignee": "Marley Olsen",
+          "priority": "Low",
+          "status": "Done",
+          "statusCategory": "done",
+          "issueType": "Task",
+          "updatedAt": "2026-05-05T15:26:18.577Z"
+        }
+      ]
+    }
+  ],
+  "generatedAt": 1778340378734,
+  "timezone": "Europe/Prague",
+  "jql": "project = EMOPS AND filter = 'Norton Email Kanban' ORDER BY Rank",
+  "preview": true,
+  "project": "EMOPS",
+  "jqlSource": "JIRA_EMOPS_KANBAN_JQL",
+  "filter": {
+    "widgetId": "kanban-board",
+    "title": "Kanban snapshot",
+    "jql": "project = EMOPS AND statusCategory != Done AND Sprint in openSprints()",
+    "source": "JIRA_EMOPS_KANBAN_JQL",
+    "fallbackFrom": null,
+    "refreshSeconds": 180,
+    "project": "EMOPS",
+    "boardUrl": "https://demo.example.com/jira/software/c/projects/EMAIL/boards/42",
+    "generatedAt": 1778340378734,
+    "chip": "EMOPS · board view · live",
+    "parameters": [
+      {
+        "label": "Project",
+        "value": "EMOPS"
+      },
+      {
+        "label": "Columns",
+        "value": "To Do → In Progress → In Review → Done"
+      },
+      {
+        "label": "Issue types",
+        "value": "(all)"
+      },
+      {
+        "label": "Labels",
+        "value": "(none)"
+      },
+      {
+        "label": "Assignee",
+        "value": "any"
+      },
+      {
+        "label": "Board URL",
+        "value": "https://demo.example.com/jira/software/c/projects/EMAIL/boards/42"
+      },
+      {
+        "label": "Timezone",
+        "value": "Europe/Prague"
+      }
+    ]
+  }
+}

@@ -18,6 +18,27 @@ const WEEKS_OF_TREND = (() => {
   return Number.isFinite(parsed) && parsed > 0 && parsed <= 52 ? parsed : 12;
 })();
 
+/**
+ * Tidy a Jira display name by trimming trailing org suffixes.
+ *
+ * Jira's per-tenant naming convention attaches "(CS)" to contractor
+ * accounts (CS = "consulting/contractor staff"), which is internal
+ * book-keeping and clutters every dashboard cell. We strip:
+ *   - Trailing " (CS)" / " (cs)" / " ( CS )" with any whitespace
+ *   - Any trailing parenthesised abbreviation that's <=4 letters
+ *     when it's clearly an org tag (uppercase or all-lowercase)
+ * Always preserves the rest of the name — first-name lookups,
+ * sorting, and avatar-initial extraction continue to work.
+ */
+function tidyDisplayName(name) {
+  if (typeof name !== "string") return name;
+  const trimmed = name.trim();
+  if (!trimmed) return trimmed;
+  return trimmed
+    .replace(/\s*\(\s*(?:CS|cs|CON|con|EXT|ext)\s*\)\s*$/u, "")
+    .trim();
+}
+
 /** ISO week label like "2026-W15" for a given UTC ms timestamp. */
 function isoWeekLabel(ms) {
   const d = new Date(ms);
@@ -97,6 +118,10 @@ export async function buildWeeklyThroughput({
   timezone = process.env.TEAM_TIMEZONE ?? "Europe/Prague",
   now = new Date(),
   weeksOfTrend = WEEKS_OF_TREND,
+  // Story-points custom field id; pinned via env so the SP rollup
+  // matches the grey bars on Jira's native throughput gadget. Empty
+  // string disables the SP secondary line.
+  storyPointsField = process.env.JIRA_STORY_POINTS_FIELD?.trim() || "",
 }) {
   if (!jira) throw new Error("buildWeeklyThroughput: jira client required");
   if (!jql) throw new Error("buildWeeklyThroughput: jql required");
@@ -126,9 +151,58 @@ export async function buildWeeklyThroughput({
   }
   const trend = await Promise.all(trendPromises);
 
+  // Story-points rollup for last-week + previous-week. Done as a
+  // single 2-week searchAll (rather than per-week) so the widget pays
+  // the SP cost once, not weeksOfTrend× — keeps p95 latency flat.
+  // Older weeks intentionally skip SP; the leaderboard widget already
+  // covers the 12-week SP totals if a director needs them.
+  let lastWeekSP = 0;
+  let previousSP = 0;
+  let sizedLastWeek = 0;
+  let sizedPrev = 0;
+  if (storyPointsField) {
+    const winFrom = prevMonday;
+    const winTo = lastSunday23;
+    const issues = await jira.searchAll(withinJql(winFrom, winTo), {
+      fields: ["resolutiondate", storyPointsField],
+      pageSize: 100,
+      hardCap: 2000,
+    });
+    const lastFromMs = Date.parse(`${lastMonday.split(" ")[0]}T00:00:00Z`);
+    for (const iss of issues) {
+      const sp = iss.fields?.[storyPointsField];
+      const spNum = typeof sp === "number" && Number.isFinite(sp) ? sp : null;
+      const resStr = iss.fields?.resolutiondate;
+      if (!resStr) continue;
+      const resMs = Date.parse(resStr);
+      if (Number.isNaN(resMs)) continue;
+      const isLastWeek = resMs >= lastFromMs;
+      if (isLastWeek) {
+        if (spNum != null) {
+          lastWeekSP += spNum;
+          sizedLastWeek += 1;
+        }
+      } else {
+        if (spNum != null) {
+          previousSP += spNum;
+          sizedPrev += 1;
+        }
+      }
+    }
+  }
+  const round1 = (n) => Math.round(n * 10) / 10;
+
   const deltaAbs = resolved - previous;
   const deltaPct =
     previous > 0 ? (deltaAbs / previous) * 100 : resolved > 0 ? 100 : 0;
+
+  const deltaSPAbs = round1(lastWeekSP - previousSP);
+  const deltaSPPct =
+    previousSP > 0
+      ? Math.round(((lastWeekSP - previousSP) / previousSP) * 1000) / 10
+      : lastWeekSP > 0
+      ? 100
+      : 0;
 
   return {
     weekLabel: isoWeekLabel(
@@ -141,6 +215,17 @@ export async function buildWeeklyThroughput({
     deltaPct: Math.round(deltaPct * 10) / 10,
     trend,
     trendLabels,
+    weeksOfTrend,
+    storyPointsEnabled: Boolean(storyPointsField),
+    storyPointsField: storyPointsField || null,
+    resolvedSP: round1(lastWeekSP),
+    previousSP: round1(previousSP),
+    deltaSPAbs,
+    deltaSPPct,
+    sizedCoveragePct:
+      resolved > 0 ? Math.round((sizedLastWeek / resolved) * 100) : 0,
+    sizedCoveragePrevPct:
+      previous > 0 ? Math.round((sizedPrev / previous) * 100) : 0,
     generatedAt: Date.now(),
     timezone,
     jql,
@@ -380,6 +465,9 @@ export async function buildKanbanBoard({
       "updated",
       "created",
       "issuetype",
+      "labels",
+      "components",
+      "parent",
     ],
     pageSize: 50,
     hardCap,
@@ -389,7 +477,7 @@ export async function buildKanbanBoard({
   const toTicket = (iss) => ({
     key: iss.key,
     summary: iss.fields?.summary ?? "(no summary)",
-    assignee: iss.fields?.assignee?.displayName ?? null,
+    assignee: tidyDisplayName(iss.fields?.assignee?.displayName ?? null),
     assigneeKey: iss.fields?.assignee?.key ?? iss.fields?.assignee?.name ?? null,
     priority: iss.fields?.priority?.name ?? null,
     status: iss.fields?.status?.name ?? "Unknown",
@@ -400,6 +488,13 @@ export async function buildKanbanBoard({
     issueType: iss.fields?.issuetype?.name ?? null,
     updatedAt: iss.fields?.updated ?? null,
     createdAt: iss.fields?.created ?? null,
+    // Team-scoping signals — carried through so web.js can optionally
+    // filter to just the Norton Email team's work when EMOPS is a
+    // shared project across multiple teams.
+    labels: iss.fields?.labels ?? [],
+    components: (iss.fields?.components ?? []).map((c) => c.name),
+    parentKey: iss.fields?.parent?.key ?? null,
+    parentSummary: iss.fields?.parent?.fields?.summary ?? null,
   });
 
   for (const iss of issues) {
@@ -640,7 +735,7 @@ export async function buildSlaAgingRisk({
       risks.push({
         key: iss.key,
         summary: iss.fields?.summary ?? "(no summary)",
-        assignee: iss.fields?.assignee?.displayName ?? null,
+        assignee: tidyDisplayName(iss.fields?.assignee?.displayName ?? null),
         priority,
         status: iss.fields?.status?.name ?? "Unknown",
         ageDays: round1(ageDays),
@@ -769,7 +864,7 @@ export async function buildTopPriorityTickets({
     return {
       key: iss.key,
       summary: iss.fields?.summary ?? "(no summary)",
-      assignee: iss.fields?.assignee?.displayName ?? null,
+      assignee: tidyDisplayName(iss.fields?.assignee?.displayName ?? null),
       assigneeKey:
         iss.fields?.assignee?.key ?? iss.fields?.assignee?.name ?? null,
       priority: iss.fields?.priority?.name ?? "Unprioritised",
@@ -858,7 +953,7 @@ export async function buildSprintBacklog({
     const p = iss.fields?.priority?.name ?? "Unprioritised";
     byPriorityMap.set(p, (byPriorityMap.get(p) ?? 0) + 1);
 
-    const aName = iss.fields?.assignee?.displayName ?? null;
+    const aName = tidyDisplayName(iss.fields?.assignee?.displayName ?? null);
     if (aName) {
       byAssigneeMap.set(aName, (byAssigneeMap.get(aName) ?? 0) + 1);
     } else {
@@ -960,7 +1055,7 @@ export async function buildReopenRate({
   const topReopened = topIssues.map((iss) => ({
     key: iss.key,
     summary: iss.fields?.summary ?? "(no summary)",
-    assignee: iss.fields?.assignee?.displayName ?? null,
+    assignee: tidyDisplayName(iss.fields?.assignee?.displayName ?? null),
     priority: iss.fields?.priority?.name ?? "Unprioritised",
     status: iss.fields?.status?.name ?? "Unknown",
     statusCategory:
@@ -1006,6 +1101,12 @@ export async function buildThroughputLeaderboard({
   weeksOfTrend = WEEKS_OF_TREND,
   topN = 6,
   hardCap = 2000,
+  // The Jira custom field that holds story points on this instance.
+  // Discovered once via /rest/api/2/field; pinned via env so the
+  // "SP delivered" totals on this widget match the same field used by
+  // Jira's native throughput gadget. Leave empty to disable SP rollup
+  // (the widget falls back to ticket-count-only behaviour).
+  storyPointsField = process.env.JIRA_STORY_POINTS_FIELD?.trim() || "",
 }) {
   if (!jira) throw new Error("buildThroughputLeaderboard: jira client required");
   if (!jql) throw new Error("buildThroughputLeaderboard: jql required");
@@ -1021,8 +1122,11 @@ export async function buildThroughputLeaderboard({
     `(${jql}) AND resolved >= "${windowStart}"` +
     ` AND resolved < "${lastSunday23}"`;
 
+  const fields = ["assignee", "resolutiondate"];
+  if (storyPointsField) fields.push(storyPointsField);
+
   const issues = await jira.searchAll(searchJql, {
-    fields: ["assignee", "resolutiondate"],
+    fields,
     pageSize: 100,
     hardCap,
   });
@@ -1050,10 +1154,44 @@ export async function buildThroughputLeaderboard({
         name: display,
         avatarUrl: avatar ?? null,
         weekly: new Array(weeksOfTrend).fill(0),
+        weeklySP: new Array(weeksOfTrend).fill(0),
         total: 0,
+        totalSP: 0,
+        // Tickets that were resolved but had no SP value — useful for
+        // operators wondering why a person's "X tix · Y SP" line shows
+        // SP < tix (the gap is unsized work, not lost work).
+        unsized: 0,
       });
     }
     return byPerson.get(key);
+  };
+
+  // Track unassigned tickets separately so the leaderboard's totals
+  // reconcile with Weekly Throughput (which counts every resolved
+  // ticket regardless of assignee). We DON'T rank them, but we expose
+  // the counts so the UI can show an explicit "+N unassigned" row
+  // under the ranking — operators were comparing the two widgets and
+  // (rightly) spotted the gap when those tickets were silently dropped.
+  let unassignedLastWeek = 0;
+  let unassignedInWindow = 0;
+  const unassignedWeekly = new Array(weeksOfTrend).fill(0);
+
+  // Story-points mirrors of the same buckets. We only populate these
+  // when JIRA_STORY_POINTS_FIELD is configured AND the issue actually
+  // carries a numeric value — Jira's "SP Delivered" series ignores
+  // unsized tickets the same way, so this matches the native chart.
+  let unassignedSPLastWeek = 0;
+  let unassignedSPInWindow = 0;
+  const unassignedSPWeekly = new Array(weeksOfTrend).fill(0);
+  // Coverage diagnostics — surfaced in the payload so the dashboard
+  // can warn operators when SP usage is too sparse to be meaningful
+  // (e.g. "73 of 200 tickets had story points · 36% sized").
+  let sizedCount = 0;
+
+  const readSP = (iss) => {
+    if (!storyPointsField) return null;
+    const v = iss.fields?.[storyPointsField];
+    return typeof v === "number" && Number.isFinite(v) ? v : null;
   };
 
   for (const iss of issues) {
@@ -1082,9 +1220,25 @@ export async function buildThroughputLeaderboard({
     }
     if (bucket < 0) continue;
 
+    const sp = readSP(iss);
+    if (sp != null) sizedCount += 1;
+
+    if (!assignee) {
+      // Unassigned: count in aggregate only, never in ranking.
+      unassignedWeekly[bucket] += 1;
+      unassignedInWindow += 1;
+      if (bucket === weeksOfTrend - 1) unassignedLastWeek += 1;
+      if (sp != null) {
+        unassignedSPWeekly[bucket] += sp;
+        unassignedSPInWindow += sp;
+        if (bucket === weeksOfTrend - 1) unassignedSPLastWeek += sp;
+      }
+      continue;
+    }
+
     const key =
       assignee?.key ?? assignee?.name ?? assignee?.accountId ?? "__unassigned";
-    const display = assignee?.displayName ?? "Unassigned";
+    const display = tidyDisplayName(assignee?.displayName) ?? "Unassigned";
     const avatar =
       assignee?.avatarUrls?.["48x48"] ??
       assignee?.avatarUrls?.["32x32"] ??
@@ -1092,6 +1246,12 @@ export async function buildThroughputLeaderboard({
     const person = ensurePerson(key, display, avatar);
     person.weekly[bucket] += 1;
     person.total += 1;
+    if (sp != null) {
+      person.weeklySP[bucket] += sp;
+      person.totalSP += sp;
+    } else {
+      person.unsized += 1;
+    }
   }
 
   const lastIdx = weeksOfTrend - 1;
@@ -1101,24 +1261,57 @@ export async function buildThroughputLeaderboard({
     .map((p) => {
       const lastWeek = p.weekly[lastIdx] ?? 0;
       const prevWeek = p.weekly[prevIdx] ?? 0;
+      const lastWeekSP = p.weeklySP[lastIdx] ?? 0;
+      const prevWeekSP = p.weeklySP[prevIdx] ?? 0;
       return {
         ...p,
         lastWeek,
         prevWeek,
         deltaAbs: lastWeek - prevWeek,
+        lastWeekSP: round1(lastWeekSP),
+        prevWeekSP: round1(prevWeekSP),
+        totalSP: round1(p.totalSP),
       };
     })
     .filter((p) => p.total > 0)
     .sort(
+      // Ranking stays ticket-count-driven so an ops team that closes
+      // lots of small unsized work still surfaces — story points are
+      // a secondary, supplemental signal here, not the canonical sort.
       (a, b) =>
         b.lastWeek - a.lastWeek ||
         b.total - a.total ||
+        b.lastWeekSP - a.lastWeekSP ||
         a.name.localeCompare(b.name)
     );
 
   const topRows = rows.slice(0, topN);
-  const totalResolvedWindow = rows.reduce((a, r) => a + r.total, 0);
-  const totalLastWeek = rows.reduce((a, r) => a + r.lastWeek, 0);
+  // Totals reconcile with Weekly Throughput: assigned + unassigned.
+  // The `totalLastWeek`/`totalResolvedWindow` fields always include
+  // unassigned so consumers comparing against the throughput widget
+  // see identical numbers. The `assignedLastWeek`/`assignedInWindow`
+  // fields give the people-only figures used to derive the ranking.
+  const assignedLastWeek = rows.reduce((a, r) => a + r.lastWeek, 0);
+  const assignedInWindow = rows.reduce((a, r) => a + r.total, 0);
+  const totalLastWeek = assignedLastWeek + unassignedLastWeek;
+  const totalResolvedWindow = assignedInWindow + unassignedInWindow;
+
+  // Story-points roll-ups. Mirror the ticket-count fields so the UI
+  // can present "X resolved · Y SP" without doing math client-side.
+  const assignedSPLastWeek = rows.reduce((a, r) => a + (r.lastWeekSP ?? 0), 0);
+  const assignedSPWindow = rows.reduce((a, r) => a + (r.totalSP ?? 0), 0);
+  const totalSPLastWeek = round1(assignedSPLastWeek + unassignedSPLastWeek);
+  const totalSPWindow = round1(assignedSPWindow + unassignedSPInWindow);
+  const weeklySPTotals = unassignedSPWeekly.map((u, i) => {
+    const assigned = rows.reduce((a, r) => a + (r.weeklySP?.[i] ?? 0), 0);
+    return round1(assigned + u);
+  });
+
+  // Coverage telemetry — operators get a one-glance answer to "is the
+  // SP number trustworthy?" without us having to inspect Jira manually.
+  const coverageDenom = totalResolvedWindow;
+  const sizedCoveragePct =
+    coverageDenom > 0 ? Math.round((sizedCount / coverageDenom) * 100) : 0;
 
   return {
     weekLabel: isoWeekLabel(
@@ -1133,6 +1326,23 @@ export async function buildThroughputLeaderboard({
     contributorsCount: rows.length,
     totalLastWeek,
     totalResolvedWindow,
+    assignedLastWeek,
+    assignedInWindow,
+    unassignedLastWeek,
+    unassignedInWindow,
+    unassignedWeekly,
+    storyPointsEnabled: Boolean(storyPointsField),
+    storyPointsField: storyPointsField || null,
+    totalSPLastWeek,
+    totalSPWindow,
+    assignedSPLastWeek: round1(assignedSPLastWeek),
+    assignedSPWindow: round1(assignedSPWindow),
+    unassignedSPLastWeek: round1(unassignedSPLastWeek),
+    unassignedSPInWindow: round1(unassignedSPInWindow),
+    unassignedSPWeekly: unassignedSPWeekly.map(round1),
+    weeklySPTotals,
+    sizedCount,
+    sizedCoveragePct,
     generatedAt: Date.now(),
     timezone,
     jql: searchJql,

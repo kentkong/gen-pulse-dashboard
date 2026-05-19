@@ -1,0 +1,90 @@
+{
+  "windowDays": 30,
+  "resolvedInWindow": 124,
+  "reopenedInWindow": 9,
+  "cleanClosed": 115,
+  "rate": 7.3,
+  "doneStatuses": [
+    "Done",
+    "Closed",
+    "Resolved"
+  ],
+  "topReopened": [
+    {
+      "key": "DEMO-268",
+      "summary": "Swap deprecated SDK in send-worker",
+      "assignee": "Harper Whitaker",
+      "priority": "High",
+      "status": "In Progress",
+      "statusCategory": "indeterminate",
+      "updatedAt": "2026-05-09T09:26:18.577Z"
+    },
+    {
+      "key": "DEMO-256",
+      "summary": "Document email deliverability runbook",
+      "assignee": "Reese Davies",
+      "priority": "High",
+      "status": "To Do",
+      "statusCategory": "new",
+      "updatedAt": "2026-05-09T01:26:18.577Z"
+    },
+    {
+      "key": "DEMO-241",
+      "summary": "Performance budget for hero image renders",
+      "assignee": "Rowan Nash",
+      "priority": "Medium",
+      "status": "In Progress",
+      "statusCategory": "indeterminate",
+      "updatedAt": "2026-05-08T08:14:18.577Z"
+    }
+  ],
+  "generatedAt": 1778340378741,
+  "timezone": "Europe/Prague",
+  "jql": "(project = EMAIL) AND status changed TO (\"Done\", \"Closed\", \"Resolved\") AFTER \"-30d\"",
+  "preview": true,
+  "project": "EMOPS",
+  "jqlSource": "JIRA_EMOPS_THROUGHPUT_JQL",
+  "filter": {
+    "widgetId": "reopen-rate",
+    "title": "Reopen / escalation rate",
+    "jql": "project = EMOPS AND issuetype in (Task, Story, Bug)",
+    "source": "JIRA_EMOPS_THROUGHPUT_JQL",
+    "fallbackFrom": "JIRA_EMOPS_REOPEN_JQL",
+    "refreshSeconds": 900,
+    "project": "EMOPS",
+    "boardUrl": null,
+    "generatedAt": 1778340378741,
+    "chip": "EMOPS · last 30d · reopened",
+    "parameters": [
+      {
+        "label": "Project",
+        "value": "EMOPS"
+      },
+      {
+        "label": "Window",
+        "value": "Last 30 days"
+      },
+      {
+        "label": "Done statuses",
+        "value": "Done · Closed · Resolved",
+        "hint": "A ticket counts as reopened when it leaves one of these statuses"
+      },
+      {
+        "label": "Issue types",
+        "value": "Task, Story, Bug"
+      },
+      {
+        "label": "Labels",
+        "value": "(none)"
+      },
+      {
+        "label": "Assignee",
+        "value": "any"
+      },
+      {
+        "label": "Timezone",
+        "value": "Europe/Prague"
+      }
+    ]
+  }
+}

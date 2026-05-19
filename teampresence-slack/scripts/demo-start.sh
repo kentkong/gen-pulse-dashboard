@@ -38,6 +38,16 @@ PORT="${PORT:-3000}"
 LOG_DIR="${LOG_DIR:-$REPO_DIR/data/logs}"
 STATE_FILE="$REPO_DIR/data/tunnel-state.json"
 
+# Trust the corporate (Zscaler / Gen Digital) root CA so Node's built-in
+# fetch can reach external APIs (e.g. Open-Meteo for the weather chip).
+# Node does not consult the macOS keychain, so without this the weather
+# endpoint silently returns {available:false} on the corporate network.
+# Bundle is produced by ./scripts/export-ca-bundle.sh — re-run that
+# script after IT rotates the corporate root.
+if [[ -z "${NODE_EXTRA_CA_CERTS:-}" && -f "$HOME/.certs/corporate-bundle.pem" ]]; then
+  export NODE_EXTRA_CA_CERTS="$HOME/.certs/corporate-bundle.pem"
+fi
+
 mkdir -p "$LOG_DIR"
 
 SERVER_LOG="$LOG_DIR/server.log"

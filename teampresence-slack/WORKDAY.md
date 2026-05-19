@@ -13,6 +13,16 @@ All three are driven by a single provider. Pick the one that matches
 the level of Workday access IT has given you, then move up as more
 becomes available.
 
+> **Strategic direction (2026-04-24).** The agreed long-term state
+> for Gen is **Workday → Outlook calendar → Slack presence → Gen
+> Pulse**, i.e. no direct Workday integration from this app. Once the
+> Workday-to-Outlook sync is live for our org, the dashboard picks up
+> absences automatically via the Slack presence path (see
+> `slack-status.js`) and the providers below become fallbacks rather
+> than the primary feed. Until that sync is switched on, the `csv`
+> provider is the demo path — see `HR-WORKDAY-REQUEST.md` for the
+> interim delivery status.
+
 ---
 
 ## The four providers
@@ -144,11 +154,17 @@ the bot to have:
 
 - `users:read`
 - `users.profile:read`
-- `users:read.presence`
 
 Add them in `api.slack.com → OAuth & Permissions → Bot Token Scopes`
 and reinstall the app. The Slack provider will log a warning for each
 user it can't resolve.
+
+> **Note on `users:read.presence`.** In the Slack v2 bot-app developer
+> console, presence is bundled into `users:read` — there is no separate
+> `users:read.presence` pick-list item. The two scopes above are
+> sufficient for the EMAIL NORTON Slack app (`A0AUY7JRG5T`, see
+> `SLACK-ADMIN-REQUEST.md`). Legacy docs that list three scopes are
+> referring to classic apps.
 
 ---
 

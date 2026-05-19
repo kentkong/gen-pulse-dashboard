@@ -122,7 +122,13 @@ export function filterForWeeklyThroughput({
   refreshSeconds,
   timezone,
   generatedAt,
+  weeksOfTrend = 8,
 }) {
+  // Use the actual N-week window from the payload so the chip never
+  // lies (we shipped 19→16 confusion partly because the chip claimed
+  // "last 8 weeks" while the chart drew 12). Falling back to 8 keeps
+  // legacy unit tests green.
+  const N = Number.isFinite(weeksOfTrend) && weeksOfTrend > 0 ? weeksOfTrend : 8;
   return {
     widgetId: "weekly-throughput",
     title: "Weekly throughput",
@@ -135,15 +141,15 @@ export function filterForWeeklyThroughput({
     generatedAt,
     chip: chipSummary({
       project: extractProject(jql),
-      windowLabel: "last 8 weeks",
-      verb: "resolved",
+      windowLabel: `last ${N} weeks`,
+      verb: "resolved by team",
     }),
     parameters: [
       { label: "Project", value: extractProject(jql) ?? "(none in JQL)" },
       { label: "Date field", value: "resolved" },
       {
         label: "Window",
-        value: "Last 8 completed Mon–Sun weeks",
+        value: `Last ${N} completed Mon–Sun weeks`,
         hint: `Timezone: ${tzShort(timezone)}`,
       },
       {
